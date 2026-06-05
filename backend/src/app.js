@@ -762,6 +762,42 @@ app.get('/api/syslogs', (req, res) => {
         report.directories[name] = stats;
     }
 
+    // 1. Get files inside directories
+    report.directoryFiles = {};
+    for (const [name, dirPath] of Object.entries(dirsToCheck)) {
+        if (fs.existsSync(dirPath)) {
+            try {
+                report.directoryFiles[name] = fs.readdirSync(dirPath);
+            } catch (err) {
+                report.directoryFiles[name] = 'Error: ' + err.message;
+            }
+        } else {
+            report.directoryFiles[name] = 'Directory does not exist';
+        }
+    }
+
+    // 2. Query database settings
+    report.dbSettings = null;
+    report.companies = null;
+    try {
+        report.dbSettings = await db('system_settings').select('*');
+        report.companies = await db('companies').select('id', 'name', 'slug', 'logo_url', 'brand_color');
+    } catch (dbErr) {
+        report.dbError = dbErr.message;
+    }
+
+    // 3. Read request log
+    const requestLogPath = path.join(__dirname, '../request.log');
+    if (fs.existsSync(requestLogPath)) {
+        try {
+            report.requestLog = fs.readFileSync(requestLogPath, 'utf8').split('\n').slice(-30).join('\n');
+        } catch (err) {
+            report.requestLogErr = err.message;
+        }
+    } else {
+        report.requestLog = 'Not found';
+    }
+
     const crashLogPath = path.join(__dirname, '../../crash.log');
     if (fs.existsSync(crashLogPath)) {
         try {
