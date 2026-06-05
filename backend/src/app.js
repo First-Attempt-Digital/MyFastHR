@@ -298,6 +298,13 @@ const app = express();
 // Security Middlewares
 app.use(helmet({
     crossOriginResourcePolicy: false, // Allow cross-origin images/files
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            'upgrade-insecure-requests': null, // Stop upgrading HTTP requests to HTTPS
+        },
+    },
+    hsts: false, // Disable HSTS (Strict-Transport-Security) for HTTP development/testing
 }));
 const allowedOrigins = [
     'https://myfasthr.com',
