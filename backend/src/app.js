@@ -406,8 +406,15 @@ app.use(cors((req, callback) => {
     const origin = req.header('Origin');
     const host = req.header('Host');
     
-    // Allow same-origin requests dynamically (Origin matches the Host header)
-    const isSameOrigin = origin && (origin === `http://${host}` || origin === `https://${host}`);
+    let isSameOrigin = false;
+    if (origin && host) {
+        try {
+            const parsedOriginHost = new URL(origin).host;
+            isSameOrigin = parsedOriginHost.toLowerCase() === host.toLowerCase();
+        } catch (e) {
+            // Invalid URL format in Origin header
+        }
+    }
     
     const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin);
     
@@ -420,7 +427,12 @@ app.use(cors((req, callback) => {
         });
     } else {
         console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+        callback(null, { 
+            origin: false, // Return origin: false instead of throwing an Error to prevent server-side 500 crash
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+        });
     }
 }));
 
@@ -673,6 +685,15 @@ app.get('/api/test-tasks', (req, res) => res.json({ message: 'Task API Mount Poi
 
 // Base API route
 app.get('/api', (req, res) => res.send('MyFastHR SaaS API is running...'));
+
+app.get('/api/debug-db', async (req, res) => {
+    try {
+        const rows = await db('system_settings').select('*');
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // Catch-all for React Router (Using regex to avoid Express 5 path-to-regexp crash)
 app.get(/(.*)/, (req, res) => {

@@ -6,7 +6,7 @@ const notificationService = require('./notificationService');
 
 // Ensure upload directories exist
 const uploadDir = path.join(__dirname, '../../uploads/kyc');
-const photoDir = path.join(__dirname, '../../uploads/profile_photos');
+const photoDir = path.join(__dirname, '../../uploads/kyc');
 
 [uploadDir, photoDir].forEach(dir => {
     if (!fs.existsSync(dir)) {

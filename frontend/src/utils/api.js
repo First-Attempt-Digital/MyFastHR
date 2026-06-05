@@ -82,9 +82,21 @@ api.interceptors.response.use(
 export const getAssetUrl = (path) => {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    
+    // Normalize path to make sure it has a leading slash
+    let cleanPath = path;
+    if (!cleanPath.startsWith('/')) {
+        cleanPath = '/' + cleanPath;
+    }
+    
+    // If it's just a raw filename of logo or favicon, prepend the folder path
+    if (cleanPath.startsWith('/logo-') || cleanPath.startsWith('/favicon-')) {
+        cleanPath = '/uploads/branding' + cleanPath;
+    }
+    
     const isProd = import.meta.env.PROD;
     const base = isProd ? '' : 'http://localhost:5000';
-    return `${base}${path}`;
+    return `${base}${cleanPath}`;
 };
 
 export const fetchBranding = async () => {
