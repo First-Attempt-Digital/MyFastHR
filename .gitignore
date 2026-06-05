@@ -1,0 +1,77 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+bin/
+obj/
+
+# Environment configurations and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+.env.*
+
+# Database and SQLite data
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.zip
+*.tar
+*.gz
+
+# Log files and logs directories
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Server and Upload directories
+backend/uploads/
+uploads/
+tmp/
+temp/
+
+# IDE and Editor directories
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.classpath
+.settings/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary and backup files
+*~
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+purge_files.js
+purge_screenshots.js

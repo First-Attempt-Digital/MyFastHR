@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer base {
+  html {
+    font-size: 17px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+}
+
+.font-outfit {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@keyframes slideRight {
+    from { transform: translateX(-150%); }
+    to { transform: translateX(250%); }
+}
+@keyframes slideLeft {
+    from { transform: translateX(150%); }
+    to { transform: translateX(-250%); }
+}
+@keyframes shootingStar {
+    0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
+    5% { transform: translateX(-200px) translateY(200px) rotate(-45deg); opacity: 0; }
+    100% { transform: translateX(-200px) translateY(200px) rotate(-45deg); opacity: 0; }
+}
+@keyframes windowPulse {
+    0%, 100% { opacity: 0.8; box-shadow: 0 0 2px #FFDA57; }
+    50% { opacity: 0.2; box-shadow: none; }
+}
+@keyframes sunPulse {
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.05); opacity: 1; }
+}
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* --- GLOBAL VISIBILITY, CONTRAST, & TEXT ACCESSIBILITY OVERRIDES --- */
+
+/* Soften blocky, massive bold font weights */
+.font-black {
+  font-weight: 750 !important;
+}
+.font-extrabold {
+  font-weight: 700 !important;
+}
+
+/* Redefine arbitrary tiny text classes to be legible and clear */
+.text-\[7\.5px\] {
+  font-size: 10px !important;
+}
+.text-\[8px\] {
+  font-size: 10.5px !important;
+}
+.text-\[9px\] {
+  font-size: 11px !important;
+}
+.text-\[10px\] {
+  font-size: 11.5px !important;
+}
+.text-xs {
+  font-size: 12px !important;
+}
+
+/* Boost light gray texts contrast */
+.text-slate-300 {
+  color: #94a3b8 !important; /* Maps Slate 300 to Slate 400 */
+}
+.text-slate-400 {
+  color: #64748b !important; /* Maps Slate 400 to Slate 500 for secondary text legibility */
+}
+.text-slate-500 {
+  color: #475569 !important; /* Maps Slate 500 to Slate 600 */
+}
+.opacity-60 {
+  opacity: 0.8 !important; /* Increase visibility of opaque text elements */
+}
+.opacity-50 {
+  opacity: 0.75 !important;
+}

@@ -1,0 +1,362 @@
+[
+  {
+    "id": 1,
+    "company_id": 1,
+    "employee_id": 1,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 2,
+    "company_id": 1,
+    "employee_id": 2,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 3,
+    "company_id": 1,
+    "employee_id": 5,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 4,
+    "company_id": 1,
+    "employee_id": 7,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 5,
+    "company_id": 1,
+    "employee_id": 9,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 6,
+    "company_id": 1,
+    "employee_id": 15,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 7,
+    "company_id": 1,
+    "employee_id": 32,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 8,
+    "company_id": 1,
+    "employee_id": 36,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 9,
+    "company_id": 1,
+    "employee_id": 1,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 10,
+    "company_id": 1,
+    "employee_id": 2,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 11,
+    "company_id": 1,
+    "employee_id": 5,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 12,
+    "company_id": 1,
+    "employee_id": 7,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 13,
+    "company_id": 1,
+    "employee_id": 9,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 14,
+    "company_id": 1,
+    "employee_id": 15,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 15,
+    "company_id": 1,
+    "employee_id": 32,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 16,
+    "company_id": 1,
+    "employee_id": 36,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 1,
+    "company_id": 1,
+    "employee_id": 1,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 2,
+    "company_id": 1,
+    "employee_id": 2,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 3,
+    "company_id": 1,
+    "employee_id": 5,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 4,
+    "company_id": 1,
+    "employee_id": 7,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 5,
+    "company_id": 1,
+    "employee_id": 9,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 6,
+    "company_id": 1,
+    "employee_id": 15,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 7,
+    "company_id": 1,
+    "employee_id": 32,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 8,
+    "company_id": 1,
+    "employee_id": 36,
+    "shift_id": 6,
+    "from_date": "2026-05-13T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-14T11:10:17.000Z",
+    "updated_at": "2026-05-14T11:10:17.000Z"
+  },
+  {
+    "id": 9,
+    "company_id": 1,
+    "employee_id": 1,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 10,
+    "company_id": 1,
+    "employee_id": 2,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 11,
+    "company_id": 1,
+    "employee_id": 5,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 12,
+    "company_id": 1,
+    "employee_id": 7,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 13,
+    "company_id": 1,
+    "employee_id": 9,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 14,
+    "company_id": 1,
+    "employee_id": 15,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 15,
+    "company_id": 1,
+    "employee_id": 32,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 16,
+    "company_id": 1,
+    "employee_id": 36,
+    "shift_id": 5,
+    "from_date": "2026-05-15T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-16T05:59:46.000Z",
+    "updated_at": "2026-05-16T05:59:46.000Z"
+  },
+  {
+    "id": 0,
+    "company_id": 1,
+    "employee_id": 59,
+    "shift_id": 3,
+    "from_date": "2026-05-14T18:30:00.000Z",
+    "to_date": "2026-05-19T18:30:00.000Z",
+    "created_at": "2026-05-21T09:11:35.000Z",
+    "updated_at": "2026-05-21T09:11:35.000Z"
+  },
+  {
+    "id": 0,
+    "company_id": 1,
+    "employee_id": 59,
+    "shift_id": 2,
+    "from_date": "2026-05-19T18:30:00.000Z",
+    "to_date": "2026-05-19T18:30:00.000Z",
+    "created_at": "2026-05-21T09:18:30.000Z",
+    "updated_at": "2026-05-21T09:18:30.000Z"
+  },
+  {
+    "id": 0,
+    "company_id": 1,
+    "employee_id": 63,
+    "shift_id": 4,
+    "from_date": "2026-05-16T18:30:00.000Z",
+    "to_date": "2026-05-16T18:30:00.000Z",
+    "created_at": "2026-05-21T09:23:22.000Z",
+    "updated_at": "2026-05-21T09:23:22.000Z"
+  },
+  {
+    "id": 0,
+    "company_id": 1,
+    "employee_id": 89,
+    "shift_id": 0,
+    "from_date": "2026-05-20T18:30:00.000Z",
+    "to_date": null,
+    "created_at": "2026-05-21T09:26:32.000Z",
+    "updated_at": "2026-05-21T09:26:32.000Z"
+  }
+]

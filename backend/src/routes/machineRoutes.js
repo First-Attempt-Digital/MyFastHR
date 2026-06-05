@@ -1,0 +1,68 @@
+const express = require('express');
+const router = express.Router();
+const machineController = require('../controllers/machineController');
+const apiKeyAuth = require('../middlewares/apiKeyAuthMiddleware');
+const { authenticateToken } = require('../middlewares/authMiddleware');
+const tenantGuard = require('../middlewares/tenantMiddleware');
+
+/**
+ * Flexible registration and mapping authorization middleware.
+ * Supports:
+ * 1. Standard JWT session (from frontend dashboard admin client)
+ * 2. Master API Key (from headless device installers/scripts)
+ */
+const flexibleAuth = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
+    const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
+
+    if (authHeader && (authHeader.startsWith('Bearer ') || authHeader.startsWith('test.'))) {
+        // Authenticate using standard JWT session
+        return authenticateToken(req, res, () => {
+            tenantGuard(req, res, next);
+        });
+    } else if (apiKey && apiKey === masterKey) {
+        // Authenticate using global master API key
+        return next();
+    } else {
+        return res.status(401).json({ 
+            message: 'Authentication required. Provide a valid Bearer token or master API key.' 
+        });
+    }
+};
+
+// 1. Device Registration (JWT Session or Master API Key)
+router.post('/register', flexibleAuth, machineController.register);
+
+// 2. Employee Biometric ID Mapping (JWT Session or Master API Key)
+router.post('/map-employee', flexibleAuth, machineController.mapEmployee);
+
+// Debug Request Logger for Biometric Machine Connection
+const fs = require('fs');
+const path = require('path');
+const logFile = path.join(__dirname, '../../biometric_debug_test.log');
+
+const debugLogger = (req, res, next) => {
+    try {
+        const logData = `[${new Date().toISOString()}] IP: ${req.ip} | URL: ${req.originalUrl} | Method: ${req.method} | Headers: ${JSON.stringify(req.headers)} | Body: ${JSON.stringify(req.body)}\n`;
+        fs.appendFileSync(logFile, logData);
+        console.log('>>> [BIOMETRIC-DEBUG-LOGGED]:', logData.trim());
+    } catch (err) {
+        console.error('Failed to write biometric debug log:', err.message);
+    }
+    next();
+};
+
+// 3. Single Attendance Sync Punch (Device x-api-key)
+router.post('/attendance', debugLogger, apiKeyAuth, machineController.attendance);
+
+// 4. Bulk Attendance Sync Punches (Device x-api-key)
+router.post('/attendance/bulk', debugLogger, apiKeyAuth, machineController.attendanceBulk);
+
+// 5. Get registered devices for a company (JWT Session or Master API Key)
+router.get('/devices', flexibleAuth, machineController.getDevices);
+
+// 6. Delete a registered device (JWT Session or Master API Key)
+router.delete('/devices/:id', flexibleAuth, machineController.deleteDevice);
+
+module.exports = router;

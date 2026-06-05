@@ -1,0 +1,6 @@
+{
+  "appId": "com.myfasthr.employee",
+  "appName": "MyFastHR",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
