@@ -107,7 +107,7 @@ class AnalyticsRepository {
             .where('employees.company_id', companyId)
             .select(db.raw('COALESCE(departments.name, employees.department, "Unassigned") as name'))
             .count('* as count')
-            .groupBy('name');
+            .groupByRaw('COALESCE(departments.name, employees.department, "Unassigned")');
 
         return {
             serviceDistribution: serviceDistribution[0],
