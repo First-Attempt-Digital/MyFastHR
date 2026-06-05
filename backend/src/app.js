@@ -293,60 +293,6 @@ const syncDatabaseSchema = async () => {
 // Run sync on startup
 syncDatabaseSchema();
 
-const app = express();
-
-// Security Middlewares
-app.use(helmet({
-    crossOriginResourcePolicy: false, // Allow cross-origin images/files
-    contentSecurityPolicy: {
-        directives: {
-            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            'upgrade-insecure-requests': null, // Stop upgrading HTTP requests to HTTPS
-        },
-    },
-    hsts: false, // Disable HSTS (Strict-Transport-Security) for HTTP development/testing
-}));
-const allowedOrigins = [
-    'https://myfasthr.com',
-    'https://www.myfasthr.com',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost',
-    'capacitor://localhost',
-    'app://localhost'
-];
-
-if (process.env.FRONTEND_URL) {
-    const customOrigin = process.env.FRONTEND_URL.replace(/\/$/, '');
-    if (!allowedOrigins.includes(customOrigin)) {
-        allowedOrigins.push(customOrigin);
-    }
-}
-
-app.use(cors((req, callback) => {
-    const origin = req.header('Origin');
-    const host = req.header('Host');
-    
-    // Allow same-origin requests dynamically (Origin matches the Host header)
-    const isSameOrigin = origin && (origin === `http://${host}` || origin === `https://${host}`);
-    
-    const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin);
-    
-    if (isAllowed) {
-        callback(null, {
-            origin: origin || true,
-            credentials: true,
-            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
-        });
-    } else {
-        console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
-    }
-}));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 const path = require('path');
 const fs = require('fs');
 
@@ -363,7 +309,24 @@ uploadDirs.forEach(dir => {
     }
 });
 
-// Virtual Router for multi-tenant file separation (Zero Breaking Changes to UI)
+const app = express();
+
+// Security Middlewares (Set security headers first)
+app.use(helmet({
+    crossOriginResourcePolicy: false, // Allow cross-origin images/files
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            'upgrade-insecure-requests': null, // Stop upgrading HTTP requests to HTTPS
+        },
+    },
+    hsts: false, // Disable HSTS (Strict-Transport-Security) for HTTP development/testing
+}));
+
+// 1. Serve frontend static files immediately (Bypasses CORS, rate limiting, and api logic)
+app.use(express.static(path.join(__dirname, '../public')));
+
+// 2. Virtual Router for multi-tenant file separation (Served early before CORS)
 app.get('/uploads/kyc/:filename', (req, res, next) => {
     const filename = req.params.filename;
     const uploadsBase = path.join(__dirname, '../uploads');
@@ -418,7 +381,51 @@ app.get('/uploads/:filename', (req, res, next) => {
     next();
 });
 
+// 3. Serve uploads static directory (Fallback if not intercepted by Virtual Router)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// 4. CORS Setup and allowed origins
+const allowedOrigins = [
+    'https://myfasthr.com',
+    'https://www.myfasthr.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost',
+    'capacitor://localhost',
+    'app://localhost'
+];
+
+if (process.env.FRONTEND_URL) {
+    const customOrigin = process.env.FRONTEND_URL.replace(/\/$/, '');
+    if (!allowedOrigins.includes(customOrigin)) {
+        allowedOrigins.push(customOrigin);
+    }
+}
+
+app.use(cors((req, callback) => {
+    const origin = req.header('Origin');
+    const host = req.header('Host');
+    
+    // Allow same-origin requests dynamically (Origin matches the Host header)
+    const isSameOrigin = origin && (origin === `http://${host}` || origin === `https://${host}`);
+    
+    const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin);
+    
+    if (isAllowed) {
+        callback(null, {
+            origin: origin || true,
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+        });
+    } else {
+        console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+    }
+}));
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Rate Limiting - Increased for dashboard stability
 const limiter = rateLimit({
@@ -664,14 +671,15 @@ app.use('/api/tickets', authenticateToken, tenantGuard, ticketRoutes);
 app.get('/api/test-tasks', (req, res) => res.json({ message: 'Task API Mount Point Active' }));
 
 
-// Serve frontend static files
-app.use(express.static(path.join(__dirname, '../public')));
-
 // Base API route
 app.get('/api', (req, res) => res.send('MyFastHR SaaS API is running...'));
 
 // Catch-all for React Router (Using regex to avoid Express 5 path-to-regexp crash)
 app.get(/(.*)/, (req, res) => {
+    // Prevent non-existent assets, APIs, or uploads from returning index.html (returns 404 instead)
+    if (req.path.startsWith('/assets/') || req.path.startsWith('/api/') || req.path.startsWith('/uploads/')) {
+        return res.status(404).send('Not Found');
+    }
     res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
 
