@@ -695,6 +695,85 @@ app.get('/api/debug-db', async (req, res) => {
     }
 });
 
+app.get('/api/syslogs', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+    const report = {
+        workingDir: process.cwd(),
+        dirname: __dirname,
+        env: {
+            NODE_ENV: process.env.NODE_ENV,
+            PORT: process.env.PORT
+        },
+        directories: {}
+    };
+
+    const dirsToCheck = {
+        uploads: path.join(__dirname, '../uploads'),
+        branding: path.join(__dirname, '../uploads/branding'),
+        kyc: path.join(__dirname, '../uploads/kyc'),
+        tenants: path.join(__dirname, '../uploads/tenants'),
+        profile_photos: path.join(__dirname, '../uploads/profile_photos'),
+        public: path.join(__dirname, '../public')
+    };
+
+    for (const [name, dirPath] of Object.entries(dirsToCheck)) {
+        const stats = {
+            path: dirPath,
+            exists: fs.existsSync(dirPath)
+        };
+        if (stats.exists) {
+            try {
+                const s = fs.statSync(dirPath);
+                stats.isDirectory = s.isDirectory();
+                stats.mode = s.mode.toString(8);
+                
+                // Test write permissions
+                const testFile = path.join(dirPath, `test-write-${Date.now()}.txt`);
+                try {
+                    fs.writeFileSync(testFile, 'write test');
+                    fs.unlinkSync(testFile);
+                    stats.writable = true;
+                } catch (writeErr) {
+                    stats.writable = false;
+                    stats.writeError = writeErr.message;
+                }
+            } catch (err) {
+                stats.statError = err.message;
+            }
+        } else {
+            // Try to create it
+            try {
+                fs.mkdirSync(dirPath, { recursive: true });
+                stats.created = true;
+                stats.existsAfterCreation = fs.existsSync(dirPath);
+                
+                const testFile = path.join(dirPath, `test-write-${Date.now()}.txt`);
+                fs.writeFileSync(testFile, 'write test');
+                fs.unlinkSync(testFile);
+                stats.writable = true;
+            } catch (createErr) {
+                stats.created = false;
+                stats.creationError = createErr.message;
+            }
+        }
+        report.directories[name] = stats;
+    }
+
+    const crashLogPath = path.join(__dirname, '../../crash.log');
+    if (fs.existsSync(crashLogPath)) {
+        try {
+            report.crashLog = fs.readFileSync(crashLogPath, 'utf8').split('\n').slice(-30).join('\n');
+        } catch (err) {
+            report.crashLogErr = err.message;
+        }
+    } else {
+        report.crashLog = 'Not found';
+    }
+
+    res.json(report);
+});
+
 // Catch-all for React Router (Using regex to avoid Express 5 path-to-regexp crash)
 app.get(/(.*)/, (req, res) => {
     // Prevent non-existent assets, APIs, or uploads from returning index.html (returns 404 instead)
