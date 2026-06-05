@@ -696,8 +696,7 @@ app.get('/api/debug-db', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-
-app.get('/api/syslogs', (req, res) => {
+app.get('/api/syslogs', async (req, res) => {
     const fs = require('fs');
     const path = require('path');
     const report = {
