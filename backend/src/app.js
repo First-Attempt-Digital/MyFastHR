@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const db = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');
@@ -299,7 +299,39 @@ const app = express();
 app.use(helmet({
     crossOriginResourcePolicy: false, // Allow cross-origin images/files
 }));
-app.use(cors());
+const allowedOrigins = [
+    'https://myfasthr.com',
+    'https://www.myfasthr.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost',
+    'capacitor://localhost',
+    'app://localhost'
+];
+
+if (process.env.FRONTEND_URL) {
+    const customOrigin = process.env.FRONTEND_URL.replace(/\/$/, '');
+    if (!allowedOrigins.includes(customOrigin)) {
+        allowedOrigins.push(customOrigin);
+    }
+}
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, or internal server-to-server)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
