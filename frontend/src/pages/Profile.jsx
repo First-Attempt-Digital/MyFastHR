@@ -464,7 +464,7 @@ const Profile = () => {
         setUploadingPhoto(true);
         try {
             const queryParams = new URLSearchParams(window.location.search);
-            const employeeId = queryParams.get('id');
+            const employeeId = queryParams.get('id') || profile?.employee?.id;
             const res = await api.post(`/employees/${employeeId}/photo`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });

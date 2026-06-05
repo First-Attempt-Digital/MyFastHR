@@ -300,7 +300,9 @@ const fs = require('fs');
 const uploadDirs = [
     path.join(__dirname, '../uploads'),
     path.join(__dirname, '../uploads/kyc'),
-    path.join(__dirname, '../uploads/profile_photos')
+    path.join(__dirname, '../uploads/profile_photos'),
+    path.join(__dirname, '../uploads/branding'),
+    path.join(__dirname, '../uploads/tenants')
 ];
 
 uploadDirs.forEach(dir => {
