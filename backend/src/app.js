@@ -323,21 +323,26 @@ if (process.env.FRONTEND_URL) {
     }
 }
 
-app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps, curl, or internal server-to-server)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+app.use(cors((req, callback) => {
+    const origin = req.header('Origin');
+    const host = req.header('Host');
+    
+    // Allow same-origin requests dynamically (Origin matches the Host header)
+    const isSameOrigin = origin && (origin === `http://${host}` || origin === `https://${host}`);
+    
+    const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin);
+    
+    if (isAllowed) {
+        callback(null, {
+            origin: origin || true,
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+        });
+    } else {
+        console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+    }
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
