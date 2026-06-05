@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# MyFastHR Zero-Downtime Deployment & Rollback Script
+# Designed for PM2 + Node.js + Nginx Stack
+
+set -e
+
+# Configuration
+APP_DIR="/var/www/myfasthr"
+BACKUP_DIR="/var/www/myfasthr_backups"
+BACKEND_DIR="${APP_DIR}/backend"
+FRONTEND_DIR="${APP_DIR}/frontend"
+DB_NAME="u735392253_fasthr"
+DB_USER="u735392253_fast_hr"
+DB_PASS="Lucky@&1523@&"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+PM2_APP_NAME="myfasthr-backend"
+
+mkdir -p "${BACKUP_DIR}"
+
+# Logging Helper
+log() {
+    echo -e "\033[1;32m[DEPLOY-LOG] $1\033[0m"
+}
+
+error() {
+    echo -e "\033[1;31m[DEPLOY-ERROR] $1\033[0m" >&2
+}
+
+# Run Rollback Action
+rollback() {
+    log "Initiating rollback procedure..."
+    
+    LATEST_BACKUP=$(ls -td ${BACKUP_DIR}/deploy_backup_* 2>/dev/null | head -1)
+    
+    if [ -z "${LATEST_BACKUP}" ]; then
+        error "No backups found to rollback to!"
+        exit 1
+    fi
+    
+    log "Restoring files from: ${LATEST_BACKUP}"
+    # Restore codebase files
+    rm -rf "${BACKEND_DIR}" "${FRONTEND_DIR}"
+    tar -xzf "${LATEST_BACKUP}/files.tar.gz" -C "${APP_DIR}"
+    
+    # Restore Database
+    if [ -f "${LATEST_BACKUP}/db.sql" ]; then
+        log "Restoring database snapshot..."
+        mysql -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" < "${LATEST_BACKUP}/db.sql"
+    fi
+    
+    log "Reloading PM2 instances..."
+    pm2 reload "${PM2_APP_NAME}" || pm2 restart "${PM2_APP_NAME}"
+    
+    log "Rollback completed successfully!"
+}
+
+# Check argument for manual rollback
+if [ "$1" == "--rollback" ]; then
+    rollback
+    exit 0
+fi
+
+# Main Deployment Flow
+log "Starting Deployment Prep..."
+
+# 1. Database Backup
+log "Backing up live database..."
+CURRENT_BACKUP_PATH="${BACKUP_DIR}/deploy_backup_${TIMESTAMP}"
+mkdir -p "${CURRENT_BACKUP_PATH}"
+
+mysqldump -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" > "${CURRENT_BACKUP_PATH}/db.sql"
+
+# 2. File Backup
+log "Archiving active code assets..."
+tar -czf "${CURRENT_BACKUP_PATH}/files.tar.gz" -C "${APP_DIR}" backend frontend 2>/dev/null || true
+
+# Hook for rollback on failure
+trap 'error "Deployment failed! Reverting to backup..."; rollback; exit 1' ERR
+
+# 3. Pull Repository Updates
+log "Pulling latest version from branch..."
+git pull origin main
+
+# 4. Install backend dependencies
+log "Installing server dependencies..."
+cd "${BACKEND_DIR}"
+npm install --omit=dev
+
+# 5. Install frontend dependencies and build frontend
+log "Installing frontend dependencies & building production bundle..."
+cd "${FRONTEND_DIR}"
+npm install
+npm run build
+
+# 6. Copy build output to backend public server path
+log "Syncing static assets to backend public route..."
+rm -rf "${BACKEND_DIR}/public/*"
+cp -r "${FRONTEND_DIR}/dist/"* "${BACKEND_DIR}/public/"
+
+# 7. Reload backend cluster zero-downtime
+log "Reloading processes via PM2..."
+cd "${APP_DIR}"
+pm2 reload ecosystem.config.js --env production || pm2 reload "${PM2_APP_NAME}"
+
+# 8. Post-deployment self-check verification
+log "Verifying server response..."
+sleep 3
+RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api || true)
+
+if [ "${RESPONSE_CODE}" -ne 200 ] && [ "${RESPONSE_CODE}" -ne 302 ]; then
+    error "Web service is not responsive (HTTP status: ${RESPONSE_CODE}). Tracing error logs..."
+    pm2 logs "${PM2_APP_NAME}" --lines 50
+    false # Triggers trap ERR -> rollback
+fi
+
+log "MyFastHR deployed successfully! Zero-downtime active."

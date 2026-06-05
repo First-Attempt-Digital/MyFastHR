@@ -49,7 +49,7 @@ db.raw('SELECT 1')
         console.error('Database connection failed:', err.message);
     });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Server running on http://127.0.0.1:${PORT}`);
     console.log(`[System Ready for Onboarding]`);
 });
