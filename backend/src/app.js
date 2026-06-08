@@ -591,11 +591,15 @@ app.post('/Device/SaveDevice', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing date or time in payload.' });
         }
 
-        // Skip failed punches if machine sends PunchStatus
+        // Skip failed punches if machine sends PunchStatus (could be 'success', 'True', or true)
         const punchStatus = req.body.PunchStatus || req.body.punchStatus || req.body.punch_status;
-        if (punchStatus && punchStatus.toLowerCase() !== 'success') {
-            console.warn('>>> [BIOMETRIC-MACHINE]: Skipping punch with status:', punchStatus);
-            return res.status(200).json({ success: true, message: 'Punch skipped (non-success status).', status: 'skipped' });
+        if (punchStatus !== undefined && punchStatus !== null) {
+            const statusStr = String(punchStatus).toLowerCase().trim();
+            const isSuccess = statusStr === 'success' || statusStr === 'true' || statusStr === '1';
+            if (!isSuccess) {
+                console.warn('>>> [BIOMETRIC-MACHINE]: Skipping punch with status:', punchStatus);
+                return res.status(200).json({ success: true, message: 'Punch skipped (non-success status).', status: 'skipped' });
+            }
         }
 
         // Lookup device by serial - allow master key to work WITHOUT device pre-registration
