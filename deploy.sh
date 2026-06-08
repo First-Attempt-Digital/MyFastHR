@@ -6,15 +6,22 @@
 set -e
 
 # Configuration
-APP_DIR="/var/www/myfasthr"
-BACKUP_DIR="/var/www/myfasthr_backups"
+APP_DIR="/var/www/MyFastHR"
+BACKUP_DIR="/var/www/MyFastHR_backups"
 BACKEND_DIR="${APP_DIR}/backend"
 FRONTEND_DIR="${APP_DIR}/frontend"
-DB_NAME="u735392253_fasthr"
-DB_USER="u735392253_fast_hr"
-DB_PASS="Lucky@&1523@&"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-PM2_APP_NAME="myfasthr-backend"
+PM2_APP_NAME="myfasthr"
+
+# Load DB credentials from backend .env (never hardcode secrets in this file!)
+if [ -f "${BACKEND_DIR}/.env" ]; then
+    DB_NAME=$(grep -E '^DB_NAME=' "${BACKEND_DIR}/.env" | cut -d '=' -f2- | tr -d '"')
+    DB_USER=$(grep -E '^DB_USER=' "${BACKEND_DIR}/.env" | cut -d '=' -f2- | tr -d '"')
+    DB_PASS=$(grep -E '^DB_PASSWORD=' "${BACKEND_DIR}/.env" | cut -d '=' -f2- | tr -d '"')
+else
+    echo "[DEPLOY-ERROR] backend/.env not found! DB credentials missing."
+    exit 1
+fi
 
 mkdir -p "${BACKUP_DIR}"
 
@@ -95,7 +102,8 @@ npm run build
 
 # 6. Copy build output to backend public server path
 log "Syncing static assets to backend public route..."
-rm -rf "${BACKEND_DIR}/public/*"
+rm -rf "${BACKEND_DIR}/public/"
+mkdir -p "${BACKEND_DIR}/public"
 cp -r "${FRONTEND_DIR}/dist/"* "${BACKEND_DIR}/public/"
 
 # 7. Reload backend cluster zero-downtime
