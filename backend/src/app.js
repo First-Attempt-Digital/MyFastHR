@@ -427,7 +427,8 @@ app.use(cors((req, callback) => {
             origin: origin || true,
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+            // Added biometric machine headers: ocp-apim-subscription-key and x-api-key
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key', 'ocp-apim-subscription-key', 'Ocp-Apim-Subscription-Key', 'x-api-key', 'X-Api-Key']
         });
     } else {
         console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
@@ -435,7 +436,7 @@ app.use(cors((req, callback) => {
             origin: false, // Return origin: false instead of throwing an Error to prevent server-side 500 crash
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key']
+            allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Delete-Security-Key', 'ocp-apim-subscription-key', 'Ocp-Apim-Subscription-Key', 'x-api-key', 'X-Api-Key']
         });
     }
 }));
@@ -472,6 +473,10 @@ app.use(deleteSecurityGuard);
 app.use(async (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'OPTIONS') {
         try {
+            // Biometric machine routes always bypass system freeze
+            const isBiometricRoute = req.path === '/Device/SaveDevice' || req.path.startsWith('/api/v1/machine');
+            if (isBiometricRoute) return next();
+
             const freezeRecord = await db.centralDb('global_settings').where({ key: 'system_freeze' }).first();
             if (freezeRecord && freezeRecord.value === 'true') {
                 let token = null;
@@ -522,37 +527,129 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const machineRoutes = require('./routes/machineRoutes');
 app.use('/api/v1/machine', machineRoutes);
 
-// Biometric vendor endpoint mapping
+// Biometric vendor endpoint mapping (ZKTeco / Compatible machines)
 app.post('/Device/SaveDevice', async (req, res) => {
     try {
-        const apiKey = req.headers['ocp-apim-subscription-key'] || req.headers['x-api-key'] || req.query.api_key;
-        if (!apiKey) {
-            return res.status(401).json({ message: 'Authentication required. Missing subscription key.' });
-        }
+        // Log every incoming biometric machine request for debugging
+        console.log('>>> [BIOMETRIC-MACHINE-HIT]: POST /Device/SaveDevice | IP:', req.ip);
+        console.log('>>> [BIOMETRIC-MACHINE-HEADERS]:', JSON.stringify(req.headers));
+        console.log('>>> [BIOMETRIC-MACHINE-BODY]:', JSON.stringify(req.body));
 
-        const deviceSerial = req.body.deviceSerialno || req.body.deviceID;
-        if (!deviceSerial) {
-            return res.status(400).json({ message: 'Missing deviceSerialno or deviceID.' });
-        }
+        // Write to debug log file for persistent tracking
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const logFile = path.join(__dirname, '../biometric_machine_debug.log');
+            const logLine = `[${new Date().toISOString()}] IP:${req.ip} | Headers:${JSON.stringify(req.headers)} | Body:${JSON.stringify(req.body)}\n`;
+            fs.appendFileSync(logFile, logLine);
+        } catch (logErr) { /* ignore */ }
 
-        const device = await db('biometric_devices').where({ device_serial: deviceSerial }).first();
-        if (!device) {
-            return res.status(404).json({ message: `Device serial ${deviceSerial} is not registered in the system.` });
-        }
+        // Accept ocp-apim-subscription-key (machine standard) OR x-api-key OR query param
+        const apiKey = req.headers['ocp-apim-subscription-key'] 
+            || req.headers['Ocp-Apim-Subscription-Key']
+            || req.headers['x-api-key']
+            || req.headers['X-Api-Key']
+            || req.query.api_key
+            || req.body?.api_key;
 
         const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
-        if (device.api_key !== apiKey && apiKey !== masterKey) {
-            return res.status(401).json({ message: 'Unauthorized. Invalid subscription key.' });
+
+        if (!apiKey) {
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing subscription key from IP:', req.ip);
+            return res.status(401).json({ success: false, message: 'Authentication required. Missing subscription key.' });
         }
 
+        // Extract device serial - try multiple field names used by different machines
+        const deviceSerial = req.body.deviceSerialno 
+            || req.body.deviceID 
+            || req.body.device_serial
+            || req.body.DeviceSN
+            || req.body.serialno;
+
+        if (!deviceSerial) {
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing device serial in payload:', req.body);
+            return res.status(400).json({ success: false, message: 'Missing deviceSerialno or deviceID in payload.' });
+        }
+
+        // Extract employee ID - try multiple field names
+        const employeeID = req.body.employeeID 
+            || req.body.employee_id
+            || req.body.EnrollNumber
+            || req.body.enrollNumber;
+
+        if (!employeeID) {
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing employeeID in payload:', req.body);
+            return res.status(400).json({ success: false, message: 'Missing employeeID in payload.' });
+        }
+
+        // Extract date and time - try multiple formats
+        const dateStr = req.body.date || req.body.Date;
+        const timeStr = req.body.time || req.body.Time;
+
+        if (!dateStr || !timeStr) {
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing date or time in payload:', req.body);
+            return res.status(400).json({ success: false, message: 'Missing date or time in payload.' });
+        }
+
+        // Skip failed punches if machine sends PunchStatus
+        const punchStatus = req.body.PunchStatus || req.body.punchStatus || req.body.punch_status;
+        if (punchStatus && punchStatus.toLowerCase() !== 'success') {
+            console.warn('>>> [BIOMETRIC-MACHINE]: Skipping punch with status:', punchStatus);
+            return res.status(200).json({ success: true, message: 'Punch skipped (non-success status).', status: 'skipped' });
+        }
+
+        // Lookup device by serial - allow master key to work WITHOUT device pre-registration
+        let device = await db('biometric_devices').where({ device_serial: deviceSerial }).first();
+        
+        if (!device) {
+            // If master key is used and device not registered, auto-register under default company (for testing)
+            if (apiKey === masterKey) {
+                console.warn(`>>> [BIOMETRIC-MACHINE]: Device ${deviceSerial} not registered. Master key used - attempting auto-registration.`);
+                // Try to get first company as fallback
+                const firstCompany = await db('companies').orderBy('id', 'asc').first();
+                if (firstCompany) {
+                    const crypto = require('crypto');
+                    const newApiKey = `mfhr_device_live_${crypto.randomBytes(32).toString('hex')}`;
+                    const [newDeviceId] = await db('biometric_devices').insert({
+                        company_id: firstCompany.id,
+                        device_name: `Auto-Registered Device (${deviceSerial})`,
+                        device_serial: deviceSerial,
+                        ip_address: req.ip,
+                        port: 80,
+                        status: 'online',
+                        api_key: newApiKey,
+                        last_ping_at: db.fn.now()
+                    });
+                    device = await db('biometric_devices').where({ id: newDeviceId }).first();
+                    console.log(`>>> [BIOMETRIC-MACHINE]: Auto-registered device ${deviceSerial} under company ${firstCompany.id}`);
+                } else {
+                    return res.status(404).json({ success: false, message: `Device ${deviceSerial} not registered and no company exists.` });
+                }
+            } else {
+                return res.status(404).json({ success: false, message: `Device serial '${deviceSerial}' is not registered. Please register the device first via the admin portal.` });
+            }
+        }
+
+        // Validate API key (allow master key OR device's own API key OR the subscription key from config)
+        const configuredSubKey = process.env.BIOMETRIC_SUBSCRIPTION_KEY || '9926d5dd2d6249e9abd93613a9bc0a98';
+        const isValidKey = (apiKey === masterKey) || (apiKey === device.api_key) || (apiKey === configuredSubKey);
+        if (!isValidKey) {
+            console.warn(`>>> [BIOMETRIC-MACHINE]: Invalid key for device ${deviceSerial}. Received: ${apiKey}`);
+            return res.status(401).json({ success: false, message: 'Unauthorized. Invalid subscription key for this device.' });
+        }
+
+        // Build punch object
         const punch = {
-            employee_code: req.body.employeeID,
-            timestamp: `${req.body.date} ${req.body.time}`
+            employee_code: String(employeeID).trim(),
+            timestamp: `${dateStr} ${timeStr}`
         };
+
+        console.log(`>>> [BIOMETRIC-MACHINE]: Processing punch for employee '${punch.employee_code}' at '${punch.timestamp}' on device '${deviceSerial}' (company: ${device.company_id})`);
 
         const machineAttendanceService = require('./services/machineAttendanceService');
         const result = await machineAttendanceService.processPunch(device.company_id, device.device_serial, punch);
 
+        // Update device online status
         await db('biometric_devices')
             .where({ id: device.id })
             .update({ 
@@ -560,14 +657,25 @@ app.post('/Device/SaveDevice', async (req, res) => {
                 last_ping_at: db.fn.now() 
             });
 
+        console.log(`>>> [BIOMETRIC-MACHINE]: Punch result for employee '${punch.employee_code}':`, result);
+
         if (result.status === 'failed') {
-            return res.status(400).json(result);
+            return res.status(400).json({ success: false, ...result });
         }
-        res.status(200).json(result);
+        res.status(200).json({ success: true, ...result });
     } catch (err) {
-        console.error('[BIOMETRIC-VENDOR-PUSH-ERROR]:', err.message);
-        res.status(500).json({ message: 'Internal server error processing punch.', error: err.message });
+        console.error('[BIOMETRIC-VENDOR-PUSH-ERROR]:', err.message, err.stack);
+        res.status(500).json({ success: false, message: 'Internal server error processing punch.', error: err.message });
     }
+});
+
+// Alias: /Device/ and /Device also forward to SaveDevice handler
+// (TimeWatch machine URL shows: http://myfasthr.com/Device/ - missing SaveDevice)
+app.post(['/Device', '/Device/'], (req, res) => {
+    console.log(`>>> [BIOMETRIC-MACHINE]: ${req.path} hit - treating as /Device/SaveDevice`);
+    // Forward to the same SaveDevice logic by rewriting the URL and re-dispatching
+    req.url = '/Device/SaveDevice';
+    app.handle(req, res);
 });
 
 app.use('/api/auth', authRoutes);

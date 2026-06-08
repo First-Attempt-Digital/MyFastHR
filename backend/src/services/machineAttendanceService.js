@@ -165,18 +165,39 @@ class MachineAttendanceService {
             // 2. Resolve Employee
             let employeeId = null;
 
-            // Check mapping table first
+            const cleanCode = employeeCodeClean(employee_code);
+
+            // Check mapping table first (biometric_enroll_id)
             const mapper = await db('employee_biometric_mapping')
-                .where({ company_id: companyId, biometric_enroll_id: employeeCodeClean(employee_code) })
+                .where({ company_id: companyId, biometric_enroll_id: cleanCode })
                 .first();
 
             if (mapper) {
                 employeeId = mapper.employee_id;
             } else {
-                // Fallback to checking employees.employee_id_number directly
-                const employee = await db('employees')
-                    .where({ company_id: companyId, employee_id_number: employee_code })
+                // Fallback: try matching employees.employee_id_number as string
+                let employee = await db('employees')
+                    .where({ company_id: companyId, employee_id_number: cleanCode })
                     .first();
+
+                // If not found, try without leading zeros (e.g. machine sends "09910" but stored as "9910")
+                if (!employee && cleanCode.startsWith('0')) {
+                    const strippedCode = cleanCode.replace(/^0+/, '');
+                    employee = await db('employees')
+                        .where({ company_id: companyId, employee_id_number: strippedCode })
+                        .first();
+                }
+
+                // If still not found, try numeric comparison (employee_id_number stored as number)
+                if (!employee) {
+                    const numericCode = parseInt(cleanCode, 10);
+                    if (!isNaN(numericCode)) {
+                        employee = await db('employees')
+                            .where({ company_id: companyId })
+                            .whereRaw('CAST(employee_id_number AS CHAR) = ?', [String(numericCode)])
+                            .first();
+                    }
+                }
 
                 if (employee) {
                     employeeId = employee.id;
@@ -191,9 +212,9 @@ class MachineAttendanceService {
                     employee_code,
                     punch_time: punchTimeStr,
                     status: 'invalid_user',
-                    error_details: 'Unmapped biometric enroll ID.'
+                    error_details: `Unmapped biometric enroll ID: '${cleanCode}'. No employee found with this code.`
                 });
-                return { status: 'skipped', reason: 'Employee mapping not found' };
+                return { status: 'skipped', reason: `Employee mapping not found for code: ${cleanCode}` };
             }
 
             // 3. Process Check-In / Check-Out Business Logic
