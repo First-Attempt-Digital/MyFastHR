@@ -76,7 +76,7 @@ log "Backing up live database..."
 CURRENT_BACKUP_PATH="${BACKUP_DIR}/deploy_backup_${TIMESTAMP}"
 mkdir -p "${CURRENT_BACKUP_PATH}"
 
-mysqldump -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" > "${CURRENT_BACKUP_PATH}/db.sql"
+mysqldump --no-tablespaces -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" > "${CURRENT_BACKUP_PATH}/db.sql"
 
 # 2. File Backup
 log "Archiving active code assets..."
