@@ -82,7 +82,7 @@ class EmployeeRepository {
             company_id: cleanInt(data.company_id),
             employee_id_number: cleanString(data.employee_id_number),
             first_name: cleanString(data.first_name),
-            last_name: cleanString(data.last_name),
+            last_name: cleanString(data.last_name) || '',
             email: cleanString(data.email),
             phone: cleanString(data.phone),
             gender: cleanString(data.gender),

@@ -88,12 +88,13 @@ class EmployeeService {
             if (existingEmployee) {
                 employeeId = existingEmployee.id;
                 // Reuse and reactivate the inactive employee
-                await trx('employees').where({ id: employeeId }).update({
+                const cleanData = employeeRepository._mapEmployeeData({
                     ...data,
                     status: 'active',
                     onboarding_token: onboardingToken,
                     onboarding_status: 'pending'
                 });
+                await trx('employees').where({ id: employeeId }).update(cleanData);
             } else {
                 const employeeData = {
                     ...data,
@@ -105,6 +106,42 @@ class EmployeeService {
                 };
                 const [newEmployeeId] = await employeeRepository.create(employeeData, trx);
                 employeeId = newEmployeeId;
+            }
+
+            if (data.initial_leaves && typeof data.initial_leaves === 'object') {
+                const leaveTypes = await trx('leave_types').where(function() {
+                    this.whereNull('company_id').orWhere('company_id', companyId);
+                }).andWhere('is_active', true);
+
+                for (const lt of leaveTypes) {
+                    const assignedDays = Number(data.initial_leaves[lt.id]);
+                    if (isNaN(assignedDays)) continue;
+
+                    const defaultDays = Number(lt.days_per_year);
+                    const diff = assignedDays - defaultDays;
+
+                    if (diff > 0) {
+                        await trx('leave_adjustments').insert({
+                            company_id: companyId,
+                            employee_id: employeeId,
+                            leave_type_id: lt.id,
+                            adjustment_type: 'credit',
+                            days: diff,
+                            reason: 'Initial entitlement assignment during onboarding',
+                            created_by: null
+                        });
+                    } else if (diff < 0) {
+                        await trx('leave_adjustments').insert({
+                            company_id: companyId,
+                            employee_id: employeeId,
+                            leave_type_id: lt.id,
+                            adjustment_type: 'debit',
+                            days: Math.abs(diff),
+                            reason: 'Initial entitlement assignment during onboarding',
+                            created_by: null
+                        });
+                    }
+                }
             }
 
             // Fetch company name for email
@@ -139,7 +176,7 @@ class EmployeeService {
     }
 
     async updateEmployee(id, companyId, data, user) {
-        const { role_name, ...employeeData } = data;
+        const { role_name, initial_leaves, ...employeeData } = data;
         
         return await db.transaction(async (trx) => {
             const updated = await employeeRepository.update(id, companyId, employeeData, trx);
@@ -174,7 +211,7 @@ class EmployeeService {
                                         password_hash: passwordHash,
                                         role_id: role ? role.id : 4,
                                         status: 'active'
-                                    });
+                                     });
                                     userId = newUserId;
                                     await trx('employees').where({ id }).update({ user_id: userId });
                                 }
@@ -190,6 +227,54 @@ class EmployeeService {
                     }
                 }
             }
+
+            if (initial_leaves && typeof initial_leaves === 'object') {
+                const leaveTypes = await trx('leave_types').where(function() {
+                    this.whereNull('company_id').orWhere('company_id', companyId);
+                }).andWhere('is_active', true);
+
+                // Fetch current adjustments for this year to calculate current entitlement
+                const currentYear = new Date().getFullYear();
+                const adjustments = await trx('leave_adjustments')
+                    .where({ employee_id: id, company_id: companyId })
+                    .andWhereRaw('YEAR(created_at) = ?', [currentYear]);
+
+                for (const lt of leaveTypes) {
+                    const assignedDays = Number(initial_leaves[lt.id]);
+                    if (isNaN(assignedDays)) continue;
+
+                    const defaultDays = Number(lt.days_per_year);
+                    const typeAdjusts = adjustments.filter(a => a.leave_type_id === lt.id);
+                    const credits = typeAdjusts.filter(a => a.adjustment_type === 'credit').reduce((acc, curr) => acc + Number(curr.days), 0);
+                    const debits = typeAdjusts.filter(a => a.adjustment_type === 'debit').reduce((acc, curr) => acc + Number(curr.days), 0);
+                    
+                    const currentEntitlement = defaultDays + credits - debits;
+                    const diff = assignedDays - currentEntitlement;
+
+                    if (diff > 0) {
+                        await trx('leave_adjustments').insert({
+                            company_id: companyId,
+                            employee_id: id,
+                            leave_type_id: lt.id,
+                            adjustment_type: 'credit',
+                            days: diff,
+                            reason: 'Entitlement updated via employee profile edit',
+                            created_by: user.id
+                        });
+                    } else if (diff < 0) {
+                        await trx('leave_adjustments').insert({
+                            company_id: companyId,
+                            employee_id: id,
+                            leave_type_id: lt.id,
+                            adjustment_type: 'debit',
+                            days: Math.abs(diff),
+                            reason: 'Entitlement updated via employee profile edit',
+                            created_by: user.id
+                        });
+                    }
+                }
+            }
+
             return updated;
         });
     }
@@ -274,6 +359,27 @@ class EmployeeService {
                 await trx('users').where({ id: employee.user_id }).delete();
             }
             await trx('employees').where({ id, company_id: user.company_id }).delete();
+        });
+    }
+
+    async bulkDeleteEmployees(ids, user) {
+        await db.transaction(async (trx) => {
+            // Find user_ids first to delete from users table
+            const employees = await trx('employees')
+                .whereIn('id', ids)
+                .where('company_id', user.company_id)
+                .select('user_id');
+            
+            const userIds = employees.map(e => e.user_id).filter(Boolean);
+            
+            if (userIds.length > 0) {
+                await trx('users').whereIn('id', userIds).delete();
+            }
+            
+            await trx('employees')
+                .whereIn('id', ids)
+                .where('company_id', user.company_id)
+                .delete();
         });
     }
 
@@ -840,7 +946,7 @@ class EmployeeService {
                 }
             } catch (err) {}
 
-            return clean;
+            return null;
         };
 
         const parseBoolean = (val) => {
@@ -901,9 +1007,59 @@ class EmployeeService {
                     }
                 });
 
+                // Auto-detect and fix shifted columns (e.g. Phone number ends up in office_location, Gender in phone, Location in date fields)
+                const originalLoc = (employeeData.office_location || '').trim();
+                const originalPhone = (employeeData.phone || '').trim();
+                
+                const isLocPhone = /^\d{8,12}$/.test(originalLoc);
+                const isPhoneGen = ['male', 'female'].includes(originalPhone.toLowerCase());
+
+                if (isLocPhone || isPhoneGen) {
+                    if (isPhoneGen) {
+                        employeeData.gender = originalPhone;
+                    }
+                    if (isLocPhone) {
+                        employeeData.phone = originalLoc;
+                    }
+
+                    // Find where the location ("lhs", "rhs", etc.) was misplaced in rawData
+                    let detectedLocation = null;
+                    Object.keys(rawData).forEach(k => {
+                        const val = rawData[k];
+                        if (val && typeof val === 'string') {
+                            const lowerVal = val.toLowerCase().trim();
+                            if (lowerVal === 'lhs' || lowerVal === 'rhs' || lowerVal.includes('rhs/') || lowerVal.includes('lhs/') || lowerVal.includes('/lhs') || lowerVal.includes('/rhs') || lowerVal.includes(' lhs') || lowerVal.includes(' rhs')) {
+                                detectedLocation = val.trim();
+                            }
+                        }
+                    });
+
+                    if (detectedLocation) {
+                        employeeData.office_location = detectedLocation;
+                    } else {
+                        employeeData.office_location = 'Rhs';
+                    }
+
+                    // Shift dates: The joining date was shifted to date_of_birth column
+                    if (employeeData.date_of_birth) {
+                        employeeData.joining_date = employeeData.date_of_birth;
+                        employeeData.date_of_birth = null;
+                    }
+                }
+
                 // Clean and normalize names
                 employeeData.first_name = (employeeData.first_name || '').trim();
                 employeeData.last_name = (employeeData.last_name || '').trim();
+                employeeData.employee_id_number = (employeeData.employee_id_number || '').trim();
+
+                // Validate mandatory fields: only employee name and employee ID
+                if (!employeeData.first_name) {
+                    throw new Error('Employee Name (First Name) is missing or empty.');
+                }
+                if (!employeeData.employee_id_number) {
+                    throw new Error('Employee ID is missing or empty.');
+                }
+
                 employeeData.designation = (employeeData.designation || 'Staff').trim() || 'Staff';
 
                 // Normalize email to null if empty
@@ -990,7 +1146,37 @@ class EmployeeService {
                 successCount++;
             } catch (rowError) {
                 failedCount++;
-                errors.push(`Row ${rowIndex} (${rawData.email || 'No email'}): ${rowError.message}`);
+                let errorMsg = rowError.sqlMessage || rowError.message || 'Unknown database error';
+                if (errorMsg.includes(' - ') && errorMsg.includes('insert into')) {
+                    errorMsg = errorMsg.split(' - ').pop();
+                }
+                errorMsg = errorMsg.replace(/^error:\s*/i, '');
+
+                // Format duplicate database entry errors to be human readable
+                if (errorMsg.includes('Duplicate entry')) {
+                    const match = errorMsg.match(/Duplicate entry '(.*?)' for key '(.*?)'/i);
+                    if (match) {
+                        const val = match[1];
+                        const key = match[2];
+                        if (key.includes('employee_id_number')) {
+                            errorMsg = `Employee ID '${val}' is already assigned to another employee.`;
+                        } else if (key.includes('email')) {
+                            errorMsg = `Email '${val}' is already registered.`;
+                        } else if (key.includes('phone')) {
+                            errorMsg = `Phone number '${val}' is already registered.`;
+                        } else {
+                            errorMsg = `'${val}' is already registered in the system (Duplicate Entry).`;
+                        }
+                    }
+                }
+
+                // Resolve a human friendly identifier (Name or Email) for display
+                const firstNameVal = rawData['first name'] || rawData['firstname'] || rawData['first_name'] || '';
+                const lastNameVal = rawData['last name'] || rawData['lastname'] || rawData['last_name'] || '';
+                const fullName = `${firstNameVal} ${lastNameVal}`.trim();
+                const empIdentifier = fullName ? fullName : (rawData.email || rawData['email address'] || rawData['email_address'] || 'No Name/Email');
+
+                errors.push(`Row ${rowIndex} (${empIdentifier}): ${errorMsg}`);
             }
         }
 

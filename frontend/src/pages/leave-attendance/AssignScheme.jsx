@@ -46,6 +46,7 @@ const AssignScheme = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [deptFilter, setDeptFilter] = useState('All');
     const [schemeFilter, setSchemeFilter] = useState('All');
+    const [outletFilter, setOutletFilter] = useState('All');
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -290,6 +291,7 @@ const AssignScheme = () => {
             const matchesSearch = fullName.includes(search) || empId.includes(search);
 
             const matchesDept = deptFilter === 'All' || emp.department_name === deptFilter;
+            const matchesOutlet = outletFilter === 'All' || emp.office_location === outletFilter;
             
             let matchesScheme = true;
             if (schemeFilter !== 'All') {
@@ -300,9 +302,14 @@ const AssignScheme = () => {
                 }
             }
 
-            return matchesSearch && matchesDept && matchesScheme;
+            return matchesSearch && matchesDept && matchesScheme && matchesOutlet;
         });
-    }, [assignments, searchQuery, deptFilter, schemeFilter]);
+    }, [assignments, searchQuery, deptFilter, schemeFilter, outletFilter]);
+
+    // Outlets list
+    const uniqueOutlets = useMemo(() => {
+        return ['All', ...[...new Set(assignments.map(emp => emp.office_location).filter(Boolean))].sort()];
+    }, [assignments]);
 
     // Departments list
     const departments = useMemo(() => {
@@ -756,6 +763,21 @@ const AssignScheme = () => {
                                         <option value="All">All Departments</option>
                                         {departments.map(d => (
                                             <option key={d} value={d}>{d}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+
+                                {/* Outlet/Location Filter */}
+                                <div className="relative">
+                                    <select
+                                        value={outletFilter}
+                                        onChange={e => setOutletFilter(e.target.value)}
+                                        className="appearance-none bg-slate-50 border border-slate-100 rounded-xl pl-3 pr-7 h-9 text-[10px] font-bold text-slate-600 outline-none focus:border-indigo-300"
+                                    >
+                                        <option value="All">All Outlets</option>
+                                        {uniqueOutlets.filter(o => o !== 'All').map(o => (
+                                            <option key={o} value={o}>{o}</option>
                                         ))}
                                     </select>
                                     <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

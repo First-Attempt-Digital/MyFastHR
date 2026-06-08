@@ -33,11 +33,11 @@ function mapDbStatusToFrontend(status) {
     const s = String(status).trim().toLowerCase();
     if (s === '') return 'P';
     if (s === 'present' || s === 'p') return 'P';
-    if (s === 'absent' || s === 'a') return 'A';
-    if (s === 'late' || s === 'l') return 'P';
+    if (s === 'absent' || s === 'a' || s === 'short') return 'A';
+    if (s === 'late' || s === 'l' || s === 'late_in' || s === 'late-in') return 'L';
     if (s === 'off') return 'OFF';
     if (s === 'regularized' || s === 'r') return 'R';
-    if (s === 'half-day' || s === 'hd') return 'HD';
+    if (s === 'half-day' || s === 'hd' || s === 'half_day') return 'HD';
     return 'P';
 }
 
@@ -393,16 +393,30 @@ class AttendanceService {
                         if (dayRegularization || dbStatus === 'regularized' || dbStatus === 'r' || dayAttendance.punch_source === 'regularization') {
                             status = 'R';
                             stats.P++;
-                        } else if (dayEarlyOut) {
-                            status = 'E';
-                            stats.P++;
+                        } else if (dayAttendance.punch_source === 'entry_request' || dayEarlyOut) {
+                            if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
+                                status = 'HD';
+                                stats.P += 0.5;
+                            } else if (dbStatus === 'late-in' || dbStatus === 'late_in' || dbStatus === 'late' || dbStatus === 'l') {
+                                status = 'L';
+                                stats.L++;
+                            } else if (dbStatus === 'present' || dbStatus === 'p') {
+                                status = 'P';
+                                stats.P++;
+                            } else if (dbStatus === 'absent' || dbStatus === 'a') {
+                                status = 'A';
+                                stats.A++;
+                            } else {
+                                status = 'E';
+                                stats.P++;
+                            }
                         } else if (dbStatus === 'absent' || dbStatus === 'a') {
                             status = 'A';
                             stats.A++;
                         } else if (dbStatus === 'off') {
                             status = 'OFF';
                             stats.OFF++;
-                        } else if (dbStatus === 'half-day') {
+                        } else if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
                             status = 'HD';
                             stats.P += 0.5;
                         } else if (dbStatus === 'short') {
@@ -973,7 +987,7 @@ class AttendanceService {
         // Fetch all employees (removed strict status check to ensure visibility)
         const employees = await db('employees')
             .where({ company_id: companyId })
-            .select('id', 'first_name', 'last_name', 'employee_id_number', 'status');
+            .select('id', 'first_name', 'last_name', 'employee_id_number', 'status', 'office_location');
 
         console.log(`>>> [DEBUG]: Found ${employees.length} employees`);
 
@@ -1130,7 +1144,7 @@ class AttendanceService {
             'e.last_name', 
             'e.employee_id_number', 
             'e.designation', 
-            'e.city as location',
+            'e.office_location as location',
             'e.department_id',
             's.name as default_shift_name',
             'asch.weekoffs as scheme_weekoffs',
@@ -1798,6 +1812,7 @@ class AttendanceService {
                 'e.employee_id_number',
                 'e.designation',
                 'e.status',
+                'e.office_location',
                 'd.name as department_name',
                 's.id as shift_id',
                 's.name as shift_name',

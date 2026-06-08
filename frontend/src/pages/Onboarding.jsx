@@ -501,6 +501,8 @@ const Onboarding = () => {
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     
+    const [leaveTypes, setLeaveTypes] = useState([]);
+    
     const [formData, setFormData] = useState({
         // Step 1: Basic Information
         employee_number_series: '',
@@ -550,6 +552,9 @@ const Onboarding = () => {
         bank_branch: '',
         account_number: '',
         ifsc_code: '',
+
+        // Leave Entitlements
+        initial_leaves: {},
 
         // Role settings
         role_name: 'employee'
@@ -608,6 +613,19 @@ const Onboarding = () => {
 
             const res = await api.get(`/employees/${editId}?t=${Date.now()}`);
             
+            let employeeLeaves = {};
+            try {
+                const balances = await api.get('/leaves/all-balances');
+                const empBal = balances.find(b => String(b.id) === String(editId));
+                if (empBal && empBal.balances) {
+                    empBal.balances.forEach(b => {
+                        employeeLeaves[b.type_id] = b.allocated;
+                    });
+                }
+            } catch (balErr) {
+                console.error('Failed to fetch employee leave balances:', balErr);
+            }
+
             const formatDate = (d) => {
                 if (!d) return '';
                 if (String(d).includes('1899') || String(d).includes('0000-00-00')) return '';
@@ -646,6 +664,7 @@ const Onboarding = () => {
                 shift_id: res.shift_id || '',
                 uan_number: res.uan_number || '',
                 pf_excess_contribution: (res.pf_excess_contribution === 'above' || res.pf_excess_contribution === 1 || res.pf_excess_contribution === true) ? 'above' : 'ceiling',
+                initial_leaves: employeeLeaves,
                 role_name: res.role_name || 'employee'
             }));
         } catch (err) {
@@ -698,12 +717,27 @@ const Onboarding = () => {
 
     const fetchOnboardingOptions = async () => {
         try {
-            const [designations, locations, depts, shifts] = await Promise.all([
+            const [designations, locations, depts, shifts, activeLeaves] = await Promise.all([
                 api.get('/employees/options/designation').catch(() => []),
                 api.get('/employees/options/office_location').catch(() => []),
                 api.get('/org/departments').catch(() => []),
-                api.get('/attendance/shift-list').catch(() => [])
+                api.get('/attendance/shift-list').catch(() => []),
+                api.get('/leaves/types').catch(() => [])
             ]);
+
+            setLeaveTypes(activeLeaves || []);
+
+            if (activeLeaves && activeLeaves.length > 0 && !editId) {
+                setFormData(prev => {
+                    const leavesInit = { ...prev.initial_leaves };
+                    activeLeaves.forEach(lt => {
+                        if (leavesInit[lt.id] === undefined) {
+                            leavesInit[lt.id] = lt.days_per_year;
+                        }
+                    });
+                    return { ...prev, initial_leaves: leavesInit };
+                });
+            }
 
             setFieldOptions(prev => ({
                 ...prev,
@@ -890,7 +924,8 @@ const Onboarding = () => {
         { id: 1, title: 'BASIC INFORMATION', icon: User },
         { id: 2, title: 'EMPLOYEE POSITION', icon: Briefcase },
         { id: 3, title: 'STATUTORY INFO', icon: FileText },
-        { id: 4, title: 'PAYMENT MODE', icon: CreditCard }
+        { id: 4, title: 'PAYMENT MODE', icon: CreditCard },
+        { id: 5, title: 'LEAVE ENTITLEMENT', icon: Calendar }
     ];
 
     const validateStep = (step) => {
@@ -921,6 +956,16 @@ const Onboarding = () => {
                 if (!formData.account_number) newErrors.account_number = true;
                 if (!formData.ifsc_code) newErrors.ifsc_code = true;
             }
+        } else if (step === 5) {
+            // Validate that initial leaves are numeric and positive
+            if (formData.initial_leaves) {
+                Object.keys(formData.initial_leaves).forEach(key => {
+                    const val = Number(formData.initial_leaves[key]);
+                    if (isNaN(val) || val < 0) {
+                        newErrors[`leave_${key}`] = true;
+                    }
+                });
+            }
         }
 
         setErrors(newErrors);
@@ -929,7 +974,7 @@ const Onboarding = () => {
 
     const nextStep = () => {
         if (validateStep(currentStep)) {
-            if (currentStep < 4) setCurrentStep(currentStep + 1);
+            if (currentStep < 5) setCurrentStep(currentStep + 1);
         } else {
             // Optional: scroll to first error
             const firstErrorField = Object.keys(errors)[0];
@@ -946,7 +991,7 @@ const Onboarding = () => {
 
     const handleSubmit = async (e) => {
         if (e) e.preventDefault();
-        if (!validateStep(4)) return;
+        if (!validateStep(5)) return;
         
         setLoading(true);
         try {
@@ -1539,6 +1584,51 @@ const Onboarding = () => {
                         </div>
                     </div>
                 );
+            case 5:
+                return (
+                    <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6 max-w-2xl">
+                        <div className="p-4 bg-indigo-50/50 border border-indigo-100/50 rounded-xl text-indigo-900 text-xs font-semibold leading-relaxed">
+                            Specify initial leave entitlements for the employee. Leaving these as-is will assign the company's default active leave rules.
+                        </div>
+                        {leaveTypes.map(lt => {
+                            const val = formData.initial_leaves?.[lt.id] ?? lt.days_per_year;
+                            return (
+                                <div key={lt.id} className="grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-2 border-b border-slate-100">
+                                    <div className="md:col-span-2 flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: lt.color || '#4361ee' }} />
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-800">{lt.name}</h4>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Default: {lt.days_per_year} days per year</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <input 
+                                            type="number"
+                                            value={val}
+                                            onChange={(e) => {
+                                                const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    initial_leaves: {
+                                                        ...prev.initial_leaves,
+                                                        [lt.id]: v
+                                                    }
+                                                }));
+                                            }}
+                                            placeholder="Enter days"
+                                            className={`px-4 py-2 bg-white border rounded text-sm w-full focus:outline-none transition-all ${
+                                                errors[`leave_${lt.id}`] ? 'border-rose-400 bg-rose-50' : 'border-slate-300 focus:border-indigo-400'
+                                            }`}
+                                        />
+                                        {errors[`leave_${lt.id}`] && (
+                                            <span className="text-[9px] font-bold text-rose-600 uppercase tracking-tight">Invalid Value</span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
             default:
                 return null;
         }
@@ -1620,13 +1710,13 @@ const Onboarding = () => {
                         <div className="flex gap-2">
                             <button 
                                 onClick={nextStep}
-                                className={`flex items-center gap-2 px-6 py-2 bg-white border border-indigo-600 text-indigo-600 text-[12px] font-medium rounded hover:bg-indigo-50 transition-all ${currentStep === 4 ? 'hidden' : ''}`}
+                                className={`flex items-center gap-2 px-6 py-2 bg-white border border-indigo-600 text-indigo-600 text-[12px] font-medium rounded hover:bg-indigo-50 transition-all ${currentStep === 5 ? 'hidden' : ''}`}
                             >
                                 Next
                                 <ChevronRight size={14} />
                             </button>
                             
-                            {currentStep === 4 && (
+                            {currentStep === 5 && (
                                 <button 
                                     onClick={handleSubmit}
                                     disabled={loading}

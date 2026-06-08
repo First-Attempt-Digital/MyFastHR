@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
     ChevronLeft, ChevronRight, Info, Edit2, Lock, Unlock,
@@ -282,6 +282,7 @@ const Payroll = () => {
     const currentMonthStr = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
     const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
     const [showPayrollGuide, setShowPayrollGuide] = useState(false);
+    const [selectedOutlet, setSelectedOutlet] = useState('All');
 
     // Payroll Controls State
     const [controls, setControls] = useState({
@@ -950,11 +951,11 @@ const Payroll = () => {
     };
 
     const handleExportRegisterCSV = () => {
-        if (!registerData || registerData.length === 0) {
+        if (!filteredRegisterData || filteredRegisterData.length === 0) {
             alert("No data available to export.");
             return;
         }
-        const dataToExport = registerData.map(reg => ({
+        const dataToExport = filteredRegisterData.map(reg => ({
             employee_id_number: reg.employee_id_number,
             name: `${reg.first_name || ''} ${reg.last_name || ''}`.trim(),
             designation: reg.designation,
@@ -1751,25 +1752,109 @@ const Payroll = () => {
         { name: 'Mar', year: String(fyStartYear + 1) }
     ];
 
-    const chartData = (parseFloat(summary.netPay) || parseFloat(summary.deductions))
-        ? [
-            { name: 'Net Pay', value: parseFloat(summary.netPay) || 0, color: '#4361ee' },
+    // Unique outlets list
+    const uniqueOutlets = useMemo(() => {
+        const outlets = new Set();
+        if (Array.isArray(employees)) {
+            employees.forEach(e => e.office_location && outlets.add(e.office_location));
+        }
+        if (Array.isArray(registerData)) {
+            registerData.forEach(e => {
+                if (e.location) outlets.add(e.location);
+                if (e.office_location) outlets.add(e.office_location);
+            });
+        }
+        if (Array.isArray(loans)) {
+            loans.forEach(e => e.office_location && outlets.add(e.office_location));
+        }
+        if (Array.isArray(separations)) {
+            separations.forEach(e => e.office_location && outlets.add(e.office_location));
+        }
+        return ['All', ...Array.from(outlets).sort()];
+    }, [employees, registerData, loans, separations]);
+
+    // Filter register data
+    const filteredRegisterData = useMemo(() => {
+        if (!Array.isArray(registerData)) return [];
+        return registerData.filter(reg => {
+            return selectedOutlet === 'All' || reg.location === selectedOutlet || reg.office_location === selectedOutlet;
+        });
+    }, [registerData, selectedOutlet]);
+
+    // Filter loans
+    const filteredLoans = useMemo(() => {
+        if (!Array.isArray(loans)) return [];
+        return loans.filter(loan => {
+            return selectedOutlet === 'All' || loan.office_location === selectedOutlet;
+        });
+    }, [loans, selectedOutlet]);
+
+    // Filter separations
+    const filteredSeparations = useMemo(() => {
+        if (!Array.isArray(separations)) return [];
+        return separations.filter(s => {
+            return selectedOutlet === 'All' || s.office_location === selectedOutlet;
+        });
+    }, [separations, selectedOutlet]);
+
+    // Filter statements
+    const filteredStatements = useMemo(() => {
+        if (!Array.isArray(statements)) return [];
+        return statements.filter(stmt => {
+            return selectedOutlet === 'All' || stmt.office_location === selectedOutlet || stmt.location === selectedOutlet;
+        });
+    }, [statements, selectedOutlet]);
+
+    // Filter employees
+    const filteredEmployees = useMemo(() => {
+        if (!Array.isArray(employees)) return [];
+        return employees.filter(emp => {
+            return selectedOutlet === 'All' || emp.office_location === selectedOutlet || emp.location === selectedOutlet;
+        });
+    }, [employees, selectedOutlet]);
+
+    // Filter repayments
+    const filteredRepayments = useMemo(() => {
+        if (!Array.isArray(repayments)) return [];
+        return repayments.filter(r => {
+            return selectedOutlet === 'All' || r.office_location === selectedOutlet;
+        });
+    }, [repayments, selectedOutlet]);
+
+    const chartData = useMemo(() => {
+        return [
+            { name: 'Gross Salary', value: parseFloat(summary.grossPay) || 0, color: '#10b981' },
             { name: 'Deductions', value: parseFloat(summary.deductions) || 0, color: '#ef4444' }
-        ]
-        : [
-            { name: 'No Data Available', value: 1, color: '#e2e8f0' }
         ];
+    }, [summary]);
 
     return (
         <div className="p-4 md:p-6 bg-[#F4F6FC] min-h-screen font-outfit text-slate-800 antialiased selection:bg-indigo-500/20">
 
             {/* --- PAGE TITLE --- */}
-            <div className="mb-4">
-                <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                    Enterprise Payroll Hub
-                    <span className="text-[9px] font-bold tracking-widest text-[#4361ee] bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100 uppercase">Pro</span>
-                </h1>
-                <p className="text-slate-500 text-xs mt-0.5">Manage dynamic salary sheets, global statutory contributions (PF, ESIC, PT, Gratuity), and payroll formulas inside one gorgeous console.</p>
+            <div className="mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        Enterprise Payroll Hub
+                        <span className="text-[9px] font-bold tracking-widest text-[#4361ee] bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100 uppercase">Pro</span>
+                    </h1>
+                    <p className="text-slate-500 text-xs mt-0.5">Manage dynamic salary sheets, global statutory contributions (PF, ESIC, PT, Gratuity), and payroll formulas inside one gorgeous console.</p>
+                </div>
+
+                {/* Outlet filter */}
+                <div className="relative min-w-[180px] shrink-0">
+                    <select
+                        value={selectedOutlet}
+                        onChange={(e) => setSelectedOutlet(e.target.value)}
+                        className="w-full appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2.5 text-xs font-black text-slate-700 outline-none pr-10 shadow-sm cursor-pointer"
+                    >
+                        <option value="All">All Outlets</option>
+                        {uniqueOutlets.filter(o => o !== 'All').map(o => (
+                            <option key={o} value={o}>{o}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
             </div>
 
             {/* --- FINANCIAL YEAR MONTH SELECTOR --- */}
@@ -2171,7 +2256,7 @@ const Payroll = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {statements.length > 0 ? statements.map(stmt => (
+                                            {filteredStatements.length > 0 ? filteredStatements.map(stmt => (
                                                 <tr key={stmt.id} className="hover:bg-slate-50/30 transition-colors group">
                                                     <td className="py-3.5 px-3">
                                                         <div className="flex items-center gap-2.5">
@@ -2311,7 +2396,7 @@ const Payroll = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {registerData.map((reg) => (
+                                        {filteredRegisterData.map((reg) => (
                                             <tr key={reg.employee_id} className="hover:bg-slate-50/40 transition-colors group">
                                                 <td className="px-3 py-3.5 sticky left-0 bg-white z-10 border-r border-slate-150 shadow-[4px_0_12px_rgba(0,0,0,0.015)]">
                                                     <div className="flex items-center gap-2">
@@ -2531,7 +2616,7 @@ const Payroll = () => {
                                         </div>
                                     ) : (
                                         <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto custom-scrollbar pr-1">
-                                            {employees
+                                            {filteredEmployees
                                                 .filter(emp => {
                                                     const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
                                                     const empIdNum = (emp.employee_id_number || '').toLowerCase();
@@ -2563,7 +2648,7 @@ const Payroll = () => {
                                                     );
                                                 })
                                             }
-                                            {employees.filter(emp => {
+                                            {filteredEmployees.filter(emp => {
                                                 const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
                                                 const empIdNum = (emp.employee_id_number || '').toLowerCase();
                                                 const query = inputsSearchQuery.toLowerCase();

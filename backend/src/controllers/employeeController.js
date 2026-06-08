@@ -120,6 +120,19 @@ class EmployeeController {
         }
     }
 
+    async bulkDelete(req, res) {
+        try {
+            const { ids } = req.body;
+            if (!ids || !Array.isArray(ids) || ids.length === 0) {
+                return res.status(400).json({ message: 'No employee IDs provided for deletion.' });
+            }
+            await employeeService.bulkDeleteEmployees(ids, req.user);
+            res.json({ message: 'Selected employees permanently removed from matrix.' });
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
+
     async generateToken(req, res) {
         try {
             const token = await employeeService.generateOnboardingToken(req.params.id, req.user.company_id);
@@ -264,10 +277,24 @@ class EmployeeController {
                 return res.status(400).json({ message: 'No file uploaded. Please upload a CSV file.' });
             }
 
-            const csvContent = req.file.buffer.toString('utf-8');
+            // Strip UTF-8 BOM if present
+            const csvContent = req.file.buffer.toString('utf-8').replace(/^\uFEFF/, '');
             
-            // Standard robust CSV parsing logic
-            const parseCSV = (text) => {
+            // Detect delimiter dynamically from the first line
+            const firstLine = csvContent.split(/\r?\n/)[0] || '';
+            let delimiter = ',';
+            const commas = (firstLine.match(/,/g) || []).length;
+            const semicolons = (firstLine.match(/;/g) || []).length;
+            const tabs = (firstLine.match(/\t/g) || []).length;
+            
+            if (semicolons > commas && semicolons > tabs) {
+                delimiter = ';';
+            } else if (tabs > commas && tabs > semicolons) {
+                delimiter = '\t';
+            }
+            
+            // Standard robust CSV parsing logic with custom delimiter
+            const parseCSV = (text, delim = ',') => {
                 const lines = [];
                 let row = [""];
                 let inQuotes = false;
@@ -283,7 +310,7 @@ class EmployeeController {
                         } else {
                             inQuotes = !inQuotes;
                         }
-                    } else if (c === ',' && !inQuotes) {
+                    } else if (c === delim && !inQuotes) {
                         row.push('');
                     } else if ((c === '\r' || c === '\n') && !inQuotes) {
                         if (c === '\r' && next === '\n') {
@@ -301,7 +328,7 @@ class EmployeeController {
                 return lines;
             };
 
-            const rawRows = parseCSV(csvContent);
+            const rawRows = parseCSV(csvContent, delimiter);
             if (rawRows.length < 2) {
                 return res.status(400).json({ message: 'The uploaded file is empty or does not contain headers.' });
             }

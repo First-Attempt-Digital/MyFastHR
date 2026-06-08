@@ -560,6 +560,8 @@ class PayrollService {
                 last_name: empRecord.name.split(' ').slice(1).join(' ') || '',
                 employee_id_number: empRecord.code,
                 designation: empRecord.role,
+                location: empRecord.location,
+                office_location: empRecord.location,
                 base_salary: comp.base_salary,
                 total_allowances: comp.total_allowances,
                 full_base_salary: comp.full_base_salary,
@@ -1062,7 +1064,8 @@ class PayrollService {
                 'loans.*',
                 'employees.first_name',
                 'employees.last_name',
-                'employees.employee_id_number'
+                'employees.employee_id_number',
+                'employees.office_location'
             )
             .orderBy('loans.created_at', 'desc');
     }

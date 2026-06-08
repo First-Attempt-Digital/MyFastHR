@@ -17,14 +17,23 @@ const EmployeeLogin = () => {
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    const [logoUrl, setLogoUrl] = useState('/uploads/branding/logo.png');
-    const [logoHeight, setLogoHeight] = useState(40);
+    const [logoUrl, setLogoUrl] = useState(
+        (companySlug 
+            ? localStorage.getItem(`tenant_logo_${companySlug}`) 
+            : localStorage.getItem('platform_logo_url')) || '/uploads/branding/logo.png'
+    );
+    const [logoHeight, setLogoHeight] = useState(parseInt(localStorage.getItem('platform_logo_height')) || 40);
     const [logoError, setLogoError] = useState(false);
-    const [branding, setBranding] = useState({
-        app_name: 'MyFastHR',
-        login_title: 'Log in to your account',
-        login_subtitle: 'Welcome back! Please enter your details below.',
-        footer_copyright: '© 2026 MyFastHR. All rights reserved.'
+    const [branding, setBranding] = useState(() => {
+        const cachedAppName = companySlug 
+            ? localStorage.getItem(`tenant_name_${companySlug}`) 
+            : localStorage.getItem('platform_app_name');
+        return {
+            app_name: cachedAppName || 'MyFastHR',
+            login_title: cachedAppName ? `Welcome to ${cachedAppName}` : 'Log in to your account',
+            login_subtitle: cachedAppName ? 'Please enter your details below.' : 'Welcome back! Please enter your details below.',
+            footer_copyright: `© ${new Date().getFullYear()} ${cachedAppName || 'MyFastHR'}. All rights reserved.`
+        };
     });
 
     const applyPortalBrandColor = (color) => {
@@ -59,10 +68,15 @@ const EmployeeLogin = () => {
                     const data = await api.get(`/auth/tenant-branding/${companySlug}`);
                     if (data) {
                         if (data.logo_url) {
-                            setLogoUrl(getAssetUrl(data.logo_url));
+                            const fullLogoUrl = getAssetUrl(data.logo_url);
+                            setLogoUrl(fullLogoUrl);
+                            localStorage.setItem(`tenant_logo_${companySlug}`, fullLogoUrl);
                             setLogoError(false);
                         } else {
                             setLogoError(true);
+                        }
+                        if (data.name) {
+                            localStorage.setItem(`tenant_name_${companySlug}`, data.name);
                         }
                         setBranding({
                             app_name: data.name || 'MyFastHR',
@@ -78,11 +92,17 @@ const EmployeeLogin = () => {
                     const data = await fetchBranding();
                     if (data) {
                         if (data.logo_url) {
-                            setLogoUrl(getAssetUrl(data.logo_url));
+                            const fullLogoUrl = getAssetUrl(data.logo_url);
+                            setLogoUrl(fullLogoUrl);
+                            localStorage.setItem('platform_logo_url', fullLogoUrl);
                             setLogoError(false);
                         }
                         if (data.logo_height) {
                             setLogoHeight(parseInt(data.logo_height));
+                            localStorage.setItem('platform_logo_height', data.logo_height);
+                        }
+                        if (data.app_name) {
+                            localStorage.setItem('platform_app_name', data.app_name);
                         }
                         setBranding({
                             app_name: data.app_name || 'MyFastHR',

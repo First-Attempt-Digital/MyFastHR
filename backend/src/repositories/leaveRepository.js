@@ -28,6 +28,7 @@ class LeaveRepository {
             'e.first_name',
             'e.last_name',
             'e.employee_id_number',
+            'e.office_location',
             'lt.name as leave_type_name',
             'lt.color as leave_type_color'
         ).orderBy('l.created_at', 'desc');
@@ -192,6 +193,7 @@ class LeaveRepository {
                 id: emp.id,
                 name: `${emp.first_name} ${emp.last_name}`,
                 designation: emp.designation,
+                office_location: emp.office_location,
                 balances: empBalances,
                 total_allocated: totalAllocated,
                 total_used: totalUsed,

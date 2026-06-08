@@ -96,8 +96,8 @@ const AppShell = ({ children }) => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState('active');
   const menuRef = useRef(null);
-  const [logoUrl, setLogoUrl] = useState('/uploads/branding/logo.png');
-  const [logoHeight, setLogoHeight] = useState(36);
+  const [logoUrl, setLogoUrl] = useState(localStorage.getItem('platform_logo_url') || '/uploads/branding/logo.png');
+  const [logoHeight, setLogoHeight] = useState(parseInt(localStorage.getItem('platform_logo_height')) || 36);
   const [logoError, setLogoError] = useState(false);
   const [appName, setAppName] = useState(localStorage.getItem('platform_app_name') || 'MyFastHR');
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
@@ -110,11 +110,14 @@ const AppShell = ({ children }) => {
       const branding = await fetchBranding();
       if (branding) {
         if (branding.logo_url) {
-          setLogoUrl(getAssetUrl(branding.logo_url));
+          const fullLogoUrl = getAssetUrl(branding.logo_url);
+          setLogoUrl(fullLogoUrl);
+          localStorage.setItem('platform_logo_url', fullLogoUrl);
           setLogoError(false);
         }
         if (branding.logo_height) {
           setLogoHeight(parseInt(branding.logo_height));
+          localStorage.setItem('platform_logo_height', branding.logo_height);
         }
         if (branding.app_name) {
           setAppName(branding.app_name);
@@ -237,7 +240,9 @@ const AppShell = ({ children }) => {
                     applyBrandColor(defaultPlatformColor);
                 }
                 if (profile.tenant_logo_url) {
-                    setLogoUrl(getAssetUrl(profile.tenant_logo_url));
+                    const fullTenantLogoUrl = getAssetUrl(profile.tenant_logo_url);
+                    setLogoUrl(fullTenantLogoUrl);
+                    localStorage.setItem('platform_logo_url', fullTenantLogoUrl);
                     setLogoError(false);
                 }
                 if (profile.tenant_name) {

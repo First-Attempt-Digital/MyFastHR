@@ -2,8 +2,8 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 
 const deleteSecurityGuard = async (req, res, next) => {
-    // Only guard DELETE requests
-    if (req.method !== 'DELETE') {
+    // Only guard DELETE requests and bulk-delete endpoints
+    if (req.method !== 'DELETE' && !req.path.includes('bulk-delete')) {
         return next();
     }
 

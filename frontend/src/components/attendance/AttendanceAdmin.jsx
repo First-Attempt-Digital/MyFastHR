@@ -9,6 +9,18 @@ const AttendanceAdmin = () => {
     const [matrix, setMatrix] = useState([]);
     const [days, setDays] = useState(30);
     const [loading, setLoading] = useState(false);
+    const [selectedOutlet, setSelectedOutlet] = useState('All');
+
+    const uniqueOutlets = React.useMemo(() => {
+        const locations = matrix.map(emp => emp.location).filter(Boolean);
+        return ['All', ...new Set(locations)].sort();
+    }, [matrix]);
+
+    const filteredMatrix = React.useMemo(() => {
+        return matrix.filter(emp => {
+            return selectedOutlet === 'All' || emp.location === selectedOutlet;
+        });
+    }, [matrix, selectedOutlet]);
 
     const getMonthOptions = () => {
         const options = [];
@@ -22,7 +34,7 @@ const AttendanceAdmin = () => {
             });
         }
         return options;
-    };
+    }
 
     const monthOptions = getMonthOptions();
 
@@ -50,12 +62,12 @@ const AttendanceAdmin = () => {
     };
 
     const handleExport = () => {
-        if (!matrix || matrix.length === 0) {
+        if (!filteredMatrix || filteredMatrix.length === 0) {
             alert("No attendance data to export.");
             return;
         }
 
-        const dataToExport = matrix.map(emp => {
+        const dataToExport = filteredMatrix.map(emp => {
             const row = {
                 employee_code: emp.code,
                 name: emp.name,
@@ -106,51 +118,65 @@ const AttendanceAdmin = () => {
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-700">
             {/* Control Bar */}
             <div className="p-6 border-b border-slate-50 flex flex-wrap items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Month</p>
-                            <select 
-                                value={`${month}-${year}`}
-                                onChange={handleMonthChange}
-                                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10"
-                            >
-                                {monthOptions.map(opt => (
-                                    <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
-                                        {opt.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attendance Scheme</p>
-                            <select className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10">
-                                <option>Default Scheme (1st - 31st)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={handleExport}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+                <div className="flex items-center gap-4">
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Month</p>
+                        <select 
+                            value={`${month}-${year}`}
+                            onChange={handleMonthChange}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10"
                         >
-                            <Download size={14} /> Export Excel
-                        </button>
+                            {monthOptions.map(opt => (
+                                <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Outlet</p>
+                        <select 
+                            value={selectedOutlet}
+                            onChange={(e) => setSelectedOutlet(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10"
+                        >
+                            {uniqueOutlets.map(loc => (
+                                <option key={loc} value={loc}>
+                                    {loc === 'All' ? 'All Outlets' : loc}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Attendance Scheme</p>
+                        <select className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10">
+                            <option>Default Scheme (1st - 31st)</option>
+                        </select>
                     </div>
                 </div>
 
-                {/* Attendance Table */}
-                <div className="overflow-x-auto max-w-full custom-scrollbar">
-                    <table className="w-full text-left border-collapse table-fixed md:table-auto">
-                        <thead className="bg-slate-50/50">
-                            <tr>
-                                <th className="sticky left-0 z-10 bg-slate-50 border-r border-slate-100 px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest min-w-[280px]">Employee</th>
-                                {dayLabels.map(d => (
-                                    <th key={d} className="px-2 py-4 text-center text-[10px] font-black text-slate-400 border-r border-slate-100 min-w-[35px]">
-                                        {d}
-                                        <span className="block text-[8px] font-medium opacity-50 uppercase">{['S', 'M', 'T', 'W', 'T', 'F', 'S'][(new Date(year, month - 1, d)).getDay()]}</span>
-                                    </th>
-                                ))}
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={handleExport}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+                    >
+                        <Download size={14} /> Export Excel
+                    </button>
+                </div>
+            </div>
+
+            {/* Attendance Table */}
+            <div className="overflow-x-auto max-w-full custom-scrollbar">
+                <table className="w-full text-left border-collapse table-fixed md:table-auto">
+                    <thead className="bg-slate-50/50">
+                        <tr>
+                            <th className="sticky left-0 z-10 bg-slate-50 border-r border-slate-100 px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest min-w-[280px]">Employee</th>
+                            {dayLabels.map(d => (
+                                <th key={d} className="px-2 py-4 text-center text-[10px] font-black text-slate-400 border-r border-slate-100 min-w-[35px]">
+                                    {d}
+                                    <span className="block text-[8px] font-medium opacity-50 uppercase">{['S', 'M', 'T', 'W', 'T', 'F', 'S'][(new Date(year, month - 1, d)).getDay()]}</span>
+                                </th>
+                            ))}
                             <th className="px-4 py-4 text-center text-[10px] font-black text-pink-500 uppercase tracking-widest bg-pink-50/10 border-l border-slate-100">P</th>
                             <th className="px-4 py-4 text-center text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50/10">L</th>
                             <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/10">H</th>
@@ -159,7 +185,7 @@ const AttendanceAdmin = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                        {matrix.map(emp => (
+                        {filteredMatrix.map(emp => (
                             <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 border-r border-slate-100 px-6 py-4 min-w-[280px]">
                                     <div className="flex items-center gap-3">

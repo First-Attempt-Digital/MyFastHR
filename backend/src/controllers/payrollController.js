@@ -244,6 +244,7 @@ class PayrollController {
                     'e.employee_id_number',
                     'e.designation',
                     'e.joining_date',
+                    'e.office_location',
                     'd.name as department_name'
                 )
                 .orderBy('s.created_at', 'desc');

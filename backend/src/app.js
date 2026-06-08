@@ -521,6 +521,55 @@ const categoryRoutes = require('./routes/categoryRoutes');
 // Routes
 const machineRoutes = require('./routes/machineRoutes');
 app.use('/api/v1/machine', machineRoutes);
+
+// Biometric vendor endpoint mapping
+app.post('/Device/SaveDevice', async (req, res) => {
+    try {
+        const apiKey = req.headers['ocp-apim-subscription-key'] || req.headers['x-api-key'] || req.query.api_key;
+        if (!apiKey) {
+            return res.status(401).json({ message: 'Authentication required. Missing subscription key.' });
+        }
+
+        const deviceSerial = req.body.deviceSerialno || req.body.deviceID;
+        if (!deviceSerial) {
+            return res.status(400).json({ message: 'Missing deviceSerialno or deviceID.' });
+        }
+
+        const device = await db('biometric_devices').where({ device_serial: deviceSerial }).first();
+        if (!device) {
+            return res.status(404).json({ message: `Device serial ${deviceSerial} is not registered in the system.` });
+        }
+
+        const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
+        if (device.api_key !== apiKey && apiKey !== masterKey) {
+            return res.status(401).json({ message: 'Unauthorized. Invalid subscription key.' });
+        }
+
+        const punch = {
+            employee_code: req.body.employeeID,
+            timestamp: `${req.body.date} ${req.body.time}`
+        };
+
+        const machineAttendanceService = require('./services/machineAttendanceService');
+        const result = await machineAttendanceService.processPunch(device.company_id, device.device_serial, punch);
+
+        await db('biometric_devices')
+            .where({ id: device.id })
+            .update({ 
+                status: 'online', 
+                last_ping_at: db.fn.now() 
+            });
+
+        if (result.status === 'failed') {
+            return res.status(400).json(result);
+        }
+        res.status(200).json(result);
+    } catch (err) {
+        console.error('[BIOMETRIC-VENDOR-PUSH-ERROR]:', err.message);
+        res.status(500).json({ message: 'Internal server error processing punch.', error: err.message });
+    }
+});
+
 app.use('/api/auth', authRoutes);
 
 const employeeController = require('./controllers/employeeController');

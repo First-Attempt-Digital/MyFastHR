@@ -11,6 +11,7 @@ import { exportToCSV } from '../../utils/exportUtils';
 const EmployeeRecords = () => {
     const [activeTab, setActiveTab] = useState('balances'); // 'balances' or 'applications'
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedOutlet, setSelectedOutlet] = useState('All');
     const [loading, setLoading] = useState(true);
     const [balances, setBalances] = useState([]);
     const [applications, setApplications] = useState([]);
@@ -128,16 +129,26 @@ const EmployeeRecords = () => {
         exportToCSV(dataToExport, `Leave_Applications_Log_${new Date().getFullYear()}.csv`, headers);
     };
 
-    // Filtered data based on search
-    const filteredBalances = balances.filter(emp => 
-        emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (emp.designation && emp.designation.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    // Unique outlets list
+    const uniqueOutlets = ['All', ...[...new Set([
+        ...balances.map(b => b.office_location),
+        ...applications.map(a => a.office_location)
+    ].filter(Boolean))].sort()];
 
-    const filteredApplications = applications.filter(app => 
-        `${app.first_name} ${app.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        app.leave_type_name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Filtered data based on search & outlet
+    const filteredBalances = balances.filter(emp => {
+        const matchesSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (emp.designation && emp.designation.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesOutlet = selectedOutlet === 'All' || emp.office_location === selectedOutlet;
+        return matchesSearch && matchesOutlet;
+    });
+
+    const filteredApplications = applications.filter(app => {
+        const matchesSearch = `${app.first_name} ${app.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            app.leave_type_name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesOutlet = selectedOutlet === 'All' || app.office_location === selectedOutlet;
+        return matchesSearch && matchesOutlet;
+    });
 
     // Approve / Reject Leave Handler
     const handleStatusUpdate = async (id, status) => {
@@ -343,15 +354,31 @@ const EmployeeRecords = () => {
 
             {/* --- CONTROLS BAR (SEARCH) --- */}
             <div className="bg-white border border-slate-200/40 p-3.5 rounded-2xl shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-                <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 w-full sm:max-w-md shadow-inner">
-                    <Search size={14} className="text-slate-400 shrink-0" />
-                    <input 
-                        type="text" 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={activeTab === 'balances' ? 'Search employee name or role...' : 'Search employee name or leave type...'}
-                        className="bg-transparent border-none text-xs font-bold text-slate-700 outline-none w-full"
-                    />
+                <div className="flex flex-col sm:flex-row gap-3 items-center w-full sm:max-w-xl">
+                    <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 w-full shadow-inner">
+                        <Search size={14} className="text-slate-400 shrink-0" />
+                        <input 
+                            type="text" 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder={activeTab === 'balances' ? 'Search employee name or role...' : 'Search employee name or leave type...'}
+                            className="bg-transparent border-none text-xs font-bold text-slate-700 outline-none w-full"
+                        />
+                    </div>
+                    {/* Outlet/Location Filter */}
+                    <div className="relative w-full sm:w-48 shrink-0">
+                        <select
+                            value={selectedOutlet}
+                            onChange={(e) => setSelectedOutlet(e.target.value)}
+                            className="w-full appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                        >
+                            <option value="All">All Outlets</option>
+                            {uniqueOutlets.filter(o => o !== 'All').map(o => (
+                                <option key={o} value={o}>{o}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-4">

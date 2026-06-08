@@ -145,6 +145,7 @@ const uploadCSV = multer({
     limits: { fileSize: 5 * 1024 * 1024 }
 });
 router.post('/bulk-import', authorize(['company_admin', 'super_admin']), uploadCSV.single('file'), employeeController.bulkImport);
+router.post('/bulk-delete', authorize(['company_admin', 'super_admin']), employeeController.bulkDelete);
 
 router.get('/managers', employeeController.getManagers);
 router.get('/options/:field', employeeController.getOptions);

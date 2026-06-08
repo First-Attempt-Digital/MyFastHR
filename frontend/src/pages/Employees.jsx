@@ -249,7 +249,9 @@ const Employees = () => {
 
         try {
             const res = await api.post('/employees/bulk-import', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
             });
             setImportResult(res);
             fetchEmployees(); // Refresh list
@@ -371,7 +373,7 @@ const Employees = () => {
         if (!await window.customConfirm(`Are you sure you want to permanently delete the ${selectedEmployeeIds.length} selected employees? This action cannot be undone.`, 'Bulk Delete')) return;
         setLoading(true);
         try {
-            await Promise.all(selectedEmployeeIds.map(id => api.delete(`/employees/${id}`)));
+            await api.post('/employees/bulk-delete', { ids: selectedEmployeeIds });
             setSelectedEmployeeIds([]);
             fetchEmployees();
         } catch (err) {
@@ -683,37 +685,39 @@ const Employees = () => {
                         initial={{ opacity: 0, y: 50, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 50, scale: 0.95 }}
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 z-50 border border-slate-800"
+                        className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-xl text-white px-8 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.35)] flex items-center gap-8 z-50 border border-white/10"
                     >
-                        <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-black">{selectedEmployeeIds.length}</span>
+                        <div className="flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 text-white flex items-center justify-center text-[11px] font-black shadow-[0_0_15px_rgba(99,102,241,0.5)]">
+                                {selectedEmployeeIds.length}
+                            </span>
                             <span className="text-xs font-bold text-slate-300">Selected</span>
                         </div>
-                        <div className="h-6 w-[1px] bg-slate-800" />
-                        <div className="flex items-center gap-2">
+                        <div className="h-6 w-[1px] bg-white/10" />
+                        <div className="flex items-center gap-3">
                             <button
                                 onClick={handleBulkFire}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors rounded-xl text-xs font-bold border border-amber-500/20"
+                                className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-300 hover:bg-amber-500 hover:text-white transition-all rounded-xl text-xs font-bold border border-amber-500/20 active:scale-95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] cursor-pointer"
                             >
                                 <UserMinus size={14} /> Deactivate
                             </button>
                             <button
                                 onClick={handleBulkActivate}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors rounded-xl text-xs font-bold border border-emerald-500/20"
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-50 hover:text-white transition-all rounded-xl text-xs font-bold border border-emerald-500/20 active:scale-95 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] cursor-pointer"
                             >
                                 <UserCheck size={14} /> Activate
                             </button>
                             <button
                                 onClick={handleBulkDelete}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors rounded-xl text-xs font-bold border border-rose-500/20"
+                                className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-rose-500 to-red-600 text-white hover:from-rose-600 hover:to-red-700 transition-all rounded-xl text-xs font-black shadow-[0_4px_15px_rgba(244,63,94,0.35)] active:scale-95 hover:scale-[1.03] cursor-pointer"
                             >
                                 <Trash2 size={14} /> Delete
                             </button>
                         </div>
-                        <div className="h-6 w-[1px] bg-slate-800" />
+                        <div className="h-6 w-[1px] bg-white/10" />
                         <button
                             onClick={() => setSelectedEmployeeIds([])}
-                            className="text-xs font-bold text-slate-400 hover:text-white transition-colors"
+                            className="text-xs font-black text-slate-400 hover:text-white transition-colors cursor-pointer"
                         >
                             Cancel
                         </button>
