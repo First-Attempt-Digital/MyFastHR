@@ -285,7 +285,9 @@ class MachineAttendanceService {
                     shiftAllowed.setHours(sHours, sMins + (parseInt(grace) || 0), 0, 0);
 
                     if (punchTime > shiftAllowed) {
-                        // AUTO-CREATE PENDING ENTRY/EXIT REQUEST
+                        // Biometric machine punch - log attendance as 'late' instead of blocking
+                        // Auto-create regularization request for manager review
+                        status = 'late';
                         const existingRequest = await db('attendance_entry_requests')
                             .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'late_in' })
                             .first();
@@ -302,18 +304,7 @@ class MachineAttendanceService {
                                 updated_at: db.fn.now()
                             });
                         }
-                        
-                        // Record raw log in biometric raw logs as pending approval
-                        await db('biometric_raw_logs').insert({
-                            company_id: companyId,
-                            device_serial: deviceSerial,
-                            employee_code,
-                            punch_time: punchTimeStr,
-                            status: 'pending_approval',
-                            error_details: 'Late Check-In. Request created.'
-                        });
-
-                        return { status: 'skipped', reason: 'Late Check-In blocked. Awaiting manager approval.' };
+                        // NOTE: Do NOT return/skip - continue to log the attendance below
                     }
                 }
 
@@ -418,7 +409,7 @@ class MachineAttendanceService {
                     }
 
                     if (isEarly) {
-                        // AUTO-CREATE PENDING ENTRY/EXIT REQUEST
+                        // Biometric machine punch - log checkout anyway, just create a regularization request
                         const existingRequest = await db('attendance_entry_requests')
                             .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out' })
                             .first();
@@ -435,18 +426,7 @@ class MachineAttendanceService {
                                 updated_at: db.fn.now()
                             });
                         }
-
-                        // Record raw log in biometric raw logs as pending approval
-                        await db('biometric_raw_logs').insert({
-                            company_id: companyId,
-                            device_serial: deviceSerial,
-                            employee_code,
-                            punch_time: punchTimeStr,
-                            status: 'pending_approval',
-                            error_details: 'Early Out check-out. Request created.'
-                        });
-
-                        return { status: 'skipped', reason: 'Early Out blocked. Awaiting manager approval.' };
+                        // NOTE: Do NOT return/skip - continue to log check-out below
                     }
                 }
 
