@@ -63,6 +63,14 @@ class AdminController {
                     status: 'active'
                 }, trx);
 
+                // 5. Seed Default Leave Types for this company
+                const defaultLeaveTypes = [
+                    { company_id: companyId, name: 'Sick Leave',    days_per_year: 12, accrual_frequency: 'monthly', carry_forward: true,  is_active: true },
+                    { company_id: companyId, name: 'Casual Leave',  days_per_year: 12, accrual_frequency: 'monthly', carry_forward: true,  is_active: true },
+                    { company_id: companyId, name: 'Annual Leave',  days_per_year: 18, accrual_frequency: 'yearly',  carry_forward: false, is_active: true },
+                ];
+                await trx('leave_types').insert(defaultLeaveTypes);
+
                 return companyId;
             });
 
