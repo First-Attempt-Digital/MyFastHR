@@ -1586,7 +1586,8 @@ class AttendanceService {
 
                 const empId = employee.id;
                 const companyId = employee.company_id;
-                const punchTime = new Date(rawTime);
+                const rawTimeStr = typeof rawTime === 'string' ? rawTime : String(rawTime);
+                const punchTime = new Date(rawTimeStr.includes('+') ? rawTimeStr : `${rawTimeStr} +05:30`);
 
                 if (isNaN(punchTime.getTime())) {
                     results.failedCount++;
@@ -1623,8 +1624,10 @@ class AttendanceService {
                     const grace = employeeWithShift?.scheme_grace ?? employeeWithShift?.shift_grace ?? rules.grace_period;
 
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
-                    const shiftAllowed = new Date(punchTime);
-                    shiftAllowed.setHours(sHours, sMins + (parseInt(grace) || 0), 0, 0);
+                    const totalMins = sMins + (parseInt(grace) || 0);
+                    const allowedHours = String(sHours + Math.floor(totalMins / 60)).padStart(2, '0');
+                    const allowedMins = String(totalMins % 60).padStart(2, '0');
+                    const shiftAllowed = new Date(`${logDate} ${allowedHours}:${allowedMins}:00 +05:30`);
 
                     const status = punchTime > shiftAllowed ? 'late' : 'present';
 

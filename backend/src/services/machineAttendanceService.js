@@ -140,7 +140,9 @@ class MachineAttendanceService {
             return { status: 'failed', reason: 'Missing employee_code or timestamp' };
         }
 
-        const punchTime = new Date(timestamp);
+        // Parse the incoming timestamp in Indian Standard Time (IST) timezone
+        const rawTimeStr = typeof timestamp === 'string' ? timestamp : String(timestamp);
+        const punchTime = new Date(rawTimeStr.includes('+') ? rawTimeStr : `${rawTimeStr} +05:30`);
         if (isNaN(punchTime.getTime())) {
             return { status: 'failed', reason: 'Invalid timestamp format' };
         }
@@ -281,8 +283,11 @@ class MachineAttendanceService {
                     const grace = employeeWithShift?.scheme_grace ?? employeeWithShift?.shift_grace ?? rules.grace_period ?? 15;
 
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
-                    const shiftAllowed = new Date(punchTime);
-                    shiftAllowed.setHours(sHours, sMins + (parseInt(grace) || 0), 0, 0);
+                    const totalMins = sMins + (parseInt(grace) || 0);
+                    const allowedHours = String(sHours + Math.floor(totalMins / 60)).padStart(2, '0');
+                    const allowedMins = String(totalMins % 60).padStart(2, '0');
+                    // Construct allowed shift start time in IST timezone
+                    const shiftAllowed = new Date(`${dateStr} ${allowedHours}:${allowedMins}:00 +05:30`);
 
                     if (punchTime > shiftAllowed) {
                         // Biometric machine punch - log attendance as 'late' instead of blocking
@@ -401,8 +406,8 @@ class MachineAttendanceService {
                     } else {
                         const shiftEnd = employee?.end_time || '18:00';
                         const [eHours, eMins] = shiftEnd.split(':').map(Number);
-                        const shiftEndLimit = new Date(punchTime);
-                        shiftEndLimit.setHours(eHours, eMins, 0, 0);
+                        // Construct allowed shift end time in IST timezone
+                        const shiftEndLimit = new Date(`${dateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
                         if (punchTime < shiftEndLimit) {
                             isEarly = true;
                         }
