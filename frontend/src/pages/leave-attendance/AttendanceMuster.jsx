@@ -10,6 +10,32 @@ import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../utils/api';
 import { exportToCSV } from '../../utils/exportUtils';
 
+const formatPunchTime = (punchTimeVal) => {
+    if (!punchTimeVal) return '';
+    try {
+        let dateObj;
+        if (punchTimeVal instanceof Date) {
+            dateObj = punchTimeVal;
+        } else {
+            let str = String(punchTimeVal).trim();
+            if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(str)) {
+                str = str.replace(' ', 'T') + 'Z';
+            }
+            dateObj = new Date(str);
+        }
+
+        if (isNaN(dateObj.getTime())) return punchTimeVal;
+
+        return dateObj.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        }).replace(/\s+/g, '');
+    } catch (e) {
+        return punchTimeVal;
+    }
+};
+
 const AttendanceMuster = () => {
     const [searchParams] = useSearchParams();
     const initialTab = searchParams.get('tab') === 'entry_requests' ? 'entry_requests' : 'muster';
@@ -644,7 +670,7 @@ const AttendanceMuster = () => {
                                                             </span>
                                                             {req.punch_time && (
                                                                 <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                                                    Time: {req.punch_time}
+                                                                    Time: {formatPunchTime(req.punch_time)}
                                                                 </span>
                                                             )}
                                                         </div>
@@ -1030,7 +1056,7 @@ const AttendanceMuster = () => {
                                                     <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-700">
                                                         <div>
                                                             <span className="text-slate-400 text-[8px] font-black uppercase block mb-0.5">Punch Attempt Time</span>
-                                                            {modalData.entry_request.punch_time ? new Date(modalData.entry_request.punch_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}
+                                                            {modalData.entry_request.punch_time ? formatPunchTime(modalData.entry_request.punch_time) : 'N/A'}
                                                         </div>
                                                         <div>
                                                             <span className="text-slate-400 text-[8px] font-black uppercase block mb-0.5">Request Type</span>
@@ -1281,7 +1307,7 @@ const AttendanceMuster = () => {
                                     <span>Date: {approvalModalRequest.date ? new Date(approvalModalRequest.date).toLocaleDateString() : 'N/A'}</span>
                                 </div>
                                 {approvalModalRequest.punch_time && (
-                                    <p className="text-xs font-bold text-slate-750">Punch Attempt: <span className="text-indigo-600 font-black">{approvalModalRequest.punch_time}</span></p>
+                                    <p className="text-xs font-bold text-slate-750">Punch Attempt: <span className="text-indigo-600 font-black">{formatPunchTime(approvalModalRequest.punch_time)}</span></p>
                                 )}
                             </div>
 
