@@ -31,10 +31,12 @@ function safeFormatTime(dateTimeVal) {
 function mapDbStatusToFrontend(status) {
     if (status === null || status === undefined) return 'A';
     const s = String(status).trim().toLowerCase();
+    if (s === 'pending') return '-';
     if (s === '') return 'P';
     if (s === 'present' || s === 'p') return 'P';
     if (s === 'absent' || s === 'a' || s === 'short') return 'A';
     if (s === 'late' || s === 'l' || s === 'late_in' || s === 'late-in') return 'L';
+    if (s === 'early_out' || s === 'early-out' || s === 'eo' || s === 'earlyout') return 'E';
     if (s === 'off') return 'OFF';
     if (s === 'regularized' || s === 'r') return 'R';
     if (s === 'half-day' || s === 'hd' || s === 'half_day') return 'HD';
@@ -49,6 +51,7 @@ function mapFrontendStatusToDb(status) {
     if (s === 'OFF') return 'off';
     if (s === 'R') return 'regularized';
     if (s === 'HD') return 'half-day';
+    if (s === 'E' || s === 'EO') return 'early_out';
     return 'present';
 }
 
@@ -390,7 +393,9 @@ class AttendanceService {
                     if (dayAttendance) {
                         const dbStatus = dayAttendance.status ? dayAttendance.status.toLowerCase() : '';
                         
-                        if (dayRegularization || dbStatus === 'regularized' || dbStatus === 'r' || dayAttendance.punch_source === 'regularization') {
+                        if (dbStatus === 'pending') {
+                            status = '-';
+                        } else if (dayRegularization || dbStatus === 'regularized' || dbStatus === 'r' || dayAttendance.punch_source === 'regularization') {
                             status = 'R';
                             stats.P++;
                         } else if (dayAttendance.punch_source === 'entry_request' || dayEarlyOut) {
@@ -406,6 +411,9 @@ class AttendanceService {
                             } else if (dbStatus === 'absent' || dbStatus === 'a') {
                                 status = 'A';
                                 stats.A++;
+                            } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
+                                status = 'E';
+                                stats.P++;
                             } else {
                                 status = 'E';
                                 stats.P++;
@@ -419,6 +427,9 @@ class AttendanceService {
                         } else if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
                             status = 'HD';
                             stats.P += 0.5;
+                        } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
+                            status = 'E';
+                            stats.P++;
                         } else if (dbStatus === 'short') {
                             status = 'A';
                             stats.A++;
@@ -2017,6 +2028,19 @@ class AttendanceService {
             const dateStr = request.date;
             const punchTimeStr = request.punch_time;
 
+            let dbStatus = 'present';
+            if (attendanceStatus === 'late_in' || attendanceStatus === 'late') {
+                dbStatus = 'late';
+            } else if (attendanceStatus === 'half_day' || attendanceStatus === 'half-day') {
+                dbStatus = 'half-day';
+            } else if (attendanceStatus === 'early_out' || attendanceStatus === 'early-out') {
+                dbStatus = 'early_out';
+            } else if (attendanceStatus === 'present' || attendanceStatus === 'p') {
+                dbStatus = 'present';
+            } else if (attendanceStatus === 'absent' || attendanceStatus === 'a') {
+                dbStatus = 'absent';
+            }
+
             if (request.request_type === 'late_in') {
                 const existingAtt = await db('attendance')
                     .where({ employee_id: request.employee_id })
@@ -2029,26 +2053,47 @@ class AttendanceService {
                         company_id: companyId,
                         check_in: punchTimeStr,
                         check_out: null,
-                        status: attendanceStatus || 'present',
+                        status: dbStatus,
                         punch_source: 'entry_request',
                         created_at: db.fn.now()
                     });
+                } else {
+                    await db('attendance')
+                        .where({ id: existingAtt.id })
+                        .update({
+                            status: dbStatus,
+                            punch_source: 'entry_request',
+                            updated_at: db.fn.now()
+                        });
                 }
             } else if (request.request_type === 'early_out') {
                 const existingAtt = await db('attendance')
-                    .where({ employee_id: request.employee_id, check_out: null })
+                    .where({ employee_id: request.employee_id })
                     .whereRaw('DATE(check_in) = ?', [dateStr])
                     .first();
 
                 if (existingAtt) {
+                    const updates = {
+                        status: dbStatus,
+                        punch_source: 'entry_request',
+                        updated_at: db.fn.now()
+                    };
+                    if (!existingAtt.check_out && punchTimeStr) {
+                        updates.check_out = punchTimeStr;
+                    }
                     await db('attendance')
                         .where({ id: existingAtt.id })
-                        .update({
-                            check_out: punchTimeStr,
-                            status: attendanceStatus || 'present',
-                            punch_source: 'entry_request',
-                            updated_at: db.fn.now()
-                        });
+                        .update(updates);
+                } else {
+                    await db('attendance').insert({
+                        employee_id: request.employee_id,
+                        company_id: companyId,
+                        check_in: punchTimeStr || `${dateStr} 09:00:00`,
+                        check_out: punchTimeStr || `${dateStr} 18:00:00`,
+                        status: dbStatus,
+                        punch_source: 'entry_request',
+                        created_at: db.fn.now()
+                    });
                 }
             }
         }

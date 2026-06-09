@@ -292,7 +292,7 @@ class MachineAttendanceService {
                     if (punchTime > shiftAllowed) {
                         // Biometric machine punch - log attendance as 'late' instead of blocking
                         // Auto-create regularization request for manager review
-                        status = 'late';
+                        status = 'pending';
                         const existingRequest = await db('attendance_entry_requests')
                             .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'late_in' })
                             .first();
@@ -431,7 +431,27 @@ class MachineAttendanceService {
                                 updated_at: db.fn.now()
                             });
                         }
-                        // NOTE: Do NOT return/skip - continue to log check-out below
+                        // Update check_out and set status to 'pending' because it requires approval
+                        await db('attendance')
+                            .where({ id: activeLog.id })
+                            .update({
+                                check_out: punchTimeStr,
+                                status: 'pending',
+                                punch_source: 'biometric',
+                                device_id: deviceIdString(deviceSerial),
+                                updated_at: db.fn.now()
+                            });
+
+                        // Record audit log
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'synced'
+                        });
+
+                        return { status: 'check-out', record_status: 'pending' };
                     }
                 }
 

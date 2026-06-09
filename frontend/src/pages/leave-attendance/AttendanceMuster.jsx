@@ -1309,6 +1309,13 @@ const AttendanceMuster = () => {
                                     >
                                         Mark Half Day
                                     </button>
+                                    <button
+                                        onClick={() => handleRequestAction(approvalModalRequest.id, 'approved', 'early_out')}
+                                        disabled={approvingId === approvalModalRequest.id}
+                                        className="w-full py-3 bg-orange-50 hover:bg-orange-100/75 text-orange-700 border border-orange-200 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                                    >
+                                        Mark Early Out
+                                    </button>
                                 </div>
                             </div>
 
