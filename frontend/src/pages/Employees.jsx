@@ -159,8 +159,9 @@ const Employees = () => {
     const [showFilterOptions, setShowFilterOptions] = useState(false);
     const [selectedDept, setSelectedDept] = useState('All');
     const [selectedStatus, setSelectedStatus] = useState('All');
-    const [selectedLocation, setSelectedLocation] = useState('All');
     const [selectedGender, setSelectedGender] = useState('All');
+    const [selectedDesignation, setSelectedDesignation] = useState('All');
+    const [selectedLocation, setSelectedLocation] = useState('All');
 
     // Helper to format string to Title Case/capitalize
     const formatLabel = (str) => {
@@ -176,9 +177,9 @@ const Employees = () => {
         }).join(' ');
     };
 
-    // Dynamic Filter Option Lists
     const uniqueDepartments = ['All', ...[...new Set(employees.map(e => formatLabel(e.department_name || e.department || 'General')).filter(Boolean))].sort()];
     const uniqueLocations = ['All', ...[...new Set(employees.map(e => formatLabel(e.office_location || 'Unassigned')).filter(Boolean))].sort()];
+    const uniqueDesignations = ['All', ...[...new Set(employees.map(e => formatLabel(e.designation || 'Specialist')).filter(Boolean))].sort()];
 
     // Filter Logic
     const filteredEmployees = employees.filter(emp => {
@@ -212,6 +213,12 @@ const Employees = () => {
             } else {
                 if (empGender !== selectedGender.toLowerCase()) return false;
             }
+        }
+
+        // 5. Designation Filter
+        if (selectedDesignation !== 'All') {
+            const empDesg = emp.designation || 'Specialist';
+            if (formatLabel(empDesg) !== selectedDesignation) return false;
         }
 
         return true;
@@ -289,12 +296,12 @@ const Employees = () => {
             account_status: 'Status',
             created_at: 'Created At'
         };
-        exportToCSV(employees, `Employee_Directory_${new Date().toISOString().split('T')[0]}.csv`, headers);
+        exportToCSV(filteredEmployees, `Employee_Directory_${new Date().toISOString().split('T')[0]}.csv`, headers);
         setShowExportDropdown(false);
     };
 
     const handleExportECR = () => {
-        exportToECR(employees, `EPFO_Payroll_ECR_${new Date().toISOString().split('T')[0]}.txt`);
+        exportToECR(filteredEmployees, `EPFO_Payroll_ECR_${new Date().toISOString().split('T')[0]}.txt`);
         setShowExportDropdown(false);
     };
 
@@ -526,7 +533,7 @@ const Employees = () => {
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 overflow-hidden pt-4 mt-4 border-t border-slate-100"
+                            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 overflow-hidden pt-4 mt-4 border-t border-slate-100"
                         >
                             {/* Department Filter */}
                             <div className="flex flex-col gap-1.5">
@@ -538,6 +545,20 @@ const Employees = () => {
                                 >
                                     {uniqueDepartments.map(dept => (
                                         <option key={dept} value={dept}>{dept}</option>
+                                    ))}
+                                </select>
+                             </div>
+
+                            {/* Designation Filter */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Designation</label>
+                                <select
+                                    value={selectedDesignation}
+                                    onChange={(e) => setSelectedDesignation(e.target.value)}
+                                    className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 text-slate-700 cursor-pointer"
+                                >
+                                    {uniqueDesignations.map(desg => (
+                                        <option key={desg} value={desg}>{desg}</option>
                                     ))}
                                 </select>
                             </div>

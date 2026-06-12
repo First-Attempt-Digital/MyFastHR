@@ -176,6 +176,59 @@ class BrandingController {
             res.status(500).json({ message: 'Error updating branding settings', error: error.message });
         }
     }
+
+    // Dynamic Manifest Endpoint
+    async getPublicManifest(req, res) {
+        try {
+             const settings = await db.centralDb('system_settings')
+                .whereIn('key_name', ['logo_url', 'favicon_url', 'app_name', 'primary_color'])
+                .select('key_name', 'value_text');
+            
+            const branding = {
+                logo_url: '/uploads/branding/logo.png',
+                favicon_url: '/uploads/branding/favicon.png',
+                app_name: 'MyFastHR',
+                primary_color: '#6028D9'
+            };
+            
+            settings.forEach(s => {
+                branding[s.key_name] = s.value_text;
+            });
+
+            const host = req.headers.host || 'localhost:5000';
+            const iconUrl = branding.logo_url || '/uploads/branding/logo.png';
+            const iconType = iconUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+
+            const faviconUrl = branding.favicon_url || '/uploads/branding/favicon.png';
+            const faviconType = faviconUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+
+            res.json({
+                short_name: branding.app_name,
+                name: `${branding.app_name} - Enterprise Employee Portal`,
+                icons: [
+                    {
+                        src: faviconUrl,
+                        type: faviconType,
+                        sizes: "192x192 512x512",
+                        purpose: "any"
+                    },
+                    {
+                        src: iconUrl,
+                        type: iconType,
+                        sizes: "192x192 512x512",
+                        purpose: "maskable"
+                    }
+                ],
+                start_url: "/",
+                background_color: "#ffffff",
+                theme_color: branding.primary_color,
+                display: "standalone",
+                orientation: "portrait"
+            });
+        } catch (error) {
+            res.status(500).json({ message: 'Error generating manifest', error: error.message });
+        }
+    }
 }
 
 module.exports = new BrandingController();

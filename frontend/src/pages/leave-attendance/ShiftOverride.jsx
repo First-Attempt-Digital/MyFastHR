@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Clock, Users, CheckCircle, Search, Save, Shield, 
+import {
+    Clock, Users, CheckCircle, Search, Save, Shield,
     Plus, X, Info, UserCheck, Trash2, Calendar, Layout, Zap, Download, Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,6 +11,7 @@ import DeleteSecurityModal from '../../components/common/DeleteSecurityModal';
 const ShiftManagement = () => {
     const [employees, setEmployees] = useState([]);
     const [shifts, setShifts] = useState([]);
+    const [showRules, setShowRules] = useState(false);
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(true);
     const [success, setSuccess] = useState(false);
@@ -18,7 +19,60 @@ const ShiftManagement = () => {
     const [editingShiftId, setEditingShiftId] = useState(null);
     const [assignMode, setAssignMode] = useState('single'); // 'single', 'multiple'
     const [selectedShiftId, setSelectedShiftId] = useState('');
-    
+
+    const decimalToTime = (decimal) => {
+        if (decimal === undefined || decimal === null || isNaN(decimal)) return '00:00';
+        const hrs = Math.floor(decimal);
+        const mins = Math.round((decimal - hrs) * 60);
+        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    };
+
+    const getDurationFromTimes = (start, end, s2Start, s2End, punches) => {
+        const timeToMins = (t) => {
+            if (!t) return 0;
+            const [h, m] = t.split(':').map(Number);
+            return h * 60 + m;
+        };
+        let totalMins = 0;
+        if (parseInt(punches) === 4) {
+            const s1Start = timeToMins(start || '09:00');
+            const s1End = timeToMins(end || '13:00');
+            const s2S = timeToMins(s2Start || '14:00');
+            const s2E = timeToMins(s2End || '18:00');
+            let s1 = s1End - s1Start;
+            if (s1 < 0) s1 += 24 * 60;
+            let s2 = s2E - s2S;
+            if (s2 < 0) s2 += 24 * 60;
+            totalMins = s1 + s2;
+        } else {
+            const s1Start = timeToMins(start || '09:00');
+            const s1End = timeToMins(end || '18:00');
+            let s1 = s1End - s1Start;
+            if (s1 < 0) s1 += 24 * 60;
+            totalMins = s1;
+        }
+        return parseFloat((totalMins / 60).toFixed(2)) || 8.0;
+    };
+
+    const timeToDecimal = (timeString) => {
+        if (!timeString) return 0;
+        const [hrs, mins] = timeString.split(':').map(Number);
+        if (isNaN(hrs) || isNaN(mins)) return 0;
+        return hrs + (mins / 60);
+    };
+
+    // Custom Alert & Confirm States
+    const [alertConfig, setAlertConfig] = useState({ show: false, message: '', type: 'info' });
+    const [confirmConfig, setConfirmConfig] = useState({ show: false, message: '', onConfirm: null });
+
+    const showAlert = (message, type = 'info') => {
+        setAlertConfig({ show: true, message, type });
+    };
+
+    const triggerConfirm = (message, onConfirm) => {
+        setConfirmConfig({ show: true, message, onConfirm });
+    };
+
     // Delete Protection States
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteTargetId, setDeleteTargetId] = useState(null);
@@ -30,8 +84,12 @@ const ShiftManagement = () => {
     const [selectedEmployees, setSelectedEmployees] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
 
     const uniqueLocations = ['all', ...[...new Set(employees.map(e => e.office_location).filter(Boolean))].sort()];
+    const uniqueDepts = ['all', ...[...new Set(employees.map(e => e.department_name).filter(Boolean))].sort()];
+    const uniqueDesignations = ['all', ...[...new Set(employees.map(e => e.designation).filter(Boolean))].sort()];
     const [shiftConfig, setShiftConfig] = useState({
         name: '',
         start_time: '09:00',
@@ -42,7 +100,19 @@ const ShiftManagement = () => {
         to_date: '',
         is_night_shift: false,
         is_flexi: false,
-        min_hours: 8.0
+        min_hours: '8.0',
+        min_hours_half: '4.0',
+        total_punches_required: 2,
+        session2_start_time: '14:00',
+        session2_end_time: '18:00',
+        session1_grace_out: 0,
+        session2_grace_in: 15,
+        session2_grace_out: 0,
+        session1_in_margin: 0,
+        session1_out_margin: 0,
+        session2_in_margin: 0,
+        session2_out_margin: 0,
+        terminate_hour: ''
     });
 
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
@@ -70,10 +140,10 @@ const ShiftManagement = () => {
     const handleEmployeeToggle = (emp) => {
         // In override mode, we can pick any employee. In assign mode, only unassigned.
         if (viewMode === 'assign' && emp.assigned_shift) {
-            alert(`${emp.first_name} already has a shift assigned. Use "Override Shift" mode to change existing assignments.`);
+            showAlert(`${emp.first_name} already has a shift assigned. Use "Override Shift" mode to change existing assignments.`, 'info');
             return;
         }
-        
+
         if (selectedEmployees.some(item => item.id === emp.id)) {
             setSelectedEmployees(prev => prev.filter(item => item.id !== emp.id));
         } else {
@@ -82,8 +152,8 @@ const ShiftManagement = () => {
     };
 
     const handleOverrideExecute = async () => {
-        if (!selectedShiftId) return alert('Select a shift protocol');
-        if (selectedEmployees.length === 0) return alert('Select personnel');
+        if (!selectedShiftId) return showAlert('Select a shift protocol', 'error');
+        if (selectedEmployees.length === 0) return showAlert('Select personnel', 'error');
 
         try {
             setLoading(true);
@@ -101,7 +171,7 @@ const ShiftManagement = () => {
             setViewMode('list');
             fetchData();
         } catch (err) {
-            alert(err.message);
+            showAlert(err.message, 'error');
         } finally {
             setLoading(false);
         }
@@ -120,32 +190,54 @@ const ShiftManagement = () => {
             to_date: '',
             is_night_shift: !!shift.is_night_shift,
             is_flexi: !!shift.is_flexi,
-            min_hours: shift.min_hours || 8.0
+            min_hours: shift.min_hours !== undefined && shift.min_hours !== null ? String(shift.min_hours) : '8.0',
+            min_hours_half: shift.min_hours !== undefined && shift.min_hours !== null ? String(shift.min_hours / 2) : '4.0',
+            total_punches_required: shift.total_punches_required !== undefined ? shift.total_punches_required : 2,
+            session2_start_time: shift.session2_start_time || '14:00',
+            session2_end_time: shift.session2_end_time || '18:00',
+            session1_grace_out: shift.session1_grace_out !== undefined ? shift.session1_grace_out : 0,
+            session2_grace_in: shift.session2_grace_in !== undefined ? shift.session2_grace_in : 15,
+            session2_grace_out: shift.session2_grace_out !== undefined ? shift.session2_grace_out : 0,
+            session1_in_margin: shift.session1_in_margin !== undefined ? shift.session1_in_margin : 0,
+            session1_out_margin: shift.session1_out_margin !== undefined ? shift.session1_out_margin : 0,
+            session2_in_margin: shift.session2_in_margin !== undefined ? shift.session2_in_margin : 0,
+            session2_out_margin: shift.session2_out_margin !== undefined ? shift.session2_out_margin : 0,
+            terminate_hour: shift.terminate_hour !== undefined && shift.terminate_hour !== null ? shift.terminate_hour : ''
         });
         setViewMode('assign');
     };
 
     const handleSave = async (e) => {
         if (e) e.preventDefault();
-        if (!shiftConfig.name) return alert('Shift Name is required');
-        if (!editingShiftId && selectedEmployees.length === 0) {
-            return alert('Please select employees to assign this shift to.');
-        }
+        if (!shiftConfig.name) return showAlert('Shift Name is required', 'error');
 
         try {
             setLoading(true);
+            const postData = {
+                name: shiftConfig.name,
+                start_time: shiftConfig.is_flexi ? '00:00' : shiftConfig.start_time,
+                end_time: shiftConfig.is_flexi ? '23:59' : shiftConfig.end_time,
+                grace_period: shiftConfig.is_flexi ? 0 : shiftConfig.grace_period,
+                grace_count_limit: shiftConfig.is_flexi ? 0 : shiftConfig.grace_count_limit,
+                is_night_shift: shiftConfig.is_flexi ? false : shiftConfig.is_night_shift,
+                is_flexi: shiftConfig.is_flexi,
+                min_hours: parseFloat(shiftConfig.min_hours) || 8.0,
+                total_punches_required: parseInt(shiftConfig.total_punches_required) || 2,
+                session2_start_time: shiftConfig.total_punches_required === 4 ? shiftConfig.session2_start_time : null,
+                session2_end_time: shiftConfig.total_punches_required === 4 ? shiftConfig.session2_end_time : null,
+                session1_grace_out: parseInt(shiftConfig.session1_grace_out) || 0,
+                session2_grace_in: parseInt(shiftConfig.session2_grace_in) || 15,
+                session2_grace_out: parseInt(shiftConfig.session2_grace_out) || 0,
+                session1_in_margin: parseInt(shiftConfig.session1_in_margin) || 0,
+                session1_out_margin: parseInt(shiftConfig.session1_out_margin) || 0,
+                session2_in_margin: parseInt(shiftConfig.session2_in_margin) || 0,
+                session2_out_margin: parseInt(shiftConfig.session2_out_margin) || 0,
+                terminate_hour: shiftConfig.terminate_hour !== '' && shiftConfig.terminate_hour !== undefined && shiftConfig.terminate_hour !== null ? parseInt(shiftConfig.terminate_hour) : null
+            };
+
             if (editingShiftId) {
                 // Update existing shift parameters
-                await api.put(`/attendance/shift-list/${editingShiftId}`, {
-                    name: shiftConfig.name,
-                    start_time: shiftConfig.is_flexi ? '00:00' : shiftConfig.start_time,
-                    end_time: shiftConfig.is_flexi ? '23:59' : shiftConfig.end_time,
-                    grace_period: shiftConfig.is_flexi ? 0 : shiftConfig.grace_period,
-                    grace_count_limit: shiftConfig.is_flexi ? 0 : shiftConfig.grace_count_limit,
-                    is_night_shift: shiftConfig.is_flexi ? false : shiftConfig.is_night_shift,
-                    is_flexi: shiftConfig.is_flexi,
-                    min_hours: shiftConfig.is_flexi ? shiftConfig.min_hours : 8.0
-                });
+                await api.put(`/attendance/shift-list/${editingShiftId}`, postData);
 
                 // Assign to employees if any are selected during edit
                 if (selectedEmployees.length > 0) {
@@ -157,26 +249,20 @@ const ShiftManagement = () => {
                     });
                 }
 
-                alert('Shift updated successfully!');
+                showAlert('Shift updated successfully!', 'success');
             } else {
                 // Create new shift protocol
-                const shiftRes = await api.post('/attendance/shift-list', {
-                    name: shiftConfig.name,
-                    start_time: shiftConfig.is_flexi ? '00:00' : shiftConfig.start_time,
-                    end_time: shiftConfig.is_flexi ? '23:59' : shiftConfig.end_time,
-                    grace_period: shiftConfig.is_flexi ? 0 : shiftConfig.grace_period,
-                    grace_count_limit: shiftConfig.is_flexi ? 0 : shiftConfig.grace_count_limit,
-                    is_night_shift: shiftConfig.is_flexi ? false : shiftConfig.is_night_shift,
-                    is_flexi: shiftConfig.is_flexi,
-                    min_hours: shiftConfig.is_flexi ? shiftConfig.min_hours : 8.0
-                });
+                const shiftRes = await api.post('/attendance/shift-list', postData);
 
-                await api.post('/attendance/shift-override', {
-                    employee_ids: selectedEmployees.map(e => e.id),
-                    shift_id: shiftRes.id,
-                    from_date: shiftConfig.from_date,
-                    to_date: shiftConfig.to_date || null
-                });
+                if (selectedEmployees.length > 0) {
+                    await api.post('/attendance/shift-override', {
+                        employee_ids: selectedEmployees.map(e => e.id),
+                        shift_id: shiftRes.id,
+                        from_date: shiftConfig.from_date,
+                        to_date: shiftConfig.to_date || null
+                    });
+                }
+                showAlert('Shift created successfully!', 'success');
             }
 
             setSuccess(true);
@@ -184,16 +270,27 @@ const ShiftManagement = () => {
             setSelectedEmployees([]);
             setEditingShiftId(null);
             setShiftConfig({
-                name: '', start_time: '09:00', end_time: '18:00', 
-                grace_period: 15, grace_count_limit: 3, 
+                name: '', start_time: '09:00', end_time: '18:00',
+                grace_period: 15, grace_count_limit: 3,
                 from_date: new Date().toISOString().split('T')[0],
                 to_date: '', is_night_shift: false,
-                is_flexi: false, min_hours: 8.0
+                is_flexi: false, min_hours: '8.0', min_hours_half: '4.0',
+                total_punches_required: 2,
+                session2_start_time: '14:00',
+                session2_end_time: '18:00',
+                session1_grace_out: 0,
+                session2_grace_in: 15,
+                session2_grace_out: 0,
+                session1_in_margin: 0,
+                session1_out_margin: 0,
+                session2_in_margin: 0,
+                session2_out_margin: 0,
+                terminate_hour: ''
             });
             setViewMode('list');
             fetchData();
         } catch (err) {
-            alert(err.message);
+            showAlert(err.message, 'error');
         } finally {
             setLoading(false);
         }
@@ -202,22 +299,24 @@ const ShiftManagement = () => {
     const handleDeleteShift = async (id, e) => {
         if (e) e.stopPropagation();
         if (id === 1 || String(id) === '1') {
-            alert('Cannot delete the primary General Shift.');
+            showAlert('Cannot delete the primary General Shift.', 'error');
             return;
         }
-        if (!window.confirm('Are you sure you want to delete this shift? Active employees will default back to General Shift timings.')) {
-            return;
-        }
-        try {
-            setLoading(true);
-            await api.delete(`/attendance/shift-list/${id}`);
-            fetchData();
-            alert('Shift deleted successfully!');
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete shift');
-        } finally {
-            setLoading(false);
-        }
+        triggerConfirm(
+            'Are you sure you want to delete this shift? Active employees will default back to General Shift timings.',
+            async () => {
+                try {
+                    setLoading(true);
+                    await api.delete(`/attendance/shift-list/${id}`);
+                    fetchData();
+                    showAlert('Shift deleted successfully!', 'success');
+                } catch (err) {
+                    showAlert(err.response?.data?.message || 'Failed to delete shift', 'error');
+                } finally {
+                    setLoading(false);
+                }
+            }
+        );
     };
 
     const filteredEmployees = employees.filter(emp => {
@@ -226,7 +325,9 @@ const ShiftManagement = () => {
         const empId = (emp.employee_id_number || '').toLowerCase();
         const matchesSearch = fullName.includes(search) || empId.includes(search);
         const matchesOutlet = selectedOutlet === 'all' || emp.office_location === selectedOutlet;
-        return matchesSearch && matchesOutlet;
+        const matchesDept = selectedDept === 'all' || emp.department_name === selectedDept;
+        const matchesDesignation = selectedDesignation === 'all' || emp.designation === selectedDesignation;
+        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
     });
 
     const handleExport = () => {
@@ -259,21 +360,37 @@ const ShiftManagement = () => {
                         <Clock size={16} />
                     </div>
                     <div>
-                        <h1 className="text-lg font-black text-slate-800 tracking-tight">Shift Management</h1>
+                        <h1 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
+                            Shift Management
+                            <div className="relative group">
+                                <button
+                                    onClick={() => setShowRules(!showRules)}
+                                    className={`p-1.5 rounded-lg border transition-all ${showRules
+                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 scale-105'
+                                            : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                                        }`}
+                                >
+                                    <Info size={12} className={showRules ? 'animate-pulse' : ''} />
+                                </button>
+                                <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50 text-center">
+                                    {showRules ? 'Hide Shift Guidelines / नियम छुपाएं' : 'Show Shift Guidelines / नियम देखें'}
+                                </span>
+                            </div>
+                        </h1>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Shift Guidelines & Assignments</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {viewMode === 'list' ? (
                         <>
-                            <button 
+                            <button
                                 onClick={() => setViewMode('override')}
                                 className="flex items-center gap-2 px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
                             >
                                 <Zap size={14} />
                                 Override Shift
                             </button>
-                            <button 
+                            <button
                                 onClick={() => setViewMode('assign')}
                                 className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
                             >
@@ -282,7 +399,7 @@ const ShiftManagement = () => {
                             </button>
                         </>
                     ) : (
-                        <button 
+                        <button
                             onClick={() => {
                                 setViewMode('list');
                                 setSelectedEmployees([]);
@@ -320,6 +437,55 @@ const ShiftManagement = () => {
                         ))}
                     </div>
 
+                    {/* Shift Protocol Guidelines */}
+                    <AnimatePresence>
+                        {showRules && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0, y: -10 }}
+                                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                                exit={{ opacity: 0, height: 0, y: -10 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent border border-indigo-100 rounded-3xl p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 text-indigo-700 font-black text-xs uppercase tracking-wider mb-2">
+                                        <Clock size={16} className="text-indigo-600" />
+                                        Shift rules & calculation logic / शिफ्ट नियम एवं कैलकुलेशन लॉजिक
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-600 mt-2">
+                                        <div>
+                                            <h4 className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
+                                                ⏱️ Punch Timing & Grace Rules (पंचिंग टाइमिंग और लेट नियम)
+                                            </h4>
+                                            <p className="text-slate-500 leading-relaxed font-bold">
+                                                Employees checking in inside the <span className="text-slate-700 font-extrabold">Grace Period</span> (e.g. 15 mins) are marked Present directly. Punching after the grace limit triggers a <span className="text-indigo-600 bg-indigo-50 px-1 rounded font-extrabold">Late Mark</span> which requires manager regularization.
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(ग्रेस पीरियड (जैसे 15 मिनट) के भीतर आने पर प्रेजेंट मार्क होगी। लेट आने पर सुधार अनुरोध जनरेट होगा।)</span>
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
+                                                ⚙️ Worked Hours Calculations & Early Out (हाफ-डे एवं अर्ली आउट नियम)
+                                            </h4>
+                                            <p className="text-slate-500 leading-relaxed font-bold">
+                                                Calculated automatically: Under <span className="text-rose-600 bg-rose-50 px-1 rounded font-extrabold">Half Day Minimum Hours</span> = Absent (checkouts before this do not trigger early-out approval requests). Early-out requests are only generated if punching out after completing half-day hours but before full shift.
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(हाफ-डे से कम समय पर Absent मार्क होगा और कोई रिक्वेस्ट जनरेट नहीं होगी। हाफ-डे पूरा होने के बाद ही जल्दी जाने पर अर्ली-आउट रिक्वेस्ट भेजी जाएगी।)</span>
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
+                                                🚨 Zero Check-In Checkout Attempt (ज़ीरो चेक-इन चेकआउट प्रयास)
+                                            </h4>
+                                            <p className="text-slate-500 leading-relaxed font-bold">
+                                                If an employee punches for the first time within 2 hours of shift end or later, it is marked as <span className="text-rose-600 bg-rose-50 px-1 rounded font-extrabold">NC (Checkout Attempt - Zero Check-In)</span> instead of a late check-in.
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(यदि कर्मचारी बिना सुबह के पंच के सीधे छुट्टी के अंतिम 2 घंटे या उसके बाद पहला पंच करता है, तो इसे NC (Zero Check-In) मार्क किया जाता है।)</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* Defined Shifts Panel */}
                         <div className="lg:col-span-4 space-y-4">
@@ -340,8 +506,10 @@ const ShiftManagement = () => {
                                                 <div className="flex justify-between items-center mb-1">
                                                     <span className="text-[10px] font-black text-slate-700 uppercase">{shift.name}</span>
                                                     <div className="flex items-center gap-1.5">
-                                                        <span className="text-[8px] font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-50">{shift.is_flexi ? 'Flexi' : shift.start_time}</span>
-                                                        <button 
+                                                        <span className="text-[8px] font-bold text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-50">
+                                                            {shift.is_flexi ? 'Flexi' : (shift.total_punches_required === 4 ? `Split (${shift.start_time}-${shift.end_time} & ${shift.session2_start_time || '14:00'}-${shift.session2_end_time || '18:00'})` : `${shift.start_time}-${shift.end_time}`)}
+                                                        </span>
+                                                        <button
                                                             onClick={(e) => handleEditShift(shift, e)}
                                                             className="text-slate-350 hover:text-indigo-600 transition-colors p-0.5 rounded hover:bg-slate-100"
                                                             title="Edit Shift"
@@ -349,7 +517,7 @@ const ShiftManagement = () => {
                                                             <Edit2 size={12} />
                                                         </button>
                                                         {shift.id !== 1 && shift.id !== '1' && (
-                                                            <button 
+                                                            <button
                                                                 onClick={(e) => handleDeleteShift(shift.id, e)}
                                                                 className="text-slate-350 hover:text-rose-600 transition-colors p-0.5 rounded hover:bg-slate-100"
                                                                 title="Delete Shift"
@@ -359,15 +527,29 @@ const ShiftManagement = () => {
                                                         )}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 text-[8px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                <div className="flex flex-col gap-1 text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">
+                                                    <div>Punches Required: {shift.total_punches_required || 2}</div>
                                                     {shift.is_flexi ? (
-                                                        <span>Min Hours: {shift.min_hours}h</span>
+                                                        <div className="mt-1">Min Hours: {shift.min_hours}h</div>
                                                     ) : (
-                                                        <>
-                                                            <span>Grace: {shift.grace_period}m</span>
-                                                            <span>•</span>
-                                                            <span>Limit: {shift.grace_count_limit}/mo</span>
-                                                        </>
+                                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1.5 border-t border-slate-100 pt-1.5">
+                                                            <div>
+                                                                <p className="text-slate-500 font-extrabold text-[8px] mb-0.5">Session 1</p>
+                                                                <div className="text-[7.5px] leading-relaxed text-slate-400 normal-case font-medium">
+                                                                    Grace: <span className="font-bold">{shift.grace_period || 15}m</span> / <span className="font-bold">{shift.session1_grace_out || 0}m</span><br />
+                                                                    Margin: <span className="font-bold">{shift.session1_in_margin || 0}m</span> / <span className="font-bold">{shift.session1_out_margin || 0}m</span>
+                                                                </div>
+                                                            </div>
+                                                            {shift.total_punches_required === 4 && (
+                                                                <div>
+                                                                    <p className="text-slate-500 font-extrabold text-[8px] mb-0.5">Session 2</p>
+                                                                    <div className="text-[7.5px] leading-relaxed text-slate-400 normal-case font-medium">
+                                                                        Grace: <span className="font-bold">{shift.session2_grace_in || 15}m</span> / <span className="font-bold">{shift.session2_grace_out || 0}m</span><br />
+                                                                        Margin: <span className="font-bold">{shift.session2_in_margin || 0}m</span> / <span className="font-bold">{shift.session2_out_margin || 0}m</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -390,7 +572,7 @@ const ShiftManagement = () => {
                                         >
                                             <Download size={11} /> Export CSV
                                         </button>
-                                        <select 
+                                        <select
                                             value={selectedOutlet}
                                             onChange={(e) => setSelectedOutlet(e.target.value)}
                                             className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
@@ -401,10 +583,32 @@ const ShiftManagement = () => {
                                                 </option>
                                             ))}
                                         </select>
+                                        <select
+                                            value={selectedDept}
+                                            onChange={(e) => setSelectedDept(e.target.value)}
+                                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                        >
+                                            {uniqueDepts.map(dept => (
+                                                <option key={dept} value={dept}>
+                                                    {dept === 'all' ? 'All Departments' : dept}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            value={selectedDesignation}
+                                            onChange={(e) => setSelectedDesignation(e.target.value)}
+                                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                        >
+                                            {uniqueDesignations.map(desg => (
+                                                <option key={desg} value={desg}>
+                                                    {desg === 'all' ? 'All Designations' : desg}
+                                                </option>
+                                            ))}
+                                        </select>
                                         <div className="relative">
                                             <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 placeholder="Quick filter..."
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -446,9 +650,8 @@ const ShiftManagement = () => {
                                                         )}
                                                     </td>
                                                     <td className="px-5 py-3 text-right">
-                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter ${
-                                                            emp.assigned_shift ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'
-                                                        }`}>
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter ${emp.assigned_shift ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'
+                                                            }`}>
                                                             {emp.assigned_shift ? 'Active' : 'Inactive'}
                                                         </span>
                                                     </td>
@@ -480,7 +683,7 @@ const ShiftManagement = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <button 
+                                <button
                                     onClick={handleSave}
                                     disabled={loading}
                                     className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
@@ -492,18 +695,18 @@ const ShiftManagement = () => {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Shift Name</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         placeholder="e.g. Standard General"
                                         value={shiftConfig.name}
-                                        onChange={(e) => setShiftConfig({...shiftConfig, name: e.target.value})}
+                                        onChange={(e) => setShiftConfig({ ...shiftConfig, name: e.target.value })}
                                         className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-500 transition-all"
                                     />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Shift Code</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         placeholder="e.g. SG-01"
                                         className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-500 transition-all"
                                     />
@@ -518,78 +721,261 @@ const ShiftManagement = () => {
                             </div>
 
                             <div className="bg-slate-50/50 p-6 rounded-[24px] border border-slate-100 space-y-4">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Calculate Shift Hours based on:</p>
+                                <p className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                                    Required Punches per Day
+                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group">
+                                        <Info size={12} />
+                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-bold uppercase leading-tight z-50">
+                                            2 Punches: One In, One Out. 4 Punches: Session 1 In/Out & Session 2 In/Out (requires break punches).
+                                        </span>
+                                    </span>
+                                </p>
                                 <div className="flex gap-8">
                                     <label className="flex items-center gap-2 cursor-pointer group">
-                                        <input type="radio" name="calc_mode" defaultChecked className="accent-indigo-600" />
-                                        <span className="text-xs font-bold text-slate-600 group-hover:text-slate-800 transition-colors">Sum of Session's In and Out time.</span>
+                                        <input
+                                            type="radio"
+                                            name="total_punches_required"
+                                            checked={parseInt(shiftConfig.total_punches_required) === 2}
+                                            onChange={() => {
+                                                const newMinHours = getDurationFromTimes(shiftConfig.start_time, shiftConfig.end_time, shiftConfig.session2_start_time, shiftConfig.session2_end_time, 2);
+                                                setShiftConfig({ ...shiftConfig, total_punches_required: 2, min_hours: String(newMinHours), min_hours_half: String(newMinHours / 2) });
+                                            }}
+                                            className="accent-indigo-600"
+                                        />
+                                        <span className="text-xs font-bold text-slate-600 group-hover:text-slate-800 transition-colors">2 Punches (Single Session)</span>
                                     </label>
                                     <label className="flex items-center gap-2 cursor-pointer group">
-                                        <input type="radio" name="calc_mode" className="accent-indigo-600" />
-                                        <span className="text-xs font-bold text-slate-600 group-hover:text-slate-800 transition-colors">Duration between Shift Start Time and End Time.</span>
+                                        <input
+                                            type="radio"
+                                            name="total_punches_required"
+                                            checked={parseInt(shiftConfig.total_punches_required) === 4}
+                                            onChange={() => {
+                                                const newMinHours = getDurationFromTimes(shiftConfig.start_time, shiftConfig.end_time, shiftConfig.session2_start_time, shiftConfig.session2_end_time, 4);
+                                                setShiftConfig({ ...shiftConfig, total_punches_required: 4, min_hours: String(newMinHours), min_hours_half: String(newMinHours / 2) });
+                                            }}
+                                            className="accent-indigo-600"
+                                        />
+                                        <span className="text-xs font-bold text-slate-600 group-hover:text-slate-800 transition-colors">4 Punches (Double Session / Split Shift)</span>
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="overflow-hidden rounded-2xl border border-slate-100">
+                            <div className="overflow-visible rounded-2xl border border-slate-100">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 uppercase">
                                             <th className="px-6 py-4 text-[10px] font-black tracking-widest">Session</th>
-                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">In Time</th>
-                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">Out Time</th>
-                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">Grace In Time</th>
-                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">Grace Out Time</th>
-                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">In Margin</th>
-                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">Out Margin</th>
+                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">
+                                                <div className="flex items-center gap-1">
+                                                    In Time
+                                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
+                                                        <Info size={11} />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Session start time. Check-ins after this will be verified against Grace In.
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </th>
+                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">
+                                                <div className="flex items-center gap-1">
+                                                    Out Time
+                                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
+                                                        <Info size={11} />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Session end time. Check-outs before this will be verified against Grace Out.
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </th>
+                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">
+                                                <div className="flex items-center gap-1">
+                                                    Grace In (Mins)
+                                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
+                                                        <Info size={11} />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Allowed delay after Session Start without penalty. Punching in during this period marks "Present" but flags a Grace marker. Punching in later triggers a Late In request.
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </th>
+                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">
+                                                <div className="flex items-center gap-1">
+                                                    Grace Out (Mins)
+                                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
+                                                        <Info size={11} />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Allowed early check-out before Session End without penalty. Check-out before this threshold triggers an Early Out request.
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </th>
+                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">
+                                                <div className="flex items-center gap-1">
+                                                    In Margin (Mins)
+                                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
+                                                        <Info size={11} />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Accepted early punch window before Session Start. Punches in this window are direct punches (Present/On-Time), and do NOT generate any requests.
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </th>
+                                            <th className="px-4 py-4 text-[10px] font-black tracking-widest">
+                                                <div className="flex items-center gap-1">
+                                                    Out Margin (Mins)
+                                                    <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
+                                                        <Info size={11} />
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Accepted checkout window after Session End. Punches in this window are direct, mapping to this session, and do NOT generate any requests.
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         <tr>
                                             <td className="px-6 py-4 text-xs font-bold text-slate-600">Session 1</td>
                                             <td className="px-2 py-4">
-                                                <input 
-                                                    type="time" 
-                                                    value={shiftConfig.is_flexi ? '00:00' : shiftConfig.start_time} 
-                                                    disabled={shiftConfig.is_flexi}
-                                                    onChange={(e) => setShiftConfig({...shiftConfig, start_time: e.target.value})}
-                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" 
-                                                />
-                                            </td>
-                                            <td className="px-2 py-4">
-                                                <input 
-                                                    type="time" 
-                                                    value={shiftConfig.is_flexi ? '23:59' : shiftConfig.end_time} 
-                                                    disabled={shiftConfig.is_flexi}
-                                                    onChange={(e) => setShiftConfig({...shiftConfig, end_time: e.target.value})}
-                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" 
-                                                />
-                                            </td>
-                                            <td className="px-2 py-4">
-                                                <input 
-                                                    type="time" 
-                                                    value={shiftConfig.is_flexi ? '00:00' : `00:${String(shiftConfig.grace_period).padStart(2, '0')}`} 
+                                                <input
+                                                    type="time"
+                                                    value={shiftConfig.is_flexi ? '00:00' : shiftConfig.start_time}
                                                     disabled={shiftConfig.is_flexi}
                                                     onChange={(e) => {
-                                                        const parts = e.target.value.split(':');
-                                                        const minutes = (parseInt(parts[0]) * 60) + parseInt(parts[1]);
-                                                        setShiftConfig({...shiftConfig, grace_period: minutes});
+                                                        const val = e.target.value;
+                                                        const d = getDurationFromTimes(val, shiftConfig.end_time, shiftConfig.session2_start_time, shiftConfig.session2_end_time, shiftConfig.total_punches_required);
+                                                        setShiftConfig({ ...shiftConfig, start_time: val, min_hours: String(d), min_hours_half: String(d / 2) });
                                                     }}
-                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" 
+                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
                                                 />
                                             </td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="time"
+                                                    value={shiftConfig.is_flexi ? '23:59' : shiftConfig.end_time}
+                                                    disabled={shiftConfig.is_flexi}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const d = getDurationFromTimes(shiftConfig.start_time, val, shiftConfig.session2_start_time, shiftConfig.session2_end_time, shiftConfig.total_punches_required);
+                                                        setShiftConfig({ ...shiftConfig, end_time: val, min_hours: String(d), min_hours_half: String(d / 2) });
+                                                    }}
+                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="15"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.grace_period}
+                                                    disabled={shiftConfig.is_flexi}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, grace_period: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session1_grace_out}
+                                                    disabled={shiftConfig.is_flexi}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session1_grace_out: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session1_in_margin}
+                                                    disabled={shiftConfig.is_flexi}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session1_in_margin: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session1_out_margin}
+                                                    disabled={shiftConfig.is_flexi}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session1_out_margin: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
                                         </tr>
-                                        <tr>
-                                            <td className="px-6 py-4 text-xs font-bold text-slate-600">Session 2</td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
-                                            <td className="px-2 py-4"><input type="time" defaultValue="00:00" className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50" disabled={shiftConfig.is_flexi} /></td>
+                                        <tr className={parseInt(shiftConfig.total_punches_required) !== 4 ? 'opacity-40' : ''}>
+                                            <td className="px-6 py-4 text-xs font-bold text-slate-600 flex items-center gap-1">
+                                                Session 2
+                                                {parseInt(shiftConfig.total_punches_required) !== 4 && (
+                                                    <span className="text-[8px] font-black uppercase text-amber-500 bg-amber-50 px-1 py-0.5 rounded">Disabled</span>
+                                                )}
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="time"
+                                                    value={shiftConfig.is_flexi ? '00:00' : shiftConfig.session2_start_time}
+                                                    disabled={shiftConfig.is_flexi || parseInt(shiftConfig.total_punches_required) !== 4}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const d = getDurationFromTimes(shiftConfig.start_time, shiftConfig.end_time, val, shiftConfig.session2_end_time, shiftConfig.total_punches_required);
+                                                        setShiftConfig({ ...shiftConfig, session2_start_time: val, min_hours: String(d), min_hours_half: String(d / 2) });
+                                                    }}
+                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="time"
+                                                    value={shiftConfig.is_flexi ? '23:59' : shiftConfig.session2_end_time}
+                                                    disabled={shiftConfig.is_flexi || parseInt(shiftConfig.total_punches_required) !== 4}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const d = getDurationFromTimes(shiftConfig.start_time, shiftConfig.end_time, shiftConfig.session2_start_time, val, shiftConfig.total_punches_required);
+                                                        setShiftConfig({ ...shiftConfig, session2_end_time: val, min_hours: String(d), min_hours_half: String(d / 2) });
+                                                    }}
+                                                    className="h-10 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="15"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session2_grace_in}
+                                                    disabled={shiftConfig.is_flexi || parseInt(shiftConfig.total_punches_required) !== 4}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session2_grace_in: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session2_grace_out}
+                                                    disabled={shiftConfig.is_flexi || parseInt(shiftConfig.total_punches_required) !== 4}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session2_grace_out: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session2_in_margin}
+                                                    disabled={shiftConfig.is_flexi || parseInt(shiftConfig.total_punches_required) !== 4}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session2_in_margin: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
+                                            <td className="px-2 py-4">
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={shiftConfig.is_flexi ? 0 : shiftConfig.session2_out_margin}
+                                                    disabled={shiftConfig.is_flexi || parseInt(shiftConfig.total_punches_required) !== 4}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, session2_out_margin: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                    className="h-10 w-24 bg-white border border-slate-200 rounded-lg px-2 text-xs font-bold outline-none focus:border-indigo-500 disabled:opacity-50"
+                                                />
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -601,14 +987,46 @@ const ShiftManagement = () => {
                                     <div className="flex items-center gap-4">
                                         <span className="text-xs font-bold text-slate-500 w-24">For Half day</span>
                                         <div className="flex items-center gap-2">
-                                            <input type="text" defaultValue="04:00" className="w-20 h-10 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs font-black" />
+                                            <input
+                                                type="number"
+                                                step="0.5"
+                                                min="0"
+                                                max="24"
+                                                value={shiftConfig.min_hours_half}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    const parsed = parseFloat(val);
+                                                    setShiftConfig({
+                                                        ...shiftConfig,
+                                                        min_hours_half: val,
+                                                        min_hours: isNaN(parsed) ? '' : String(parsed * 2)
+                                                    });
+                                                }}
+                                                className="w-20 h-10 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs font-black outline-none focus:border-indigo-500 px-2"
+                                            />
                                             <span className="text-[10px] font-black text-slate-400 uppercase">hours</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <span className="text-xs font-bold text-slate-500 w-24">For Full day</span>
                                         <div className="flex items-center gap-2">
-                                            <input type="text" defaultValue="08:00" className="w-20 h-10 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs font-black" />
+                                            <input
+                                                type="number"
+                                                step="0.5"
+                                                min="0"
+                                                max="24"
+                                                value={shiftConfig.min_hours}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    const parsed = parseFloat(val);
+                                                    setShiftConfig({
+                                                        ...shiftConfig,
+                                                        min_hours: val,
+                                                        min_hours_half: isNaN(parsed) ? '' : String(parsed / 2)
+                                                    });
+                                                }}
+                                                className="w-20 h-10 bg-slate-50 border border-slate-200 rounded-lg text-center text-xs font-black outline-none focus:border-indigo-500 px-2"
+                                            />
                                             <span className="text-[10px] font-black text-slate-400 uppercase">hours</span>
                                         </div>
                                     </div>
@@ -618,23 +1036,23 @@ const ShiftManagement = () => {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Grace Cap / Mo</label>
-                                            <input 
-                                                type="number" 
-                                                value={shiftConfig.grace_count_limit} 
+                                            <input
+                                                type="number"
+                                                value={shiftConfig.grace_count_limit}
                                                 disabled={shiftConfig.is_flexi}
-                                                onChange={(e) => setShiftConfig({...shiftConfig, grace_count_limit: parseInt(e.target.value) || 0})}
-                                                className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none disabled:opacity-50" 
+                                                onChange={(e) => setShiftConfig({ ...shiftConfig, grace_count_limit: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                                                className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none disabled:opacity-50"
                                             />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Night Shift</label>
                                             <div className="flex items-center h-10">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={shiftConfig.is_night_shift} 
+                                                <input
+                                                    type="checkbox"
+                                                    checked={shiftConfig.is_night_shift}
                                                     disabled={shiftConfig.is_flexi}
-                                                    onChange={(e) => setShiftConfig({...shiftConfig, is_night_shift: e.target.checked})}
-                                                    className="w-4 h-4 accent-indigo-600 disabled:opacity-50" 
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, is_night_shift: e.target.checked })}
+                                                    className="w-4 h-4 accent-indigo-600 disabled:opacity-50"
                                                 />
                                             </div>
                                         </div>
@@ -643,35 +1061,56 @@ const ShiftManagement = () => {
                                         <div className="space-y-1">
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Flexi / Anytime Shift</label>
                                             <div className="flex items-center h-10">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={shiftConfig.is_flexi} 
-                                                    onChange={(e) => setShiftConfig({...shiftConfig, is_flexi: e.target.checked})}
-                                                    className="w-4 h-4 accent-indigo-600" 
+                                                <input
+                                                    type="checkbox"
+                                                    checked={shiftConfig.is_flexi}
+                                                    onChange={(e) => setShiftConfig({ ...shiftConfig, is_flexi: e.target.checked })}
+                                                    className="w-4 h-4 accent-indigo-600"
                                                 />
                                             </div>
                                         </div>
                                         {shiftConfig.is_flexi && (
                                             <div className="space-y-1">
                                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Min Hours Required</label>
-                                                <input 
-                                                    type="number" 
+                                                <input
+                                                    type="number"
                                                     step="0.5"
-                                                    value={shiftConfig.min_hours} 
-                                                    onChange={(e) => setShiftConfig({...shiftConfig, min_hours: parseFloat(e.target.value) || 8.0})}
-                                                    className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" 
+                                                    value={shiftConfig.min_hours}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const parsed = parseFloat(val);
+                                                        setShiftConfig({
+                                                            ...shiftConfig,
+                                                            min_hours: val,
+                                                            min_hours_half: isNaN(parsed) ? '' : String(parsed / 2)
+                                                        });
+                                                    }}
+                                                    className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none"
                                                 />
                                             </div>
                                         )}
                                     </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Shift Terminate Hour</label>
+                                        <input 
+                                            type="number" 
+                                            placeholder="e.g. 2 (Absent if no check-out after shift end + 2 hours)"
+                                            value={shiftConfig.terminate_hour === undefined || shiftConfig.terminate_hour === null ? '' : shiftConfig.terminate_hour} 
+                                            onChange={(e) => setShiftConfig({...shiftConfig, terminate_hour: e.target.value === '' ? '' : parseInt(e.target.value)})}
+                                            className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" 
+                                        />
+                                        <span className="text-[8px] text-slate-400 font-bold block mt-0.5">Absent status is automatically marked if the employee exceeds this duration without punching out.</span>
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Valid From</label>
-                                            <input type="date" value={shiftConfig.from_date} onChange={(e) => setShiftConfig({...shiftConfig, from_date: e.target.value})} className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
+                                            <input type="date" value={shiftConfig.from_date} onChange={(e) => setShiftConfig({ ...shiftConfig, from_date: e.target.value })} className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Valid To</label>
-                                            <input type="date" value={shiftConfig.to_date} onChange={(e) => setShiftConfig({...shiftConfig, to_date: e.target.value})} className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
+                                            <input type="date" value={shiftConfig.to_date} onChange={(e) => setShiftConfig({ ...shiftConfig, to_date: e.target.value })} className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
                                         </div>
                                     </div>
                                 </div>
@@ -681,7 +1120,7 @@ const ShiftManagement = () => {
                                 <div className="flex items-center gap-3">
                                     <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                        {editingShiftId 
+                                        {editingShiftId
                                             ? 'Selected employees will be assigned to this shift after saving (Optional)'
                                             : 'New shift will be assigned to selected employees after saving'}
                                     </p>
@@ -696,7 +1135,7 @@ const ShiftManagement = () => {
                                     {editingShiftId ? 'Assign to Employees (Optional)' : 'Select Employees for Assignment'}
                                 </h3>
                                 <div className="flex items-center gap-4">
-                                    <select 
+                                    <select
                                         value={selectedOutlet}
                                         onChange={(e) => setSelectedOutlet(e.target.value)}
                                         className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-indigo-300 shadow-sm"
@@ -709,12 +1148,12 @@ const ShiftManagement = () => {
                                     </select>
                                     <div className="relative">
                                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input 
-                                            type="text" 
-                                            placeholder="Search employees..." 
+                                        <input
+                                            type="text"
+                                            placeholder="Search employees..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-[10px] font-bold outline-none focus:border-indigo-300 w-64 shadow-sm" 
+                                            className="bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-[10px] font-bold outline-none focus:border-indigo-300 w-64 shadow-sm"
                                         />
                                     </div>
                                     <button onClick={() => setSelectedEmployees(filteredEmployees.filter(e => !e.assigned_shift))} className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-800 transition-colors">Select All</button>
@@ -723,18 +1162,16 @@ const ShiftManagement = () => {
                             </div>
                             <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-h-[400px] overflow-y-auto custom-scrollbar">
                                 {filteredEmployees.map(emp => (
-                                    <div 
+                                    <div
                                         key={emp.id}
                                         onClick={() => handleEmployeeToggle(emp)}
-                                        className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${
-                                            selectedEmployees.some(e => e.id === emp.id)
-                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' 
+                                        className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${selectedEmployees.some(e => e.id === emp.id)
+                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100'
                                                 : 'bg-white border-slate-100 hover:border-slate-300 text-slate-700'
-                                        }`}
+                                            }`}
                                     >
-                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black uppercase ${
-                                            selectedEmployees.some(e => e.id === emp.id) ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
-                                        }`}>
+                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-black uppercase ${selectedEmployees.some(e => e.id === emp.id) ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'
+                                            }`}>
                                             {(emp.first_name?.[0] || '')}{(emp.last_name?.[0] || '')}
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -760,7 +1197,7 @@ const ShiftManagement = () => {
                                     <Zap size={14} className="text-amber-500" />
                                     <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Override Logic</h3>
                                 </div>
-                                <button 
+                                <button
                                     onClick={handleOverrideExecute}
                                     disabled={loading}
                                     className="px-4 py-1.5 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50"
@@ -772,8 +1209,8 @@ const ShiftManagement = () => {
                             <div className="space-y-4">
                                 <div className="space-y-1">
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Select Target Protocol</label>
-                                    <select 
-                                        value={selectedShiftId} 
+                                    <select
+                                        value={selectedShiftId}
                                         onChange={(e) => setSelectedShiftId(e.target.value)}
                                         className="w-full h-10 bg-slate-50 border border-slate-100 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
                                     >
@@ -787,11 +1224,11 @@ const ShiftManagement = () => {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Effective From</label>
-                                        <input type="date" value={overrideConfig.from_date} onChange={(e) => setOverrideConfig({...overrideConfig, from_date: e.target.value})} className="w-full h-10 bg-slate-50 border border-slate-100 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
+                                        <input type="date" value={overrideConfig.from_date} onChange={(e) => setOverrideConfig({ ...overrideConfig, from_date: e.target.value })} className="w-full h-10 bg-slate-50 border border-slate-100 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Effective To</label>
-                                        <input type="date" value={overrideConfig.to_date} onChange={(e) => setOverrideConfig({...overrideConfig, to_date: e.target.value})} className="w-full h-10 bg-slate-50 border border-slate-100 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" placeholder="Indefinite" />
+                                        <input type="date" value={overrideConfig.to_date} onChange={(e) => setOverrideConfig({ ...overrideConfig, to_date: e.target.value })} className="w-full h-10 bg-slate-50 border border-slate-100 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" placeholder="Indefinite" />
                                     </div>
                                 </div>
 
@@ -808,7 +1245,7 @@ const ShiftManagement = () => {
                             <div className="p-4 border-b border-slate-50 flex items-center justify-between gap-4 flex-wrap">
                                 <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Select Employees</h3>
                                 <div className="flex items-center gap-4 flex-wrap">
-                                    <select 
+                                    <select
                                         value={selectedOutlet}
                                         onChange={(e) => setSelectedOutlet(e.target.value)}
                                         className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
@@ -821,8 +1258,8 @@ const ShiftManagement = () => {
                                     </select>
                                     <div className="relative">
                                         <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             placeholder="Quick filter..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -837,19 +1274,17 @@ const ShiftManagement = () => {
                             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                                 <div className="space-y-2">
                                     {filteredEmployees.map(emp => (
-                                        <div 
+                                        <div
                                             key={emp.id}
                                             onClick={() => handleEmployeeToggle(emp)}
-                                            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                                                selectedEmployees.some(e => e.id === emp.id)
-                                                    ? 'bg-slate-900 border-slate-900 text-white' 
+                                            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${selectedEmployees.some(e => e.id === emp.id)
+                                                    ? 'bg-slate-900 border-slate-900 text-white'
                                                     : 'bg-white border-slate-50 hover:border-slate-200'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-black ${
-                                                    selectedEmployees.some(e => e.id === emp.id) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-400'
-                                                }`}>
+                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-black ${selectedEmployees.some(e => e.id === emp.id) ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-400'
+                                                    }`}>
                                                     {(emp.first_name?.[0] || '')}{(emp.last_name?.[0] || '')}
                                                 </div>
                                                 <div>
@@ -871,7 +1306,7 @@ const ShiftManagement = () => {
 
             <AnimatePresence>
                 {success && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, y: 50 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 50 }}
@@ -879,6 +1314,94 @@ const ShiftManagement = () => {
                     >
                         <CheckCircle size={14} className="text-emerald-400" />
                         <span className="text-[10px] font-black uppercase tracking-widest">Protocol Synchronised</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Custom Alert Modal */}
+            <AnimatePresence>
+                {alertConfig.show && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-white rounded-[32px] p-8 max-w-sm w-full mx-4 shadow-2xl border border-slate-100 flex flex-col items-center text-center gap-5"
+                        >
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${alertConfig.type === 'success'
+                                    ? 'bg-emerald-50 text-emerald-600'
+                                    : alertConfig.type === 'error'
+                                        ? 'bg-rose-50 text-rose-600 animate-bounce'
+                                        : 'bg-indigo-50 text-indigo-600'
+                                }`}>
+                                {alertConfig.type === 'success' ? <CheckCircle size={24} /> : <Info size={24} />}
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-black uppercase tracking-widest text-slate-800 mb-2">
+                                    {alertConfig.type === 'success'
+                                        ? 'Success'
+                                        : alertConfig.type === 'error'
+                                            ? 'Oops!'
+                                            : 'Notification'}
+                                </h4>
+                                <p className="text-xs font-bold text-slate-500 leading-relaxed">{alertConfig.message}</p>
+                            </div>
+                            <button
+                                onClick={() => setAlertConfig({ ...alertConfig, show: false })}
+                                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-lg shadow-slate-100 cursor-pointer active:scale-95"
+                            >
+                                Continue
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Custom Confirm Modal */}
+            <AnimatePresence>
+                {confirmConfig.show && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-white rounded-[32px] p-8 max-w-sm w-full mx-4 shadow-2xl border border-slate-100 flex flex-col items-center text-center gap-5"
+                        >
+                            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center animate-pulse">
+                                <Shield size={24} />
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-black uppercase tracking-widest text-slate-800 mb-2">Are you sure?</h4>
+                                <p className="text-xs font-bold text-slate-500 leading-relaxed">{confirmConfig.message}</p>
+                            </div>
+                            <div className="flex gap-3 w-full">
+                                <button
+                                    onClick={() => setConfirmConfig({ show: false, message: '', onConfirm: null })}
+                                    className="flex-1 py-3.5 bg-slate-155 hover:bg-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border border-slate-100 active:scale-95"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (confirmConfig.onConfirm) confirmConfig.onConfirm();
+                                        setConfirmConfig({ show: false, message: '', onConfirm: null });
+                                    }}
+                                    className="flex-1 py-3.5 bg-indigo-650 hover:bg-indigo-700 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-lg shadow-indigo-50 active:scale-95"
+                                >
+                                    Confirm
+                                </button>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>

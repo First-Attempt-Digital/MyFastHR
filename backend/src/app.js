@@ -285,6 +285,47 @@ const syncDatabaseSchema = async () => {
             console.log('>>> [DB-SYNC]: Seeding default case studies complete.');
         }
 
+        // Ensure shifts table has split shift columns
+        const hasShiftsTable = await db.schema.hasTable('shifts');
+        if (hasShiftsTable) {
+            const shiftColumns = [
+                'total_punches_required',
+                'session2_start_time',
+                'session2_end_time',
+                'session1_grace_out',
+                'session2_grace_in',
+                'session2_grace_out',
+                'session1_in_margin',
+                'session1_out_margin',
+                'session2_in_margin',
+                'session2_out_margin'
+            ];
+            const missingShiftCols = [];
+            for (const col of shiftColumns) {
+                const exists = await db.schema.hasColumn('shifts', col);
+                if (!exists) {
+                    missingShiftCols.push(col);
+                }
+            }
+
+            if (missingShiftCols.length > 0) {
+                console.log(`>>> [DB-SYNC]: Adding ${missingShiftCols.length} missing columns to shifts table...`);
+                await db.schema.alterTable('shifts', (table) => {
+                    if (missingShiftCols.includes('total_punches_required')) table.integer('total_punches_required').defaultTo(2);
+                    if (missingShiftCols.includes('session2_start_time')) table.string('session2_start_time', 10).nullable();
+                    if (missingShiftCols.includes('session2_end_time')) table.string('session2_end_time', 10).nullable();
+                    if (missingShiftCols.includes('session1_grace_out')) table.integer('session1_grace_out').defaultTo(0);
+                    if (missingShiftCols.includes('session2_grace_in')) table.integer('session2_grace_in').defaultTo(15);
+                    if (missingShiftCols.includes('session2_grace_out')) table.integer('session2_grace_out').defaultTo(0);
+                    if (missingShiftCols.includes('session1_in_margin')) table.integer('session1_in_margin').defaultTo(0);
+                    if (missingShiftCols.includes('session1_out_margin')) table.integer('session1_out_margin').defaultTo(0);
+                    if (missingShiftCols.includes('session2_in_margin')) table.integer('session2_in_margin').defaultTo(0);
+                    if (missingShiftCols.includes('session2_out_margin')) table.integer('session2_out_margin').defaultTo(0);
+                });
+                console.log('>>> [DB-SYNC]: shifts table columns updated.');
+            }
+        }
+
     } catch (err) {
         console.error('>>> [DB-SYNC-ERROR]:', err.message);
     }
@@ -420,7 +461,28 @@ app.use(cors((req, callback) => {
         }
     }
     
-    const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin);
+    const isLocalIP = origin && (
+        origin.startsWith('http://192.168.') || 
+        origin.startsWith('http://10.') || 
+        origin.startsWith('http://172.16.') || 
+        origin.startsWith('http://172.17.') || 
+        origin.startsWith('http://172.18.') || 
+        origin.startsWith('http://172.19.') || 
+        origin.startsWith('http://172.20.') || 
+        origin.startsWith('http://172.21.') || 
+        origin.startsWith('http://172.22.') || 
+        origin.startsWith('http://172.23.') || 
+        origin.startsWith('http://172.24.') || 
+        origin.startsWith('http://172.25.') || 
+        origin.startsWith('http://172.26.') || 
+        origin.startsWith('http://172.27.') || 
+        origin.startsWith('http://172.28.') || 
+        origin.startsWith('http://172.29.') || 
+        origin.startsWith('http://172.30.') || 
+        origin.startsWith('http://172.31.')
+    );
+    
+    const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin) || isLocalIP;
     
     if (isAllowed) {
         callback(null, {
@@ -692,6 +754,8 @@ app.post('/api/employees/:id/generate-token', authenticateToken, tenantGuard, em
 // Public Branding Route
 const brandingController = require('./controllers/brandingController');
 app.get('/api/public/branding', brandingController.getPublicBranding);
+app.get('/api/public/branding/manifest.json', (req, res) => brandingController.getPublicManifest(req, res));
+app.get('/manifest.json', (req, res) => brandingController.getPublicManifest(req, res));
 
 // Public Case Studies Route
 app.get('/api/public/case-studies', async (req, res) => {

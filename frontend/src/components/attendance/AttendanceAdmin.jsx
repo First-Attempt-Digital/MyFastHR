@@ -10,17 +10,39 @@ const AttendanceAdmin = () => {
     const [days, setDays] = useState(30);
     const [loading, setLoading] = useState(false);
     const [selectedOutlet, setSelectedOutlet] = useState('All');
+    const [selectedDept, setSelectedDept] = useState('All');
+    const [selectedDesignation, setSelectedDesignation] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
 
     const uniqueOutlets = React.useMemo(() => {
         const locations = matrix.map(emp => emp.location).filter(Boolean);
         return ['All', ...new Set(locations)].sort();
     }, [matrix]);
 
+    const uniqueDepartments = React.useMemo(() => {
+        const depts = matrix.map(emp => emp.department).filter(Boolean);
+        return ['All', ...new Set(depts)].sort();
+    }, [matrix]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const roles = matrix.map(emp => emp.role).filter(Boolean);
+        return ['All', ...new Set(roles)].sort();
+    }, [matrix]);
+
     const filteredMatrix = React.useMemo(() => {
         return matrix.filter(emp => {
-            return selectedOutlet === 'All' || emp.location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || emp.location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || emp.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || emp.role === selectedDesignation;
+            
+            const query = searchQuery.toLowerCase().trim();
+            const matchesSearch = query === '' || 
+                (emp.name && emp.name.toLowerCase().includes(query)) ||
+                (emp.code && emp.code.toLowerCase().includes(query));
+
+            return matchesOutlet && matchesDept && matchesDesignation && matchesSearch;
         });
-    }, [matrix, selectedOutlet]);
+    }, [matrix, selectedOutlet, selectedDept, selectedDesignation, searchQuery]);
 
     const getMonthOptions = () => {
         const options = [];
@@ -118,13 +140,13 @@ const AttendanceAdmin = () => {
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-700">
             {/* Control Bar */}
             <div className="p-6 border-b border-slate-50 flex flex-wrap items-center justify-between gap-6">
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                     <div className="space-y-1">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Month</p>
                         <select 
                             value={`${month}-${year}`}
                             onChange={handleMonthChange}
-                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10"
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
                         >
                             {monthOptions.map(opt => (
                                 <option key={`${opt.month}-${opt.year}`} value={`${opt.month}-${opt.year}`}>
@@ -138,11 +160,39 @@ const AttendanceAdmin = () => {
                         <select 
                             value={selectedOutlet}
                             onChange={(e) => setSelectedOutlet(e.target.value)}
-                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10"
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
                         >
                             {uniqueOutlets.map(loc => (
                                 <option key={loc} value={loc}>
                                     {loc === 'All' ? 'All Outlets' : loc}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Department</p>
+                        <select 
+                            value={selectedDept}
+                            onChange={(e) => setSelectedDept(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
+                        >
+                            {uniqueDepartments.map(dept => (
+                                <option key={dept} value={dept}>
+                                    {dept === 'All' ? 'All Departments' : dept}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Designation</p>
+                        <select 
+                            value={selectedDesignation}
+                            onChange={(e) => setSelectedDesignation(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
+                        >
+                            {uniqueDesignations.map(role => (
+                                <option key={role} value={role}>
+                                    {role === 'All' ? 'All Designations' : role}
                                 </option>
                             ))}
                         </select>
@@ -156,9 +206,19 @@ const AttendanceAdmin = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Quick Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="h-10 bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 text-xs font-bold text-slate-700 w-52 outline-none focus:border-indigo-300"
+                        />
+                    </div>
                     <button 
                         onClick={handleExport}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all cursor-pointer"
                     >
                         <Download size={14} /> Export Excel
                     </button>
@@ -199,7 +259,7 @@ const AttendanceAdmin = () => {
                                 {dayLabels.map(d => {
                                     const status = emp.days[d] || '-';
                                     return (
-                                        <td key={d} className="p-0 border-r border-slate-100 text-center">
+                                        <td key={d} className="p-0 border-r border-slate-100 text-center relative">
                                             <div className={`w-full h-full py-3 text-[10px] font-black border-b-2 transition-all cursor-pointer ${
                                                     status === 'P' ? 'text-green-600 border-transparent hover:bg-green-50' :
                                                     status === 'A' ? 'text-rose-600 border-rose-400 bg-rose-50/30' :
@@ -210,6 +270,18 @@ const AttendanceAdmin = () => {
                                                 }`}>
                                                 {status}
                                             </div>
+                                            {emp.meta?.[d]?.is_override && (
+                                                <div 
+                                                    className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-indigo-600 border-l-[6px] border-l-transparent" 
+                                                    title="Manual Override"
+                                                />
+                                            )}
+                                            {emp.meta?.[d]?.is_grace && (
+                                                <div 
+                                                    className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full" 
+                                                    title="Grace Period Applied"
+                                                />
+                                            )}
                                         </td>
                                     );
                                 })}
@@ -236,6 +308,23 @@ const AttendanceAdmin = () => {
                         <div className="flex items-center gap-3">
                             <span className="w-6 h-6 rounded flex items-center justify-center bg-amber-50 border border-amber-100 text-amber-600 text-[10px] font-black shadow-sm">L</span>
                             <span className="text-[10px] font-bold text-slate-500 uppercase">Late Mark</span>
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Special Marks</p>
+                        <div className="flex items-center gap-3">
+                            <span className="relative w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-700 text-[10px] font-black shadow-sm overflow-hidden">
+                                P
+                                <div className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-indigo-600 border-l-[6px] border-l-transparent" />
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Manual Override</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className="relative w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-200 text-slate-700 text-[10px] font-black shadow-sm">
+                                P
+                                <div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Grace Applied</span>
                         </div>
                     </div>
                     <div className="space-y-3">

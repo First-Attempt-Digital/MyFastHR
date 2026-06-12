@@ -1,0 +1,17 @@
+{
+  "short_name": "MyFastHR",
+  "name": "MyFastHR - Enterprise Employee Portal",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#6028D9",
+  "display": "standalone",
+  "orientation": "portrait"
+}

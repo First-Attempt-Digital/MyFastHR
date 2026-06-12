@@ -53,12 +53,12 @@ const StatCard = ({ title, count, period, icon: Icon, colorClass, bgClass, spark
             </div>
         </div>
         <div className="flex items-end justify-between gap-4 mt-2">
-            <div className="space-y-1.5">
-                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider leading-none">{title}</h4>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-slate-800 tracking-tight leading-none">{count}</span>
+            <div className="space-y-1.5 min-w-0">
+                <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider leading-none truncate">{title}</h4>
+                <div className="flex items-center flex-wrap gap-2">
+                    <span className="text-2xl font-black text-slate-800 tracking-tight leading-none whitespace-nowrap">{count}</span>
                     {trend && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 ${
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 shrink-0 ${
                             trend.startsWith('+') ? 'text-emerald-600 bg-emerald-50' : 
                             trend === 'Clear' || trend === 'Stable' ? 'text-slate-500 bg-slate-100' :
                             'text-rose-500 bg-rose-50'
@@ -203,6 +203,7 @@ const Overview = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [actionLoading, setActionLoading] = useState({});
+    const [showRules, setShowRules] = useState(false);
 
     useEffect(() => {
         const fetchOverview = async () => {
@@ -320,12 +321,25 @@ const Overview = () => {
         <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-10">
             {/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-2">
-                <div>
-                    <h1 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                        <Activity className="text-indigo-650" size={20} />
-                        Overview Ledger
-                    </h1>
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Statistical Analysis Dashboard</p>
+                <div className="flex items-center gap-3">
+                    <div>
+                        <h1 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                            <Activity className="text-indigo-650" size={20} />
+                            Overview Ledger
+                            <button 
+                                onClick={() => setShowRules(!showRules)}
+                                className={`p-1.5 rounded-lg border transition-all ${
+                                    showRules 
+                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 scale-105' 
+                                        : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                                }`}
+                                title="Show Rules / नियम देखें"
+                            >
+                                <Info size={14} className={showRules ? 'animate-pulse' : ''} />
+                            </button>
+                        </h1>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Statistical Analysis Dashboard</p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <select 
@@ -344,6 +358,68 @@ const Overview = () => {
             <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} selectedYear={selectedYear} />
 
             <div className={`px-2 space-y-6 transition-opacity duration-300 ${loading ? 'opacity-60' : 'opacity-100'}`}>
+                {/* Rules & Guidelines Note Card */}
+                <AnimatePresence>
+                    {showRules && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0, y: -10 }}
+                            animate={{ opacity: 1, height: 'auto', y: 0 }}
+                            exit={{ opacity: 0, height: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                        >
+                            <div className="bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent border border-indigo-100 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+                                <div className="space-y-2 max-w-4xl">
+                                    <div className="flex items-center gap-2 text-indigo-700 font-black text-xs uppercase tracking-wider">
+                                        <Info size={16} className="text-indigo-600 animate-bounce" />
+                                        Attendance & Punching Guidelines / हाजिरी एवं पंचिंग के नियम
+                                    </div>
+                                    <h2 className="text-lg font-black text-slate-800 tracking-tight leading-snug">
+                                        How does the Attendance flow work?
+                                    </h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 pt-3 border-t border-slate-200/50">
+                                        <div>
+                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                Direct Present / सीधी हाजिरी
+                                            </span>
+                                            <p className="text-slate-500 text-xs font-bold mt-1.5 leading-relaxed">
+                                                On-time biometric check-ins are automatically marked <span className="text-slate-800 font-extrabold">Present</span>. No manager approval is needed.
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(समय पर पंच करने पर सीधी हाजिरी मार्क होती है, कोई अनुमति की आवश्यकता नहीं है।)</span>
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                Regularization / सुधार अनुरोध
+                                            </span>
+                                            <p className="text-slate-500 text-xs font-bold mt-1.5 leading-relaxed">
+                                                Late arrivals, early departures, or missed punches trigger a regularization request for the manager's review.
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(लेट आने, जल्दी जाने, या पंच छूटने पर अप्रूवल रिक्वेस्ट भेजी जाती है।)</span>
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                Half-Day Calc & Early Out / हाफ-डे और अर्ली आउट
+                                            </span>
+                                            <p className="text-slate-500 text-xs font-bold mt-1.5 leading-relaxed">
+                                                Working hours under half-day limit auto-mark <span className="text-slate-800 font-extrabold">Absent</span> (early checkouts here do not create early-out requests). Early-out approval requests are only generated if punching out after completing half-day hours but before full shift.
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(हाफ-डे पूरा करने से पहले पंच-आउट करने पर कोई अर्ली-आउट रिक्वेस्ट जनरेट नहीं होगी (वह Absent गिना जायेगा)। रिक्वेस्ट केवल हाफ-डे पूरा करने के बाद ही जनरेट होगी।)</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 gap-2">
+                                    <button 
+                                        onClick={() => navigate('/leaves/shift-override')}
+                                        className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-750 font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-md shadow-indigo-100"
+                                    >
+                                        Shift Rules
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* Premium Stats Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard 

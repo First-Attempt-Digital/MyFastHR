@@ -23,6 +23,20 @@ const ManualOverride = () => {
         fetchInitialData();
     }, []);
 
+    useEffect(() => {
+        if (success) {
+            const timer = setTimeout(() => setSuccess(false), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [success]);
+
+    useEffect(() => {
+        if (error) {
+            const timer = setTimeout(() => setError(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [error]);
+
     const fetchInitialData = async () => {
         try {
             const shiftRes = await api.get('/attendance/shift-list');
@@ -76,13 +90,13 @@ const ManualOverride = () => {
             <div className="min-h-[600px]">
                 <AnimatePresence mode="wait">
                     {activeTab === 'shift_override' && (
-                        <ShiftOverrideTab key="shift" shifts={shifts} setLoading={setLoading} loading={loading} />
+                        <ShiftOverrideTab key="shift" shifts={shifts} setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
                     )}
                     {activeTab === 'employee_wise' && (
-                        <EmployeeWiseTab key="emp" setLoading={setLoading} loading={loading} />
+                        <EmployeeWiseTab key="emp" setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
                     )}
                     {activeTab === 'date_wise' && (
-                        <DateWiseTab key="date" setLoading={setLoading} loading={loading} />
+                        <DateWiseTab key="date" setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
                     )}
                     {activeTab === 'history' && (
                         <HistoryTab key="history" setLoading={setLoading} loading={loading} />
@@ -124,7 +138,7 @@ const ManualOverride = () => {
 
 // --- SUB-COMPONENTS ---
 
-const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
+const ShiftOverrideTab = ({ shifts, setLoading, loading, setSuccess, setError }) => {
     const [config, setConfig] = useState({
         singleDay: true,
         fromDate: new Date().toISOString().split('T')[0],
@@ -136,9 +150,13 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
     const [selectedEmployees, setSelectedEmployees] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
     const [fetchingEmployees, setFetchingEmployees] = useState(false);
 
     const uniqueLocations = ['all', ...[...new Set(employees.map(e => e.office_location).filter(Boolean))].sort()];
+    const uniqueDepartments = ['all', ...[...new Set(employees.map(e => e.department_name).filter(Boolean))].sort()];
+    const uniqueDesignations = ['all', ...[...new Set(employees.map(e => e.designation).filter(Boolean))].sort()];
 
     useEffect(() => {
         if ((config.shiftId || config.assignMode === 'multiple') && config.fromDate) {
@@ -166,7 +184,10 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
     };
 
     const handleApply = async () => {
-        if (selectedEmployees.length === 0) return alert('Please select at least one employee');
+        if (selectedEmployees.length === 0) {
+            setError('Please select at least one employee');
+            return;
+        }
         try {
             setLoading(true);
             await api.post('/attendance/shift-override-logic', {
@@ -176,10 +197,9 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
                 to_date: config.singleDay ? config.fromDate : config.toDate,
                 type: 'shift_override'
             });
-            // Show success...
-            alert('Override applied successfully');
+            setSuccess(true);
         } catch (err) {
-            alert(err.message);
+            setError(err.message || 'Failed to apply shift override');
         } finally {
             setLoading(false);
         }
@@ -189,7 +209,9 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
         const matchesQuery = `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
                              emp.employee_id_number?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesOutlet = selectedOutlet === 'all' || emp.office_location === selectedOutlet;
-        return matchesQuery && matchesOutlet;
+        const matchesDept = selectedDept === 'all' || emp.department_name === selectedDept;
+        const matchesDesignation = selectedDesignation === 'all' || emp.designation === selectedDesignation;
+        return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
     });
 
     const toggleEmployee = (id) => {
@@ -323,7 +345,7 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
                             <Users size={18} className="text-indigo-600" />
                             <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Select Employees</h3>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <select 
                                 value={selectedOutlet}
                                 onChange={(e) => setSelectedOutlet(e.target.value)}
@@ -335,6 +357,28 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
                                     </option>
                                 ))}
                             </select>
+                            <select 
+                                value={selectedDept}
+                                onChange={(e) => setSelectedDept(e.target.value)}
+                                className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-300"
+                            >
+                                {uniqueDepartments.map(dept => (
+                                    <option key={dept} value={dept}>
+                                        {dept === 'all' ? 'All Depts' : dept}
+                                    </option>
+                                ))}
+                            </select>
+                            <select 
+                                value={selectedDesignation}
+                                onChange={(e) => setSelectedDesignation(e.target.value)}
+                                className="h-10 bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-300"
+                            >
+                                {uniqueDesignations.map(desg => (
+                                    <option key={desg} value={desg}>
+                                        {desg === 'all' ? 'All Designations' : desg}
+                                    </option>
+                                ))}
+                            </select>
                             <div className="relative">
                                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                 <input 
@@ -342,7 +386,7 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
                                     placeholder="Search name or ID..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="h-10 bg-white border border-slate-200 rounded-xl pl-9 pr-4 text-xs font-bold text-slate-700 w-64 outline-none focus:border-indigo-300"
+                                    className="h-10 bg-white border border-slate-200 rounded-xl pl-9 pr-4 text-xs font-bold text-slate-700 w-48 outline-none focus:border-indigo-300"
                                 />
                             </div>
                             <button 
@@ -406,7 +450,7 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading }) => {
     );
 };
 
-const EmployeeWiseTab = ({ setLoading, loading }) => {
+const EmployeeWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
     const [employeeQuery, setEmployeeQuery] = useState('');
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [dateRange, setDateRange] = useState({ from: '', to: '' });
@@ -428,7 +472,10 @@ const EmployeeWiseTab = ({ setLoading, loading }) => {
     };
 
     const handleShow = async () => {
-        if (!selectedEmp || !dateRange.from || !dateRange.to) return alert('Select employee and date range');
+        if (!selectedEmp || !dateRange.from || !dateRange.to) {
+            setError('Select employee and date range');
+            return;
+        }
         try {
             setLoading(true);
             const res = await api.get('/attendance/employee-history', {
@@ -440,7 +487,7 @@ const EmployeeWiseTab = ({ setLoading, loading }) => {
             });
             setAttendance(res || []);
         } catch (err) {
-            alert(err.message);
+            setError(err.message || 'Failed to load employee history');
         } finally {
             setLoading(false);
         }
@@ -454,9 +501,10 @@ const EmployeeWiseTab = ({ setLoading, loading }) => {
                 date,
                 status
             });
+            setSuccess(true);
             handleShow(); // Refresh
         } catch (err) {
-            alert(err.message);
+            setError(err.message || 'Failed to update status');
         } finally {
             setLoading(false);
         }
@@ -464,7 +512,7 @@ const EmployeeWiseTab = ({ setLoading, loading }) => {
 
     const handleExport = () => {
         if (!attendance || attendance.length === 0) {
-            alert("No data available to export.");
+            setError("No data available to export.");
             return;
         }
         const dataToExport = attendance.map(row => ({
@@ -637,13 +685,17 @@ const EmployeeWiseTab = ({ setLoading, loading }) => {
     );
 };
 
-const DateWiseTab = ({ setLoading, loading }) => {
+const DateWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [data, setData] = useState([]);
     const [search, setSearch] = useState('');
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
 
     const uniqueLocations = ['all', ...[...new Set(data.map(e => e.office_location).filter(Boolean))].sort()];
+    const uniqueDepartments = ['all', ...[...new Set(data.map(e => e.department_name).filter(Boolean))].sort()];
+    const uniqueDesignations = ['all', ...[...new Set(data.map(e => e.designation).filter(Boolean))].sort()];
 
     useEffect(() => {
         fetchDateAttendance();
@@ -669,9 +721,10 @@ const DateWiseTab = ({ setLoading, loading }) => {
                 date,
                 status
             });
+            setSuccess(true);
             fetchDateAttendance(); // Refresh
         } catch (err) {
-            alert(err.message);
+            setError(err.message || 'Failed to update status');
         } finally {
             setLoading(false);
         }
@@ -679,7 +732,7 @@ const DateWiseTab = ({ setLoading, loading }) => {
 
     const handleExport = () => {
         if (!filtered || filtered.length === 0) {
-            alert("No data available to export.");
+            setError("No data available to export.");
             return;
         }
         const dataToExport = filtered.map(row => ({
@@ -699,7 +752,9 @@ const DateWiseTab = ({ setLoading, loading }) => {
         const matchesSearch = `${e.first_name} ${e.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
                               e.employee_id_number?.toLowerCase().includes(search.toLowerCase());
         const matchesOutlet = selectedOutlet === 'all' || e.office_location === selectedOutlet;
-        return matchesSearch && matchesOutlet;
+        const matchesDept = selectedDept === 'all' || e.department_name === selectedDept;
+        const matchesDesignation = selectedDesignation === 'all' || e.designation === selectedDesignation;
+        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
     });
 
     return (
@@ -720,7 +775,7 @@ const DateWiseTab = ({ setLoading, loading }) => {
                     />
                 </div>
 
-                <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
                     {filtered.length > 0 && (
                         <button
                             type="button"
@@ -738,6 +793,28 @@ const DateWiseTab = ({ setLoading, loading }) => {
                         {uniqueLocations.map(loc => (
                             <option key={loc} value={loc}>
                                 {loc === 'all' ? 'All Outlets' : loc}
+                            </option>
+                        ))}
+                    </select>
+                    <select 
+                        value={selectedDept}
+                        onChange={(e) => setSelectedDept(e.target.value)}
+                        className="h-12 bg-white border border-slate-200 rounded-2xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 shadow-sm"
+                    >
+                        {uniqueDepartments.map(dept => (
+                            <option key={dept} value={dept}>
+                                {dept === 'all' ? 'All Depts' : dept}
+                            </option>
+                        ))}
+                    </select>
+                    <select 
+                        value={selectedDesignation}
+                        onChange={(e) => setSelectedDesignation(e.target.value)}
+                        className="h-12 bg-white border border-slate-200 rounded-2xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 shadow-sm"
+                    >
+                        {uniqueDesignations.map(desg => (
+                            <option key={desg} value={desg}>
+                                {desg === 'all' ? 'All Designations' : desg}
                             </option>
                         ))}
                     </select>
@@ -789,7 +866,7 @@ const DateWiseTab = ({ setLoading, loading }) => {
                                                 </div>
                                                 <div>
                                                     <p className="text-[11px] font-black text-slate-800 uppercase leading-none">{row.first_name} {row.last_name}</p>
-                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">ID: #{row.employee_id_number}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">ID: #{row.employee_id_number} • {row.designation || 'Staff'} ({row.department_name || 'General'})</p>
                                                 </div>
                                             </div>
                                         </td>

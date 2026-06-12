@@ -5,6 +5,7 @@ class LeaveRepository {
         let query = db('leaves as l')
             .join('employees as e', 'l.employee_id', 'e.id')
             .join('leave_types as lt', 'l.leave_type_id', 'lt.id')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
             .where('l.company_id', user.company_id || filters.company_id);
 
         // Role-based filtering logic
@@ -29,6 +30,8 @@ class LeaveRepository {
             'e.last_name',
             'e.employee_id_number',
             'e.office_location',
+            'e.designation',
+            'd.name as department_name',
             'lt.name as leave_type_name',
             'lt.color as leave_type_color'
         ).orderBy('l.created_at', 'desc');
@@ -136,7 +139,10 @@ class LeaveRepository {
 
     async getAllBalances(companyId) {
         // 1. Get all employees
-        const employees = await db('employees').where({ company_id: companyId });
+        const employees = await db('employees as e')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
+            .where({ 'e.company_id': companyId })
+            .select('e.id', 'e.first_name', 'e.last_name', 'e.designation', 'e.office_location', 'd.name as department_name');
         
         // 2. Get all active leave types
         const types = await this.getLeaveTypes(companyId, false);
@@ -193,6 +199,7 @@ class LeaveRepository {
                 id: emp.id,
                 name: `${emp.first_name} ${emp.last_name}`,
                 designation: emp.designation,
+                department_name: emp.department_name || 'General',
                 office_location: emp.office_location,
                 balances: empBalances,
                 total_allocated: totalAllocated,

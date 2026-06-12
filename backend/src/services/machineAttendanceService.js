@@ -261,6 +261,7 @@ class MachineAttendanceService {
                     .select(
                         'employees.*', 
                         'shifts.start_time as shift_start', 
+                        'shifts.end_time as shift_end',
                         'shifts.grace_period as shift_grace',
                         'shifts.is_flexi as shift_is_flexi',
                         'attendance_schemes.grace_period as scheme_grace'
@@ -273,12 +274,24 @@ class MachineAttendanceService {
                 };
 
                 let status = 'present';
+                let isCheckoutAttempt = false;
+
+                if (employeeWithShift && employeeWithShift.shift_end && !employeeWithShift.shift_is_flexi) {
+                    const shiftEndStr = employeeWithShift.shift_end;
+                    const [eHours, eMins] = shiftEndStr.split(':').map(Number);
+                    const thresholdMins = eHours * 60 + eMins - 120; // 2 hours prior to shift end
+                    const punchMins = punchTime.getHours() * 60 + punchTime.getMinutes();
+                    if (punchMins >= thresholdMins) {
+                        isCheckoutAttempt = true;
+                        status = 'no_in';
+                    }
+                }
 
                 const approvedRequest = await db('attendance_entry_requests')
                     .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'late_in', status: 'approved' })
                     .first();
 
-                if (!approvedRequest && !employeeWithShift?.shift_is_flexi) {
+                if (!isCheckoutAttempt && !approvedRequest && !employeeWithShift?.shift_is_flexi) {
                     const shiftStart = employeeWithShift?.shift_start || rules.shift_start || '09:00';
                     const grace = employeeWithShift?.scheme_grace ?? employeeWithShift?.shift_grace ?? rules.grace_period ?? 15;
 
@@ -396,10 +409,12 @@ class MachineAttendanceService {
                         .first();
 
                     let isEarly = false;
+                    const checkIn = dbDateToUTC(activeLog.check_in);
+                    const workedHours = (punchTime - checkIn) / (1000 * 60 * 60);
+                    const minHours = parseFloat(employee?.min_hours) || 8;
+                    const halfDayLimit = minHours / 2;
+
                     if (employee?.is_flexi) {
-                        const checkIn = dbDateToUTC(activeLog.check_in);
-                        const workedHours = (punchTime - checkIn) / (1000 * 60 * 60);
-                        const minHours = parseFloat(employee.min_hours) || 8;
                         if (workedHours < minHours) {
                             isEarly = true;
                         }
@@ -411,6 +426,12 @@ class MachineAttendanceService {
                         if (punchTime < shiftEndLimit) {
                             isEarly = true;
                         }
+                    }
+
+                    // Only trigger early out request if employee has completed at least the half day hours.
+                    // If they punch out before half day, we ignore the early out request.
+                    if (isEarly && workedHours < halfDayLimit) {
+                        isEarly = false;
                     }
 
                     if (isEarly) {

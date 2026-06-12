@@ -16,6 +16,8 @@ const WhoIsIn = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedShiftId, setSelectedShiftId] = useState('all');
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
     const [shifts, setShifts] = useState([]);
     const [data, setData] = useState({
         summary: [],
@@ -54,7 +56,7 @@ const WhoIsIn = () => {
     };
 
     const handleDownloadNotYetIn = () => {
-        if (!notYetIn || notYetIn.length === 0) {
+        if (!filteredNotYetIn || filteredNotYetIn.length === 0) {
             alert('No records to export');
             return;
         }
@@ -64,11 +66,11 @@ const WhoIsIn = () => {
             shift_name: 'Shift Name',
             time: 'Expected Arrival'
         };
-        exportToCSV(notYetIn, `Not_Yet_In_${selectedDate}.csv`, headers);
+        exportToCSV(filteredNotYetIn, `Not_Yet_In_${selectedDate}.csv`, headers);
     };
 
     const handleDownloadLateArrivals = () => {
-        if (!lateArrivals || lateArrivals.length === 0) {
+        if (!filteredLateArrivals || filteredLateArrivals.length === 0) {
             alert('No records to export');
             return;
         }
@@ -79,11 +81,11 @@ const WhoIsIn = () => {
             late: 'Late By',
             time: 'Arrival Time'
         };
-        exportToCSV(lateArrivals, `Late_Arrivals_${selectedDate}.csv`, headers);
+        exportToCSV(filteredLateArrivals, `Late_Arrivals_${selectedDate}.csv`, headers);
     };
 
     const handleDownloadOnTime = () => {
-        if (!onTime || onTime.length === 0) {
+        if (!filteredOnTime || filteredOnTime.length === 0) {
             alert('No records to export');
             return;
         }
@@ -94,7 +96,7 @@ const WhoIsIn = () => {
             early: 'Early By',
             time: 'Arrival Time'
         };
-        exportToCSV(onTime, `On_Time_Arrivals_${selectedDate}.csv`, headers);
+        exportToCSV(filteredOnTime, `On_Time_Arrivals_${selectedDate}.csv`, headers);
     };
 
     const formattedDisplayDate = new Date(selectedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -111,6 +113,18 @@ const WhoIsIn = () => {
         ...(data.onTime || []).map(e => e.office_location)
     ].filter(Boolean))].sort()];
 
+    const uniqueDepts = ['all', ...[...new Set([
+        ...(data.notYetIn || []).map(e => e.department),
+        ...(data.lateArrivals || []).map(e => e.department),
+        ...(data.onTime || []).map(e => e.department)
+    ].filter(Boolean))].sort()];
+
+    const uniqueDesignations = ['all', ...[...new Set([
+        ...(data.notYetIn || []).map(e => e.designation),
+        ...(data.lateArrivals || []).map(e => e.designation),
+        ...(data.onTime || []).map(e => e.designation)
+    ].filter(Boolean))].sort()];
+
     const filterList = (list) => {
         if (!list) return [];
         return list.filter(e => {
@@ -121,8 +135,10 @@ const WhoIsIn = () => {
 
             const shiftMatch = selectedShiftName === 'all' || e.shift_name === selectedShiftName;
             const outletMatch = selectedOutlet === 'all' || e.office_location === selectedOutlet;
+            const deptMatch = selectedDept === 'all' || e.department === selectedDept;
+            const designationMatch = selectedDesignation === 'all' || e.designation === selectedDesignation;
 
-            return searchMatch && shiftMatch && outletMatch;
+            return searchMatch && shiftMatch && outletMatch && deptMatch && designationMatch;
         });
     };
 
@@ -179,6 +195,36 @@ const WhoIsIn = () => {
                                 <option value="all">All Outlets</option>
                                 {uniqueOutlets.filter(o => o !== 'all').map(o => (
                                     <option key={o} value={o}>{o}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Dept</label>
+                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm min-w-[185px] justify-between focus-within:ring-2 focus-within:ring-indigo-500/10">
+                            <select
+                                value={selectedDept}
+                                onChange={(e) => setSelectedDept(e.target.value)}
+                                className="text-[11px] font-bold text-slate-700 outline-none border-none bg-transparent w-full cursor-pointer pr-4"
+                            >
+                                <option value="all">All Departments</option>
+                                {uniqueDepts.filter(d => d !== 'all').map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Designation</label>
+                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm min-w-[185px] justify-between focus-within:ring-2 focus-within:ring-indigo-500/10">
+                            <select
+                                value={selectedDesignation}
+                                onChange={(e) => setSelectedDesignation(e.target.value)}
+                                className="text-[11px] font-bold text-slate-700 outline-none border-none bg-transparent w-full cursor-pointer pr-4"
+                            >
+                                <option value="all">All Designations</option>
+                                {uniqueDesignations.filter(d => d !== 'all').map(d => (
+                                    <option key={d} value={d}>{d}</option>
                                 ))}
                             </select>
                         </div>

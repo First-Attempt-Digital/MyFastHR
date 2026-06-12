@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const isProd = import.meta.env.PROD;
-const API_BASE_URL = isProd ? '/api' : 'http://localhost:5000/api';
+const devHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const API_BASE_URL = isProd ? '/api' : `http://${devHost}:5000/api`;
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -95,7 +96,7 @@ export const getAssetUrl = (path) => {
     }
     
     const isProd = import.meta.env.PROD;
-    const base = isProd ? '' : 'http://localhost:5000';
+    const base = isProd ? '' : `http://${devHost}:5000`;
     return `${base}${cleanPath}`;
 };
 

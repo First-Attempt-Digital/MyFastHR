@@ -4,6 +4,7 @@ class WeekendOverrideRepository {
     async getAll(companyId, month, year) {
         let query = db('weekend_overrides as wo')
             .join('employees as e', 'wo.employee_id', 'e.id')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
             .where({ 'wo.company_id': companyId });
 
         if (month && year) {
@@ -20,6 +21,8 @@ class WeekendOverrideRepository {
                 'e.last_name',
                 'e.employee_id_number',
                 'e.office_location',
+                'e.designation',
+                'd.name as department_name',
                 'wo.override_date',
                 'wo.override_type',
                 'wo.reason',

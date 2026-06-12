@@ -40,6 +40,7 @@ const AttendanceMuster = () => {
     const [searchParams] = useSearchParams();
     const initialTab = searchParams.get('tab') === 'entry_requests' ? 'entry_requests' : 'muster';
     const [activeTab, setActiveTab] = useState(initialTab); // 'muster' or 'entry_requests'
+    const [showRules, setShowRules] = useState(false);
 
     // Also sync the tab if searchParams change while component is mounted
     useEffect(() => {
@@ -54,6 +55,8 @@ const AttendanceMuster = () => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
     const [matrix, setMatrix] = useState([]);
     const [totalDays, setTotalDays] = useState(30);
     const [loading, setLoading] = useState(true);
@@ -178,12 +181,12 @@ const AttendanceMuster = () => {
     };
 
     const handleExport = () => {
-        if (!matrix || matrix.length === 0) {
-            alert('No attendance muster data to export.');
+        if (!filteredEmployees || filteredEmployees.length === 0) {
+            alert('No Attendance Muster data to export.');
             return;
         }
 
-        const dataToExport = matrix.map(emp => {
+        const dataToExport = filteredEmployees.map(emp => {
             const row = {
                 employee_code: emp.code,
                 name: emp.name,
@@ -191,7 +194,29 @@ const AttendanceMuster = () => {
                 location: emp.location
             };
             for (let d = 1; d <= totalDays; d++) {
-                row[`day_${d}`] = emp.days[d] || '-';
+                const dayStatus = emp.days[d] || '-';
+                const dayTimings = emp.timings?.[d] || {};
+                
+                const formatCSVTime = (dateTimeStr) => {
+                    if (!dateTimeStr) return '';
+                    try {
+                        const dateObj = new Date(dateTimeStr);
+                        if (isNaN(dateObj.getTime())) return '';
+                        return dateObj.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                        }).replace(/\s+/g, '');
+                    } catch (e) {
+                        return '';
+                    }
+                };
+
+                row[`day_${d}_status`] = dayStatus;
+                row[`day_${d}_in1`] = formatCSVTime(dayTimings.in1);
+                row[`day_${d}_out1`] = formatCSVTime(dayTimings.out1);
+                row[`day_${d}_in2`] = formatCSVTime(dayTimings.in2);
+                row[`day_${d}_out2`] = formatCSVTime(dayTimings.out2);
             }
             row.total_present = emp.stats?.P || 0;
             row.total_late = emp.stats?.L || 0;
@@ -207,7 +232,11 @@ const AttendanceMuster = () => {
             location: 'Location'
         };
         for (let d = 1; d <= totalDays; d++) {
-            headers[`day_${d}`] = `Day ${d}`;
+            headers[`day_${d}_status`] = `Day ${d} Status`;
+            headers[`day_${d}_in1`] = `Day ${d} In 1`;
+            headers[`day_${d}_out1`] = `Day ${d} Out 1`;
+            headers[`day_${d}_in2`] = `Day ${d} In 2`;
+            headers[`day_${d}_out2`] = `Day ${d} Out 2`;
         }
         headers.total_present = 'Total Present (P)';
         headers.total_late = 'Total Late (L)';
@@ -233,15 +262,19 @@ const AttendanceMuster = () => {
         return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
     };
 
-    // Unique outlets list
+    // Unique outlets, departments, designations list
     const uniqueOutlets = ['all', ...[...new Set(matrix.map(emp => emp.location).filter(Boolean))].sort()];
+    const uniqueDepts = ['all', ...[...new Set(matrix.map(emp => emp.department).filter(Boolean))].sort()];
+    const uniqueDesignations = ['all', ...[...new Set(matrix.map(emp => emp.role).filter(Boolean))].sort()];
 
     // Filter employees
     const filteredEmployees = matrix.filter(emp => {
         const matchesQuery = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                              (emp.code && emp.code.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesOutlet = selectedOutlet === 'all' || emp.location === selectedOutlet;
-        return matchesQuery && matchesOutlet;
+        const matchesDept = selectedDept === 'all' || emp.department === selectedDept;
+        const matchesDesignation = selectedDesignation === 'all' || emp.role === selectedDesignation;
+        return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
     });
 
     // Grid Cell Styling configuration
@@ -267,6 +300,8 @@ const AttendanceMuster = () => {
                 return 'bg-teal-50 text-teal-600 border border-teal-200/60 font-black';
             case 'HD':
                 return 'bg-cyan-50 text-cyan-600 border border-cyan-200/60 font-black';
+            case 'NC':
+                return 'bg-rose-100 text-rose-700 border border-rose-300 font-extrabold shadow-sm animate-pulse';
             default:
                 return 'bg-transparent text-slate-300 font-normal border border-transparent';
         }
@@ -284,6 +319,7 @@ const AttendanceMuster = () => {
             case 'E': return 'Early Out';
             case 'R': return 'Regularized';
             case 'HD': return 'Half Day';
+            case 'NC': return 'Checkout Attempt (Zero Check-In)';
             default: return 'No Data';
         }
     };
@@ -300,46 +336,56 @@ const AttendanceMuster = () => {
 
     return (
         <div className="space-y-6 max-w-[1700px] mx-auto animate-in fade-in duration-500 pb-10 px-2">
-            
             {/* --- HEADER BANNER --- */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white border border-slate-200/40 p-5 rounded-2xl shadow-sm">
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                    <div>
-                        <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            Attendance Muster
-                            <span className="text-[9px] font-black tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100 uppercase">Live</span>
-                        </h1>
-                        <p className="text-slate-500 text-xs mt-0.5">High-density visual grid listing day-by-day attendance, status checks, and monthly stats.</p>
-                    </div>
-
-                    {/* Tab Switcher */}
-                    <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/40">
-                        <button
-                            onClick={() => setActiveTab('muster')}
-                            className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                                activeTab === 'muster'
-                                    ? 'bg-white text-[#4361ee] shadow-sm'
-                                    : 'text-slate-550 hover:text-slate-800'
+                <div className="space-y-1.5 max-w-xl">
+                    <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                        Attendance Muster
+                        <span className="text-[9px] font-black tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100 uppercase">Live</span>
+                        <button 
+                            onClick={() => setShowRules(!showRules)}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                                showRules 
+                                    ? 'bg-[#4361ee] border-[#4361ee] text-white shadow-md shadow-indigo-100 scale-105' 
+                                    : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
                             }`}
+                            title="Show Rules / नियम देखें"
                         >
-                            Muster Grid
+                            <HelpCircle size={14} className={showRules ? 'animate-pulse' : ''} />
                         </button>
-                        <button
-                            onClick={() => setActiveTab('entry_requests')}
-                            className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                                activeTab === 'entry_requests'
-                                    ? 'bg-white text-[#4361ee] shadow-sm'
-                                    : 'text-slate-550 hover:text-slate-800'
-                            }`}
-                        >
-                            Entry/Exit Approvals
-                        </button>
-                    </div>
+                    </h1>
+                    <p className="text-slate-500 text-xs mt-0.5">High-density visual grid listing day-by-day attendance, status checks, and monthly stats.</p>
                 </div>
 
-                {/* Filters Row */}
-                {activeTab === 'muster' && (
-                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                {/* Tab Switcher */}
+                <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/40 shrink-0">
+                    <button
+                        onClick={() => setActiveTab('muster')}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            activeTab === 'muster'
+                                ? 'bg-white text-[#4361ee] shadow-sm'
+                                : 'text-slate-550 hover:text-slate-800'
+                        }`}
+                    >
+                        Muster Grid
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('entry_requests')}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            activeTab === 'entry_requests'
+                                ? 'bg-white text-[#4361ee] shadow-sm'
+                                : 'text-slate-550 hover:text-slate-800'
+                        }`}
+                    >
+                        Entry/Exit Approvals
+                    </button>
+                </div>
+            </div>
+
+            {/* --- FILTERS ROW --- */}
+            {activeTab === 'muster' && (
+                <div className="bg-white border border-slate-200/40 p-4 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
                         {/* Month selector */}
                         <div className="relative">
                             <select 
@@ -383,16 +429,46 @@ const AttendanceMuster = () => {
                             <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
 
-                        <button 
-                            onClick={handleExport}
-                            className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100/80 text-[#4361ee] border border-indigo-100 rounded-xl px-4 py-2 text-xs font-black transition-all active:scale-95 shadow-sm"
-                        >
-                            <Download size={14} />
-                            <span>Export Grid</span>
-                        </button>
+                        {/* Department Selector */}
+                        <div className="relative">
+                            <select 
+                                value={selectedDept} 
+                                onChange={(e) => setSelectedDept(e.target.value)}
+                                className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                            >
+                                <option value="all">All Departments</option>
+                                {uniqueDepts.filter(d => d !== 'all').map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+
+                        {/* Designation Selector */}
+                        <div className="relative">
+                            <select 
+                                value={selectedDesignation} 
+                                onChange={(e) => setSelectedDesignation(e.target.value)}
+                                className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                            >
+                                <option value="all">All Designations</option>
+                                {uniqueDesignations.filter(d => d !== 'all').map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
                     </div>
-                )}
-            </div>
+
+                    <button 
+                        onClick={handleExport}
+                        className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100/80 text-[#4361ee] border border-indigo-100 rounded-xl px-4 py-2 text-xs font-black transition-all active:scale-95 shadow-sm"
+                    >
+                        <Download size={14} />
+                        <span>Export Grid</span>
+                    </button>
+                </div>
+            )}
 
             {activeTab === 'muster' && (
                 <>
@@ -440,39 +516,70 @@ const AttendanceMuster = () => {
                     </div>
 
                     {/* --- SEARCH BAR AND STATUS LEGEND --- */}
-                    <div className="bg-white border border-slate-200/40 p-4 rounded-2xl shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between">
-                        {/* Search field */}
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 w-full xl:w-56 shrink-0 shadow-inner">
-                            <Search size={13} className="text-slate-400" />
-                            <input 
-                                type="text" 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search name or ID..."
-                                className="bg-transparent border-none text-[11px] font-bold text-slate-700 outline-none w-full"
-                            />
+                    <div className="bg-white border border-slate-200/40 p-4 rounded-2xl shadow-sm space-y-4">
+                        <div className="flex flex-col xl:flex-row gap-4 items-center justify-between">
+                            {/* Search field */}
+                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 w-full xl:w-56 shrink-0 shadow-inner">
+                                <Search size={13} className="text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search name or ID..."
+                                    className="bg-transparent border-none text-[11px] font-bold text-slate-700 outline-none w-full"
+                                />
+                            </div>
+
+                            {/* Status Color Legend */}
+                            <div className="flex flex-wrap gap-1.5 items-center justify-center xl:justify-end w-full">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Legend:</span>
+                                {[
+                                    { label: 'P (Present)', style: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+                                    { label: 'L (Late)', style: 'bg-amber-50 text-amber-600 border-amber-200' },
+                                    { label: 'E (Early Out)', style: 'bg-orange-50 text-orange-600 border-orange-200' },
+                                    { label: 'R (Regularized)', style: 'bg-teal-50 text-teal-600 border-teal-200' },
+                                    { label: 'HD (Half Day)', style: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+                                    { label: 'A (Absent)', style: 'bg-rose-50 text-rose-600 border-rose-200' },
+                                    { label: 'OFF (Weekly Off)', style: 'bg-slate-100 text-slate-400 border-slate-200' },
+                                    { label: 'H (Holiday)', style: 'bg-sky-50 text-sky-600 border-sky-200' },
+                                    { label: 'PL (Paid Leave)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
+                                    { label: 'UL (Unpaid Leave)', style: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-200' },
+                                ].map((item, i) => (
+                                    <div key={i} className={`px-2 py-0.5 rounded-lg border text-[8.5px] font-extrabold tracking-tight ${item.style}`}>
+                                        {item.label}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        {/* Status Color Legend */}
-                        <div className="flex flex-wrap gap-1.5 items-center justify-center xl:justify-end w-full">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-1">Legend:</span>
-                            {[
-                                { label: 'P (Present)', style: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-                                { label: 'L (Late)', style: 'bg-amber-50 text-amber-600 border-amber-200' },
-                                { label: 'E (Early Out)', style: 'bg-orange-50 text-orange-600 border-orange-200' },
-                                { label: 'R (Regularized)', style: 'bg-teal-50 text-teal-600 border-teal-200' },
-                                { label: 'HD (Half Day)', style: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-                                { label: 'A (Absent)', style: 'bg-rose-50 text-rose-600 border-rose-200' },
-                                { label: 'OFF (Weekly Off)', style: 'bg-slate-100 text-slate-400 border-slate-200' },
-                                { label: 'H (Holiday)', style: 'bg-sky-50 text-sky-600 border-sky-200' },
-                                { label: 'PL (Paid Leave)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
-                                { label: 'UL (Unpaid Leave)', style: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-200' },
-                            ].map((item, i) => (
-                                <div key={i} className={`px-2 py-0.5 rounded-lg border text-[8.5px] font-extrabold tracking-tight ${item.style}`}>
-                                    {item.label}
-                                </div>
-                            ))}
-                        </div>
+                        {/* Rules Notes Card */}
+                        <AnimatePresence>
+                            {showRules && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0, y: -10 }}
+                                    animate={{ opacity: 1, height: 'auto', y: 0 }}
+                                    exit={{ opacity: 0, height: 0, y: -10 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="bg-indigo-50/30 border border-indigo-100 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-start justify-between text-xs text-slate-600">
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center gap-1.5 text-indigo-700 font-extrabold uppercase tracking-wide text-[10px]">
+                                                <HelpCircle size={14} className="text-indigo-600" />
+                                                Muster Calculations & Attendance Flow / मस्टर गणना एवं हाजिरी नियम
+                                            </div>
+                                            <ul className="list-disc pl-4 space-y-1 text-slate-500 font-bold text-[11px] leading-relaxed">
+                                                <li><strong className="text-slate-700">P (Present):</strong> Working hours meet/exceed full shift hours. (काम के घंटे पूरे होने पर सीधी हाजिरी।)</li>
+                                                <li><strong className="text-slate-700">HD (Half Day):</strong> Working hours equal to or more than Half Day config, but less than Full Day. (काम के घंटे हाफ-डे लिमिट से ज्यादा लेकिन पूरे दिन से कम हैं।)</li>
+                                                <li><strong className="text-slate-700">A (Absent):</strong> Working hours are below the Half Day limit. Early checkouts prior to completing half-day hours do not generate early-out requests. (काम के घंटे हाफ-डे लिमिट से कम होने पर आटोमेटिक अनुपस्थित। हाफ-डे से पहले पंच-आउट करने पर कोई अर्ली-आउट रिक्वेस्ट नहीं बनेगी।)</li>
+                                                <li><strong className="text-slate-700">Direct vs Request:</strong> Punching on-time directly marks present. Late punch-ins or early departures (after half-day hours) will show status <strong className="text-[#4361ee] bg-indigo-50 px-1 rounded">L</strong> / <strong className="text-orange-600 bg-orange-50 px-1 rounded">E</strong> and generate regularization requests in "Entry/Exit Approvals". (समय पर आने पर डायरेक्ट P; लेट आने या हाफ-डे के बाद जल्दी जाने पर अप्रूवल की आवश्यकता होती है।)</li>
+                                                <li><strong className="text-slate-700">Special Indicators / विशेष चिन्ह:</strong> Cells with a <strong className="text-[#4361ee]">Blue Folded Corner</strong> represent manual overrides. Cells with an <strong className="text-amber-500">Amber Dot</strong> represent grace periods applied. (नीले कोने वाले सेल मैन्युअल बदलाव हैं; पीले बिंदु वाले सेल में लेट-इन ग्रेस लिमिट का उपयोग हुआ है।)</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     {/* --- MAIN MATRIX GRID SHEET --- */}
@@ -572,13 +679,25 @@ const AttendanceMuster = () => {
                                                                 e.stopPropagation();
                                                                 handleCellClick(emp, day);
                                                             }}
-                                                            className={`border-r border-slate-200/50 p-0.5 text-center align-middle w-9 min-w-9 cursor-pointer hover:bg-slate-50 transition-colors ${
+                                                            className={`border-r border-slate-200/50 p-0.5 text-center align-middle w-9 min-w-9 cursor-pointer hover:bg-slate-50 transition-colors relative ${
                                                                 isWeekend ? 'bg-slate-50/20' : 'bg-transparent'
                                                             }`}
                                                         >
                                                             <div className={`w-6.5 h-6.5 mx-auto rounded-full flex items-center justify-center text-[9px] transition-all hover:scale-110 border shadow-sm ${getStatusStyle(status)}`}>
                                                                 {status}
                                                             </div>
+                                                            {emp.meta?.[day]?.is_override && (
+                                                                <div 
+                                                                    className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-indigo-600 border-l-[6px] border-l-transparent" 
+                                                                    title="Manual Override / मैन्युअल बदलाव"
+                                                                />
+                                                            )}
+                                                            {emp.meta?.[day]?.is_grace && (
+                                                                <div 
+                                                                    className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full" 
+                                                                    title="Grace Period Applied / रियायत समय"
+                                                                />
+                                                            )}
                                                         </td>
                                                     );
                                                 })}
@@ -877,7 +996,118 @@ const AttendanceMuster = () => {
                                         </div>
 
                                         {/* 2. Check-In & Check-Out Timings */}
-                                        {modalData.attendance && (
+                                        {modalData.attendance_logs && modalData.attendance_logs.length > 0 && modalData.active_shift?.total_punches_required === 4 ? (
+                                            <div className="space-y-4">
+                                                {/* Split Shift Status Overview */}
+                                                <div className="bg-indigo-50/20 border border-indigo-100 p-4 rounded-2xl space-y-3">
+                                                    <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Split Shift Session Details</h5>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {/* Session 1 */}
+                                                        <div className="bg-white border border-slate-150 p-3 rounded-xl space-y-1">
+                                                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Session 1</span>
+                                                             <div className="text-[11px] font-black text-slate-800">
+                                                                 {modalData.active_shift.start_time} - {modalData.active_shift.end_time}
+                                                             </div>
+                                                             <div className="text-[9px] font-bold text-slate-505">
+                                                                 Grace: In +{modalData.active_shift.grace_period}m / Out -{modalData.active_shift.session1_grace_out}m
+                                                             </div>
+                                                             <div className={`text-[10px] font-black uppercase tracking-wider mt-1.5 ${
+                                                                 modalData.split_shift_details?.session1_status === 'Present' ? 'text-emerald-600' :
+                                                                 modalData.split_shift_details?.session1_status === 'Late' ? 'text-amber-500' : 'text-rose-500'
+                                                             }`}>
+                                                                 Status: {modalData.split_shift_details?.session1_status || 'Absent'}
+                                                             </div>
+                                                        </div>
+
+                                                        {/* Session 2 */}
+                                                        <div className="bg-white border border-slate-150 p-3 rounded-xl space-y-1">
+                                                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Session 2</span>
+                                                             <div className="text-[11px] font-black text-slate-800">
+                                                                 {modalData.active_shift.session2_start_time || 'N/A'} - {modalData.active_shift.session2_end_time || 'N/A'}
+                                                             </div>
+                                                             <div className="text-[9px] font-bold text-slate-505">
+                                                                 Grace: In +{modalData.active_shift.session2_grace_in}m / Out -{modalData.active_shift.session2_grace_out}m
+                                                             </div>
+                                                             <div className={`text-[10px] font-black uppercase tracking-wider mt-1.5 ${
+                                                                 modalData.split_shift_details?.session2_status === 'Present' ? 'text-emerald-600' :
+                                                                 modalData.split_shift_details?.session2_status === 'Late' ? 'text-amber-500' : 'text-rose-500'
+                                                             }`}>
+                                                                 Status: {modalData.split_shift_details?.session2_status || 'Absent'}
+                                                             </div>
+                                                        </div>
+                                                    </div>
+                                                    {modalData.split_shift_details?.explanation && (
+                                                        <div className="text-[9.5px] font-bold text-slate-650 border-t border-indigo-50/80 pt-2 flex items-center gap-1.5">
+                                                            <span>📝 Details:</span>
+                                                            <span>{modalData.split_shift_details.explanation}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Render all check-in/check-out logs */}
+                                                <h4 className="text-[9.5px] font-black text-slate-400 uppercase tracking-widest mt-4">Punches Record ({modalData.attendance_logs.length} Session Logs)</h4>
+                                                <div className="space-y-3">
+                                                    {modalData.attendance_logs.map((log, idx) => (
+                                                        <div key={log.id || idx} className="border border-slate-150 p-4 rounded-2xl bg-white space-y-3 shadow-xs">
+                                                            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                                                <span className="text-[9px] font-black text-slate-450 uppercase tracking-widest">Punch Entry #{idx + 1}</span>
+                                                                <span className="text-[9px] font-bold text-[#4361ee] bg-indigo-50 px-2 py-0.5 rounded uppercase">
+                                                                    Status: {log.status || 'Present'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div className="bg-emerald-50/20 border border-emerald-100 p-3 rounded-xl space-y-1">
+                                                                    <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Check In</span>
+                                                                    <h4 className="text-xs font-black text-slate-800">
+                                                                        {log.check_in ? new Date(log.check_in).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'}
+                                                                    </h4>
+                                                                    <p className="text-[8px] font-bold text-slate-400 leading-none mt-1">Source: {log.punch_source || 'device'}</p>
+                                                                </div>
+                                                                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl space-y-1">
+                                                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Check Out</span>
+                                                                    <h4 className="text-xs font-black text-slate-800">
+                                                                        {log.check_out ? new Date(log.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'}
+                                                                    </h4>
+                                                                    <p className="text-[8px] font-bold text-slate-400 leading-none mt-1">Device: {log.device_id || 'N/A'}</p>
+                                                                </div>
+                                                            </div>
+                                                            {(log.punch_location || log.remarks || log.out_punch_location || log.out_remarks) && (
+                                                                <div className="bg-slate-50/30 border border-slate-100 p-3 rounded-xl space-y-2 text-[9px] font-bold text-slate-700">
+                                                                    {log.punch_location && (
+                                                                        <div><span className="text-slate-400 mr-1.5 uppercase text-[8px] font-black">In Location:</span>{log.punch_location}</div>
+                                                                    )}
+                                                                    {log.remarks && (
+                                                                        <div><span className="text-slate-400 mr-1.5 uppercase text-[8px] font-black">In Remarks:</span>"{log.remarks}"</div>
+                                                                    )}
+                                                                    {log.out_punch_location && (
+                                                                        <div><span className="text-slate-400 mr-1.5 uppercase text-[8px] font-black">Out Location:</span>{log.out_punch_location}</div>
+                                                                    )}
+                                                                    {log.out_remarks && (
+                                                                        <div><span className="text-slate-400 mr-1.5 uppercase text-[8px] font-black">Out Remarks:</span>"{log.out_remarks}"</div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {log.latitude && log.longitude && (
+                                                                <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100">
+                                                                    <div className="flex items-center gap-1.5 text-[8.5px] font-black text-slate-400">
+                                                                        <MapPin size={10} className="text-indigo-500" />
+                                                                        <span>Coordinates: {log.latitude}, {log.longitude}</span>
+                                                                    </div>
+                                                                    <a 
+                                                                        href={`https://www.google.com/maps/search/?api=1&query=${log.latitude},${log.longitude}`}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className="text-[8.5px] font-black text-[#4361ee] uppercase tracking-wider hover:underline cursor-pointer"
+                                                                    >
+                                                                        View check-in map ↗
+                                                                    </a>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : modalData.attendance ? (
                                             <div className="space-y-4.5">
                                                 <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Biometric / Web Attendance Records</h4>
                                                 
@@ -953,9 +1183,8 @@ const AttendanceMuster = () => {
                                                     </div>
                                                 )}
                                             </div>
-                                        )}
+                                        ) : null}
 
-                                        {/* 3. Leave Details */}
                                         {modalData.leave && (
                                             <div className="space-y-3">
                                                 <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Leave Log Summary</h4>

@@ -83,14 +83,14 @@ const RegularizationView = ({ onBack, isFullPage = false }) => {
     }, [view, activeTab, calMonth, calYear]);
 
     useEffect(() => {
-        // Lock body scrolling when mounted to avoid double scrollbars
-        document.body.style.overflow = 'hidden';
+        // Allow normal scrolling on mounted page
+        document.body.style.overflow = 'auto';
         const mainEl = document.querySelector('main');
         if (mainEl) {
-            mainEl.style.overflowY = 'hidden';
+            mainEl.style.overflowY = 'auto';
         }
         return () => {
-            // Restore body scrolling when unmounted
+            // Restore default
             document.body.style.overflow = '';
             if (mainEl) {
                 mainEl.style.overflowY = 'auto';

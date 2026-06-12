@@ -6,21 +6,19 @@ import {
   Sparkles, Check, Database, ShieldAlert, Award, FileText
 } from 'lucide-react';
 import api, { fetchBranding, getAssetUrl } from '../utils/api';
-import GlobalHeaderMenu from '../components/layout/GlobalHeaderMenu';
-import MobileAuthDropdown from '../components/layout/MobileAuthDropdown';
+import UniversalHeader from '../components/layout/UniversalHeader';
+import UniversalFooter from '../components/layout/UniversalFooter';
 import '../styles/landing.css';
+import BlurText from '../components/common/BlurText';
+import SplitText from '../components/common/SplitText';
+import ScrollReveal from '../components/common/ScrollReveal';
+import Antigravity from '../components/common/Antigravity';
 
 const telemetryOptions = [
   { id: "workforce", title: "Employee Directory & Org Chart", desc: "Manage employee profiles, roles, reporting managers, and view org structures.", icon: <Database size={20} /> },
   { id: "payroll", title: "Payroll & Salary Slips", desc: "Calculate salaries, handle PF/ESIC tax deductions, and auto-generate payslips.", icon: <FileText size={20} /> },
   { id: "attendance", title: "Smart Attendance & Shifts", desc: "Track check-ins via biometric devices, mobile GPS geo-fencing, and manage shifts.", icon: <Clock size={20} /> },
   { id: "compliance", title: "Secure Document Vault", desc: "Safely store and verify employee government IDs (PAN/Aadhaar) with encrypted lock.", icon: <Key size={20} /> }
-];
-
-const operators = [
-  { id: "op-robin", name: "Robin H.", role: "Product Expert - Payroll & HR", load: "Quick Response", status: "Online" },
-  { id: "op-meera", name: "Meera Sen", role: "HR Specialist - Compliance", load: "Available Today", status: "Online" },
-  { id: "op-vikram", name: "Vikram Raj", role: "Technical Guide - Integrations", load: "Available", status: "Online" }
 ];
 
 const timeSlots = [
@@ -33,13 +31,10 @@ const BookDemoPage = () => {
   const [appName, setAppName] = useState('MyFastHR');
   const [logoHeight, setLogoHeight] = useState(40);
   const [logoError, setLogoError] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('All'); // Dummy category state to satisfy potential code expectation
-  const [searchQuery, setSearchQuery] = useState(''); // Dummy state to satisfy potential code expectation
 
   // Wizard state
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedModules, setSelectedModules] = useState([]);
-  const [selectedOperator, setSelectedOperator] = useState(null);
   
   // Date & Time selection
   const [selectedDate, setSelectedDate] = useState("");
@@ -146,7 +141,6 @@ const BookDemoPage = () => {
       });
     } catch (err) {
       console.error("Failed to register demo in database:", err);
-      // Failsafe: let compile flow continue even if API has issues
     }
 
     const logsList = [
@@ -187,67 +181,36 @@ const BookDemoPage = () => {
   };
 
   return (
-    <div className="landing-body min-h-screen flex flex-col font-sans relative overflow-x-hidden">
+    <div className="landing-body min-h-screen flex flex-col font-sans relative overflow-x-hidden bg-white text-slate-800">
       {/* Decorative Blur Backdrops */}
-      <div className="bg-mesh animate-pulse" />
-      <div className="bg-mesh-right" />
+      <div className="bg-mesh animate-pulse opacity-40" />
+      <div className="bg-mesh-right opacity-45" />
 
-      {/* 1. Header Navbar */}
-      <header className="sticky top-0 z-50 bg-[#F2EAF7]/85 backdrop-blur-md border-b-[3.5px] border-[#2B0D3E] px-6 h-[72px] flex items-center">
-        <div className="max-w-7xl mx-auto flex items-center justify-between w-full">
-          {/* Logo with mobile responsive menu */}
-          <GlobalHeaderMenu 
-            logoUrl={logoUrl}
-            appName={appName}
-            logoHeight={logoHeight}
-            logoError={logoError}
-            setLogoError={setLogoError}
-          />
-
-          {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-5 lg:gap-7 text-sm font-bold text-[#2B0D3E]">
-            <button onClick={() => navigate('/')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Home</button>
-            <button onClick={() => navigate('/features')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Features</button>
-            <button onClick={() => navigate('/pricing')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Pricing</button>
-            <button onClick={() => navigate('/support')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Support</button>
-            <button onClick={() => navigate('/infrastructure')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Infra</button>
-            <button onClick={() => navigate('/blog')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Blog</button>
-            <button onClick={() => navigate('/about')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">About</button>
-            <button onClick={() => navigate('/case-studies')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Case Studies</button>
-          </nav>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-4">
-              <button 
-                onClick={() => navigate('/book-demo')}
-                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-white bg-[#7A3F91]/80 hover:bg-[#7A3F91] border-[2.5px] border-[#2B0D3E] shadow-[2px_2px_0px_0px_#2B0D3E] transition-all active:scale-95"
-              >
-                Book Demo
-              </button>
-              <button 
-                onClick={() => navigate('/employee')}
-                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-[#2B0D3E] border-[2.5px] border-[#2B0D3E] bg-white hover:bg-[#C59DD9]/20 transition-all active:scale-95 shadow-[2px_2px_0px_0px_#2B0D3E] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              >
-                Employee Login
-              </button>
-              <button 
-                onClick={() => navigate('/login')}
-                className="px-5 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-white bg-[#7A3F91] border-[2.5px] border-[#2B0D3E] shadow-[3px_3px_0px_0px_#2B0D3E] transition-all"
-              >
-                Get Started
-              </button>
-            </div>
-            <MobileAuthDropdown />
-          </div>
-        </div>
-      </header>
+      {/* Universal Header */}
+      <UniversalHeader />
 
       {/* Main Container */}
-      <main className="flex-1 flex items-center justify-center p-6 py-12 relative z-10">
+      <main className="flex-1 flex items-center justify-center p-6 py-16 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none opacity-40 z-0">
+          <Antigravity
+            count={150}
+            magnetRadius={8}
+            ringRadius={8}
+            waveSpeed={0.4}
+            waveAmplitude={1}
+            particleSize={1.5}
+            lerpSpeed={0.05}
+            color={'#8b5cf6'}
+            autoAnimate={true}
+            particleVariance={1}
+            particleShape="sphere"
+          />
+        </div>
+        <div className="relative z-10 flex w-full justify-center items-center">
         
         {/* Check Compilation/Booking Screen Override */}
         {isCompiling ? (
-          <div className="w-full max-w-2xl brutalist-box bg-slate-950 text-emerald-400 font-mono p-8 rounded-[36px] border-[4px] border-[#2B0D3E] shadow-[8px_8px_0px_0px_#2B0D3E] space-y-6">
+          <div className="w-full max-w-2xl bg-slate-950 text-emerald-400 font-mono p-8 rounded-[32px] border border-emerald-500/20 shadow-2xl space-y-6">
             <div className="flex items-center gap-3 border-b border-emerald-500/20 pb-4">
               <Terminal className="animate-pulse text-emerald-400" size={24} />
               <span className="text-xs uppercase tracking-widest font-bold">Preparing Your Demo Dashboard...</span>
@@ -277,38 +240,37 @@ const BookDemoPage = () => {
             </div>
           </div>
         ) : isBooked ? (
-          <div className="w-full max-w-md brutalist-box bg-white p-8 rounded-[36px] border-[3.5px] border-[#2B0D3E] shadow-[8px_8px_0px_0px_#2B0D3E] text-center space-y-6 animate-fade-in-up relative overflow-hidden">
+          <div className="w-full max-w-md bg-white p-8 rounded-[32px] border border-purple-100 shadow-[0_8px_30px_rgba(96,40,217,0.03)] text-center space-y-6 animate-fade-in-up relative overflow-hidden">
             {/* Hologram aesthetic lines */}
-            <div className="absolute inset-0 bg-[radial-gradient(#2B0D3E_1.5px,transparent_1.5px)] [background-size:16px_16px] opacity-[0.03] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(var(--primary-purple)_1.5px,transparent_1.5px)] [background-size:16px_16px] opacity-[0.03] pointer-events-none" />
 
-            <div className="w-16 h-16 rounded-full bg-[#F2EAF7] border-3 border-[#2B0D3E] text-[#7A3F91] flex items-center justify-center mx-auto shadow-[4px_4px_0px_0px_#2B0D3E]">
+            <div className="w-16 h-16 rounded-full bg-purple-50 text-[var(--primary-purple)] flex items-center justify-center mx-auto shadow-sm">
               <CheckCircle2 size={36} />
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-2xl font-black text-[#2B0D3E] font-outfit">Demo Booked Successfully!</h2>
-              <p className="text-xs font-semibold text-[#2B0D3E]/60">Your custom demo workspace is ready and calendar invite has been sent.</p>
+              <h2 className="text-2xl font-bold text-slate-900">Demo Booked Successfully!</h2>
+              <p className="text-xs font-semibold text-gray-500">Your custom demo workspace is ready and calendar invite has been sent.</p>
             </div>
 
             {/* Mainframe Ticket Box */}
-            <div className="p-5 bg-[#F2EAF7] border-2 border-[#2B0D3E] rounded-2xl text-left space-y-4 shadow-[3px_3px_0px_0px_#2B0D3E] relative">
-              <div className="absolute top-[-3.5px] right-5 w-4 h-2 bg-white border-b-2 border-x-2 border-[#2B0D3E] rounded-b-md" />
-              <div className="flex justify-between items-center border-b border-[#2B0D3E]/10 pb-3">
-                <span className="text-[9px] font-black uppercase text-[#7A3F91]">Demo Booking Details</span>
-                <span className="px-2 py-0.5 bg-white border border-[#2B0D3E]/20 text-[8px] font-black rounded uppercase">Confirmed</span>
+            <div className="p-5 bg-purple-50/20 border border-purple-100 rounded-2xl text-left space-y-4 shadow-sm relative">
+              <div className="flex justify-between items-center border-b border-purple-100 pb-3">
+                <span className="text-[9px] font-bold uppercase" style={{ color: 'var(--primary-purple)' }}>Demo Booking Details</span>
+                <span className="px-2 py-0.5 bg-white border border-purple-100 text-[8px] font-bold rounded uppercase">Confirmed</span>
               </div>
-              <div className="space-y-2 text-xs font-semibold text-[#2B0D3E]">
+              <div className="space-y-2 text-xs font-semibold text-slate-700">
                 <div className="flex justify-between">
                   <span className="opacity-60">Company Name:</span>
                   <span className="font-bold">{formData.company}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="opacity-60">Time:</span>
-                  <span className="font-bold text-[#7A3F91]">{selectedTime}</span>
+                  <span className="font-bold text-slate-950">{selectedTime}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="opacity-60">Date:</span>
-                  <span className="font-bold text-[#7A3F91]">{selectedDate}</span>
+                  <span className="font-bold text-slate-950">{selectedDate}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="opacity-60">Selected Features:</span>
@@ -318,39 +280,52 @@ const BookDemoPage = () => {
             </div>
 
             <button 
-              onClick={() => { setIsBooked(false); setCurrentStep(1); setSelectedModules([]); setSelectedOperator(null); setSelectedTime(""); }}
-              className="w-full py-4 brutalist-btn text-xs rounded-xl"
+              onClick={() => { setIsBooked(false); setCurrentStep(1); setSelectedModules([]); setSelectedTime(""); }}
+              className="w-full py-3.5 text-white font-bold text-xs rounded-xl hover:opacity-90 transition-all cursor-pointer border-none shadow-md"
+              style={{ background: 'var(--cta-gradient)' }}
             >
               Book Another Demo
             </button>
           </div>
         ) : (
           /* Wizard step rendering */
-          <div className="w-full max-w-4xl brutalist-box bg-white rounded-[40px] p-8 lg:p-10 border-[3.5px] border-[#2B0D3E] shadow-[8px_8px_0px_0px_#2B0D3E] space-y-8 text-left relative overflow-hidden">
+          <div className="w-full max-w-4xl bg-white rounded-[32px] p-8 lg:p-10 border border-purple-100 shadow-[0_8px_30px_rgba(96,40,217,0.03)] space-y-8 text-left relative overflow-hidden">
             
             {/* Step Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b-[3px] border-[#2B0D3E] pb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-purple-100 pb-6">
               <div>
-                <span className="text-[10px] font-black uppercase text-[#7A3F91] tracking-widest">Demo Configurator</span>
-                <h1 className="text-2xl sm:text-3xl font-black text-[#2B0D3E] font-outfit tracking-tight leading-none mt-1">Book a Live Product Demo</h1>
+                <span className="text-[10px] font-bold uppercase tracking-widest block" style={{ color: 'var(--primary-purple)' }}>
+                  <SplitText text="Demo Configurator" className="inline-block" tag="span" textAlign="left" delay={30} />
+                </span>
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none mt-1">
+                  <BlurText text="Book a Live Product Demo" className="inline-flex" />
+                </h1>
               </div>
 
               {/* Progress step indicators */}
               <div className="flex items-center gap-2">
-                {[1, 2, 3].map((step) => (
-                  <div 
-                    key={step}
-                    className={`w-8 h-8 rounded-lg border-2 border-[#2B0D3E] flex items-center justify-center font-black text-xs transition-all shadow-[1.5px_1.5px_0px_0px_#2B0D3E] ${
-                      currentStep === step
-                        ? 'bg-[#7A3F91] text-white'
-                        : currentStep > step
-                        ? 'bg-[#C59DD9] text-[#2B0D3E]'
-                        : 'bg-white text-[#2B0D3E]/40 shadow-none'
-                    }`}
-                  >
-                    {step}
-                  </div>
-                ))}
+                {[1, 2, 3].map((step) => {
+                  const isActive = currentStep === step;
+                  const isCompleted = currentStep > step;
+                  return (
+                    <div 
+                      key={step}
+                      className={`w-8 h-8 rounded-lg border flex items-center justify-center font-bold text-xs transition-all shadow-sm ${
+                        isActive
+                          ? 'text-white'
+                          : isCompleted
+                          ? 'bg-purple-50 text-[var(--primary-purple)] border-purple-100'
+                          : 'bg-white text-gray-300 border-gray-100 shadow-none'
+                      }`}
+                      style={{
+                        backgroundColor: isActive ? 'var(--primary-purple)' : undefined,
+                        borderColor: isActive ? 'var(--primary-purple)' : undefined
+                      }}
+                    >
+                      {step}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -358,8 +333,10 @@ const BookDemoPage = () => {
             {currentStep === 1 && (
               <div className="space-y-6 reveal-on-scroll reveal-up">
                 <div className="space-y-1.5">
-                  <h3 className="text-lg font-black text-[#2B0D3E] font-outfit">Step 1: Select Features to Try</h3>
-                  <p className="text-xs font-semibold text-[#2B0D3E]/60">Choose the features you want to see in action during the live demo.</p>
+                  <h3 className="text-lg font-bold text-slate-900">Step 1: Select Features to Try</h3>
+                  <ScrollReveal containerClassName="text-xs font-semibold text-gray-500 block text-left" baseOpacity={0.1}>
+                    Choose the features you want to see in action during the live demo.
+                  </ScrollReveal>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -369,23 +346,30 @@ const BookDemoPage = () => {
                       <div 
                         key={opt.id}
                         onClick={() => toggleModule(opt.id)}
-                        className={`p-5 rounded-2xl border-[2.5px] transition-all cursor-pointer flex gap-4 text-left ${
+                        className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 text-left ${
                           isSelected 
-                            ? 'bg-[#F2EAF7] border-[#2B0D3E] shadow-[4px_4px_0px_0px_#2B0D3E] scale-[1.01]' 
-                            : 'bg-white border-[#2B0D3E]/20 hover:border-[#2B0D3E]'
+                            ? 'bg-purple-50/20 border-purple-200 shadow-sm scale-[1.01]' 
+                            : 'bg-white border-purple-100 hover:border-purple-200'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
-                          isSelected ? 'bg-[#7A3F91] text-white border-[#2B0D3E]' : 'bg-[#F2EAF7] text-[#2B0D3E]/60 border-[#2B0D3E]/10'
-                        }`}>
+                        <div 
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                            isSelected 
+                              ? 'text-white border-transparent' 
+                              : 'bg-purple-50/50 text-purple-400 border-purple-100/30'
+                          }`}
+                          style={{
+                            backgroundColor: isSelected ? 'var(--primary-purple)' : undefined
+                          }}
+                        >
                           {opt.icon}
                         </div>
                         <div className="space-y-1">
-                          <h4 className="text-sm font-black text-[#2B0D3E] font-outfit flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                             {opt.title}
-                            {isSelected && <Check size={14} className="text-[#7A3F91]" />}
+                            {isSelected && <Check size={14} style={{ color: 'var(--primary-purple)' }} />}
                           </h4>
-                          <p className="text-[11px] font-semibold text-[#2B0D3E]/70 leading-normal">{opt.desc}</p>
+                          <p className="text-[11px] font-semibold text-gray-500 leading-normal">{opt.desc}</p>
                         </div>
                       </div>
                     );
@@ -398,14 +382,14 @@ const BookDemoPage = () => {
             {currentStep === 2 && (
               <div className="space-y-6 reveal-on-scroll reveal-up">
                 <div className="space-y-1.5">
-                  <h3 className="text-lg font-black text-[#2B0D3E] font-outfit">Step 2: Choose Date & Time</h3>
-                  <p className="text-xs font-semibold text-[#2B0D3E]/60">Pick a convenient date and time slot for your walkthrough.</p>
+                  <h3 className="text-lg font-bold text-slate-900">Step 2: Choose Date & Time</h3>
+                  <p className="text-xs font-semibold text-gray-500">Pick a convenient date and time slot for your walkthrough.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
                   {/* Left Calendar selection */}
                   <div className="md:col-span-5 space-y-3">
-                    <span className="text-[10px] font-black uppercase text-[#2B0D3E]/50 tracking-wider">Select Date</span>
+                    <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Select Date</span>
                     <div className="space-y-2.5">
                       {[1, 2, 3].map((offset) => {
                         const dayStr = getDayLabel(offset);
@@ -414,14 +398,17 @@ const BookDemoPage = () => {
                           <button
                             key={offset}
                             onClick={() => setSelectedDate(dayStr)}
-                            className={`w-full p-4 rounded-xl border-[2px] font-black text-xs uppercase tracking-wider text-left transition-all ${
+                            className={`w-full p-4 rounded-xl border font-bold text-xs uppercase tracking-wider text-left transition-all cursor-pointer ${
                               isSelected
-                                ? 'bg-[#7A3F91] text-white border-[#2B0D3E] shadow-[3px_3px_0px_0px_#2B0D3E]'
-                                : 'bg-white text-[#2B0D3E] border-[#2B0D3E]/20 hover:border-[#2B0D3E]'
+                                ? 'text-white shadow-md border-transparent'
+                                : 'bg-white text-slate-700 border-purple-100 hover:border-purple-200'
                             }`}
+                            style={{
+                              backgroundColor: isSelected ? 'var(--primary-purple)' : undefined
+                            }}
                           >
                             {offset === 1 ? 'Tomorrow' : offset === 2 ? 'In 2 Days' : 'In 3 Days'}
-                            <span className="block text-[10px] font-semibold opacity-70 normal-case mt-1">{dayStr}</span>
+                            <span className={`block text-[10px] font-semibold normal-case mt-1 ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>{dayStr}</span>
                           </button>
                         );
                       })}
@@ -430,7 +417,7 @@ const BookDemoPage = () => {
 
                   {/* Right slot selection grid */}
                   <div className="md:col-span-7 space-y-3">
-                    <span className="text-[10px] font-black uppercase text-[#2B0D3E]/50 tracking-wider block text-left">Available Time Slots</span>
+                    <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider block text-left">Available Time Slots</span>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {timeSlots.map((slot) => {
                         const isSelected = selectedTime === slot;
@@ -438,11 +425,14 @@ const BookDemoPage = () => {
                           <button
                             key={slot}
                             onClick={() => setSelectedTime(slot)}
-                            className={`p-3.5 rounded-xl border-2 font-black text-xs transition-all ${
+                            className={`p-3.5 rounded-xl border font-bold text-xs transition-all cursor-pointer ${
                               isSelected
-                                ? 'bg-[#7A3F91] text-white border-[#2B0D3E] shadow-[2.5px_2.5px_0px_0px_#2B0D3E] scale-102'
-                                : 'bg-white text-[#2B0D3E] border-[#2B0D3E]/20 hover:border-[#2B0D3E] hover:bg-[#F2EAF7]/30'
+                                ? 'text-white shadow-md border-transparent'
+                                : 'bg-white text-slate-700 border-purple-100 hover:border-purple-200 hover:bg-purple-50/30'
                             }`}
+                            style={{
+                              backgroundColor: isSelected ? 'var(--primary-purple)' : undefined
+                            }}
                           >
                             {slot}
                           </button>
@@ -458,62 +448,64 @@ const BookDemoPage = () => {
             {currentStep === 3 && (
               <form onSubmit={startCompileSimulation} className="space-y-6 reveal-on-scroll reveal-up">
                 <div className="space-y-1.5">
-                  <h3 className="text-lg font-black text-[#2B0D3E] font-outfit">Step 3: Enter Your Contact Details</h3>
-                  <p className="text-xs font-semibold text-[#2B0D3E]/60">Enter your work details to finalize your booking.</p>
+                  <h3 className="text-lg font-bold text-slate-900">Step 3: Enter Your Contact Details</h3>
+                  <p className="text-xs font-semibold text-gray-500">Enter your work details to finalize your booking.</p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-[#2B0D3E]/70 block pl-1">Corporate Email Address</label>
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-bold uppercase text-gray-400 block pl-1">Corporate Email Address</label>
                     <input 
                       type="email" 
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({...formData, email: e.target.value})}
                       placeholder="you@corporate.com"
-                      className="w-full px-4 py-3 rounded-xl border-2 border-[#2B0D3E] bg-white text-xs font-bold text-[#2B0D3E] outline-none shadow-[2px_2px_0px_0px_#2B0D3E]"
+                      className="w-full px-4 py-3 rounded-xl border border-purple-100 bg-slate-50 text-xs font-bold placeholder-gray-400 focus:outline-none focus:bg-white focus:border-[#6028D9]/40 transition-colors"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-[#2B0D3E]/70 block pl-1">Corporate Company Name</label>
+                  <div className="space-y-2 text-left">
+                    <label className="text-[10px] font-bold uppercase text-gray-400 block pl-1">Corporate Company Name</label>
                     <input 
                       type="text" 
                       required
                       value={formData.company}
                       onChange={(e) => setFormData({...formData, company: e.target.value})}
                       placeholder="e.g. Acme SaaS Corp"
-                      className="w-full px-4 py-3 rounded-xl border-2 border-[#2B0D3E] bg-white text-xs font-bold text-[#2B0D3E] outline-none shadow-[2px_2px_0px_0px_#2B0D3E]"
+                      className="w-full px-4 py-3 rounded-xl border border-purple-100 bg-slate-50 text-xs font-bold placeholder-gray-400 focus:outline-none focus:bg-white focus:border-[#6028D9]/40 transition-colors"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-[#2B0D3E]/70 block pl-1">Expected Employee Count ({formData.headcount} Employees)</label>
+                <div className="space-y-2 text-left">
+                  <label className="text-[10px] font-bold uppercase text-gray-400 block pl-1">Expected Employee Count ({formData.headcount} Employees)</label>
                   <input 
                     type="range" 
                     min="5" 
                     max="1000"
                     value={formData.headcount}
                     onChange={(e) => setFormData({...formData, headcount: parseInt(e.target.value)})}
-                    className="w-full accent-[#7A3F91] h-3 bg-[#F2EAF7] border-2 border-[#2B0D3E] rounded-lg cursor-pointer"
+                    className="w-full h-2 bg-purple-100 rounded-lg cursor-pointer appearance-none"
+                    style={{ accentColor: 'var(--primary-purple)' }}
                   />
-                  <div className="flex justify-between text-[9px] font-black text-[#2B0D3E]/45 uppercase tracking-wider">
+                  <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-wider">
                      <span>5 Employees</span>
                     <span>1000 Employees</span>
                   </div>
                 </div>
 
                 {/* Booking summary block */}
-                <div className="p-4 bg-[#F2EAF7] border-[2.5px] border-[#2B0D3E] rounded-2xl text-xs font-bold text-[#2B0D3E] flex items-center gap-3">
-                  <Sparkles className="text-[#7A3F91] shrink-0" size={18} />
+                <div className="p-4 bg-purple-50/30 border border-purple-100 rounded-2xl text-xs font-bold text-slate-700 flex items-center gap-3">
+                  <Sparkles className="shrink-0" style={{ color: 'var(--primary-purple)' }} size={18} />
                   <span>Summary: Booking demo for {selectedModules.length} features on {selectedDate} at {selectedTime}.</span>
                 </div>
 
                 <button 
                   type="submit"
                   disabled={selectedModules.length === 0 || !selectedTime}
-                  className="w-full py-4 brutalist-btn text-xs rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3.5 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed border-none shadow-md cursor-pointer"
+                  style={{ background: 'var(--cta-gradient)' }}
                 >
                   Confirm & Book My Demo
                   <ArrowRight size={14} />
@@ -523,12 +515,12 @@ const BookDemoPage = () => {
 
             {/* Wizard Controls Footer */}
             {currentStep < 3 && (
-              <div className="pt-6 border-t border-[#2B0D3E]/10 flex justify-between items-center">
+              <div className="pt-6 border-t border-purple-100 flex justify-between items-center">
                 <button
                   type="button"
                   onClick={handleBack}
                   disabled={currentStep === 1}
-                  className="px-5 py-2.5 rounded-xl border-2 border-[#2B0D3E] bg-white text-[#2B0D3E] text-xs font-black uppercase tracking-wider shadow-[2.5px_2.5px_0px_0px_#2B0D3E] active:translate-y-0.5 active:shadow-none disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="px-5 py-2.5 rounded-xl border border-purple-100 bg-white text-slate-700 text-xs font-bold uppercase tracking-wider shadow-sm hover:bg-slate-50 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   Go Back
                 </button>
@@ -539,7 +531,10 @@ const BookDemoPage = () => {
                     (currentStep === 1 && selectedModules.length === 0) ||
                     (currentStep === 2 && (!selectedDate || !selectedTime))
                   }
-                  className="px-6 py-2.5 rounded-xl border-2 border-[#2B0D3E] bg-[#7A3F91] text-white text-xs font-black uppercase tracking-wider shadow-[2.5px_2.5px_0px_0px_#2B0D3E] active:translate-y-0.5 active:shadow-none disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                  className="px-6 py-2.5 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 border-none"
+                  style={{
+                    background: 'var(--cta-gradient)'
+                  }}
                 >
                   Next Step
                   <ArrowRight size={14} />
@@ -550,49 +545,11 @@ const BookDemoPage = () => {
           </div>
         )}
 
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-[#2B0D3E] text-[#F2EAF7] px-6 py-12 border-t-[3.5px] border-black mt-auto relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
-            {!logoError ? (
-              <img 
-                src={logoUrl} 
-                alt={`${appName} Logo`} 
-                className="h-8 w-auto object-contain brightness-0 invert" 
-                onError={() => setLogoError(true)}
-              />
-            ) : (
-              <span className="text-xl font-black font-outfit text-white">{appName}</span>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-6">
-            <button 
-              onClick={() => navigate('/support')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Support
-            </button>
-            <button 
-              onClick={() => navigate('/privacy')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Privacy Policy
-            </button>
-            <button 
-              onClick={() => navigate('/terms')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Terms
-            </button>
-            <div className="text-xs font-bold text-[#C59DD9]">
-              © {new Date().getFullYear()} {appName} Corp. All rights reserved. Made in Jaipur.
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Universal Footer */}
+      <UniversalFooter />
     </div>
   );
 };

@@ -21,9 +21,27 @@ const LeaveGranter = () => {
     const [filterGrantType, setFilterGrantType] = useState('All');
     const [filterLeaveType, setFilterLeaveType] = useState('All');
     const [filterEmployee, setFilterEmployee] = useState('All');
+    const [filterDept, setFilterDept] = useState('All');
+    const [filterDesignation, setFilterDesignation] = useState('All');
+    const [filterOutlet, setFilterOutlet] = useState('All');
     const [selectedYear, setSelectedYear] = useState('Jan 2026 - Dec 2026');
     const [selectedPeriod, setSelectedPeriod] = useState('All');
     const [selectedScheme, setSelectedScheme] = useState('All');
+
+    const uniqueDepartments = React.useMemo(() => {
+        const depts = employees.map(emp => emp.department_name || emp.department).filter(Boolean);
+        return ['All', ...new Set(depts)].sort();
+    }, [employees]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const roles = employees.map(emp => emp.designation).filter(Boolean);
+        return ['All', ...new Set(roles)].sort();
+    }, [employees]);
+
+    const uniqueOutlets = React.useMemo(() => {
+        const locations = employees.map(emp => emp.office_location || emp.location).filter(Boolean);
+        return ['All', ...new Set(locations)].sort();
+    }, [employees]);
 
     // Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -143,7 +161,7 @@ const LeaveGranter = () => {
 
     const handleExport = () => {
         const dataToExport = [];
-        batches.forEach(batch => {
+        filteredBatches.forEach(batch => {
             const formattedDate = new Date(batch.created_at).toLocaleString('en-IN');
             if (batch.employees && batch.employees.length > 0) {
                 batch.employees.forEach(emp => {
@@ -208,27 +226,42 @@ const LeaveGranter = () => {
     ].filter(Boolean))];
 
     // Filter Batches logic
-    const filteredBatches = batches.filter(batch => {
-        // Leave Type filter
-        if (filterLeaveType !== 'All' && batch.leave_type_name !== filterLeaveType) return false;
-        
-        // Grant Type filter
-        if (filterGrantType !== 'All' && batch.grant_type !== filterGrantType) return false;
+    const filteredBatches = React.useMemo(() => {
+        return batches.map(batch => {
+            const matchedEmployees = (batch.employees || []).filter(emp => {
+                const empDept = emp.department_name || employees.find(e => e.id === emp.employee_id)?.department_name || 'General';
+                const empDesg = emp.designation || employees.find(e => e.id === emp.employee_id)?.designation || '';
+                const empLoc = emp.office_location || employees.find(e => e.id === emp.employee_id)?.office_location || 'Unassigned';
 
-        // Employee filter
-        if (filterEmployee !== 'All') {
-            const hasEmp = batch.employees.some(emp => emp.employee_id === parseInt(filterEmployee));
-            if (!hasEmp) return false;
-        }
+                const matchesDept = filterDept === 'All' || String(empDept).toLowerCase() === String(filterDept).toLowerCase();
+                const matchesDesignation = filterDesignation === 'All' || String(empDesg).toLowerCase() === String(filterDesignation).toLowerCase();
+                const matchesOutlet = filterOutlet === 'All' || String(empLoc).toLowerCase() === String(filterOutlet).toLowerCase();
 
-        // Period filter
-        if (selectedPeriod !== 'All' && batch.period !== selectedPeriod) return false;
+                return matchesDept && matchesDesignation && matchesOutlet;
+            });
 
-        // Scheme filter
-        if (selectedScheme !== 'All' && batch.scheme !== selectedScheme) return false;
+            return {
+                ...batch,
+                employees: matchedEmployees,
+                headcount: matchedEmployees.length
+            };
+        }).filter(batch => {
+            if (filterLeaveType !== 'All' && batch.leave_type_name !== filterLeaveType) return false;
+            if (filterGrantType !== 'All' && batch.grant_type !== filterGrantType) return false;
+            if (selectedPeriod !== 'All' && batch.period !== selectedPeriod) return false;
+            if (selectedScheme !== 'All' && batch.scheme !== selectedScheme) return false;
 
-        return true;
-    });
+            if (filterEmployee !== 'All') {
+                const hasEmp = batch.employees.some(emp => emp.employee_id === parseInt(filterEmployee));
+                if (!hasEmp) return false;
+            }
+
+            const hasActiveEmployeeFilter = filterDept !== 'All' || filterDesignation !== 'All' || filterOutlet !== 'All';
+            if (hasActiveEmployeeFilter && batch.employees.length === 0) return false;
+
+            return true;
+        });
+    }, [batches, filterLeaveType, filterGrantType, filterEmployee, selectedPeriod, selectedScheme, filterDept, filterDesignation, filterOutlet, employees]);
 
     return (
         <div className="p-4 md:p-8 bg-slate-50 min-h-screen font-outfit">
@@ -361,6 +394,51 @@ const LeaveGranter = () => {
                             <option value="All">Employee: All</option>
                             {employees.map(emp => (
                                 <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_id_number})</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Department */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Department</label>
+                        <select 
+                            value={filterDept}
+                            onChange={(e) => setFilterDept(e.target.value)}
+                            className="bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-400 text-slate-700 min-w-[150px] max-w-[200px] transition-colors cursor-pointer"
+                        >
+                            <option value="All">Department: All</option>
+                            {uniqueDepartments.filter(d => d !== 'All').map(dept => (
+                                <option key={dept} value={dept}>{dept}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Designation */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Designation</label>
+                        <select 
+                            value={filterDesignation}
+                            onChange={(e) => setFilterDesignation(e.target.value)}
+                            className="bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-400 text-slate-700 min-w-[150px] max-w-[200px] transition-colors cursor-pointer"
+                        >
+                            <option value="All">Designation: All</option>
+                            {uniqueDesignations.filter(d => d !== 'All').map(desg => (
+                                <option key={desg} value={desg}>{desg}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Outlet */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Outlet</label>
+                        <select 
+                            value={filterOutlet}
+                            onChange={(e) => setFilterOutlet(e.target.value)}
+                            className="bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-400 text-slate-700 min-w-[150px] max-w-[200px] transition-colors cursor-pointer"
+                        >
+                            <option value="All">Outlet: All</option>
+                            {uniqueOutlets.filter(o => o !== 'All').map(outlet => (
+                                <option key={outlet} value={outlet}>{outlet}</option>
                             ))}
                         </select>
                     </div>
@@ -511,7 +589,12 @@ const LeaveGranter = () => {
                                                                             <tr key={emp.adjustment_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
                                                                                 <td className="py-2.5 px-4 text-center font-bold text-slate-400">{index + 1}</td>
                                                                                 <td className="py-2.5 px-4 font-bold text-slate-700">{emp.employee_id_number}</td>
-                                                                                <td className="py-2.5 px-4 font-bold text-slate-800">{emp.first_name} {emp.last_name}</td>
+                                                                                <td className="py-2.5 px-4">
+                                                                                    <div className="font-bold text-slate-800">{emp.first_name} {emp.last_name}</div>
+                                                                                    <div className="text-[9px] text-slate-400 font-semibold mt-0.5">
+                                                                                        {emp.designation || employees.find(e => e.id === emp.employee_id)?.designation || ''} • {emp.department_name || employees.find(e => e.id === emp.employee_id)?.department_name || 'General'} • {emp.office_location || employees.find(e => e.id === emp.employee_id)?.office_location || 'Unassigned'}
+                                                                                    </div>
+                                                                                 </td>
                                                                                 <td className="py-2.5 px-4 text-slate-500 font-bold capitalize">{emp.status || 'Active'}</td>
                                                                                 <td className="py-2.5 px-4 text-slate-500 font-semibold">
                                                                                     {emp.joining_date 

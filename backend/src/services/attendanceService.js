@@ -56,16 +56,142 @@ function mapFrontendStatusToDb(status) {
 }
 
 
+function calculateSplitShiftStatus(dayLogs, shift, rules) {
+    const reqPunches = parseInt(shift.total_punches_required || shift.shift_total_punches || 2);
+
+    const timeToMins = (timeStr) => {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+    };
+
+    const dateToMins = (dateVal) => {
+        if (!dateVal) return 0;
+        const d = new Date(dateVal);
+        return d.getHours() * 60 + d.getMinutes();
+    };
+
+    const s1Start = timeToMins(shift.start_time || shift.shift_start || '09:00');
+    const s1End = timeToMins(shift.end_time || shift.shift_end || '18:00');
+    const grace1In = parseInt(shift.grace_period || shift.shift_grace || rules.grace_period || 15);
+    const grace1Out = parseInt(shift.session1_grace_out || shift.shift_session1_grace_out || 0);
+
+    if (reqPunches === 4) {
+        const s2Start = timeToMins(shift.session2_start_time || shift.shift_session2_start || '14:00');
+        const s2End = timeToMins(shift.session2_end_time || shift.shift_session2_end || '18:00');
+        const grace2In = parseInt(shift.session2_grace_in || shift.shift_session2_grace_in || 15);
+        const grace2Out = parseInt(shift.session2_grace_out || shift.shift_session2_grace_out || 0);
+        const s2InMargin = parseInt(shift.session2_in_margin || shift.shift_session2_in_margin || 30);
+
+        // Classify logs using the dynamic Session 2 In Margin
+        const s1Logs = dayLogs.filter(log => dateToMins(log.check_in) < (s2Start - s2InMargin));
+        const s2Logs = dayLogs.filter(log => dateToMins(log.check_in) >= (s2Start - s2InMargin));
+
+        let s1Present = false;
+        let s1Late = false;
+        let s1Early = false;
+        let s1PunchText = 'S1: Missed';
+
+        const s1Log = s1Logs[0];
+        if (s1Log) {
+            const inMins = dateToMins(s1Log.check_in);
+            s1Late = inMins > (s1Start + grace1In);
+
+            if (s1Log.check_out) {
+                const outMins = dateToMins(s1Log.check_out);
+                s1Early = outMins < (s1End - grace1Out);
+                s1Present = true;
+                s1PunchText = `S1: ${s1Late ? 'Late' : 'On-Time'} (${safeFormatTime(s1Log.check_in)} - ${safeFormatTime(s1Log.check_out)})`;
+            } else {
+                s1PunchText = `S1: No Out (${safeFormatTime(s1Log.check_in)} - --:--)`;
+            }
+        }
+
+        let s2Present = false;
+        let s2Late = false;
+        let s2Early = false;
+        let s2PunchText = 'S2: Missed';
+
+        const s2Log = s2Logs[0];
+        if (s2Log) {
+            const inMins = dateToMins(s2Log.check_in);
+            s2Late = inMins > (s2Start + grace2In);
+
+            if (s2Log.check_out) {
+                const outMins = dateToMins(s2Log.check_out);
+                s2Early = outMins < (s2End - grace2Out);
+                s2Present = true;
+                s2PunchText = `S2: ${s2Late ? 'Late' : 'On-Time'} (${safeFormatTime(s2Log.check_in)} - ${safeFormatTime(s2Log.check_out)})`;
+            } else {
+                s2PunchText = `S2: No Out (${safeFormatTime(s2Log.check_in)} - --:--)`;
+            }
+        }
+
+        let status = 'A';
+        if (s1Present && s2Present) {
+            if (s1Late || s2Late) {
+                status = 'L';
+            } else if (s1Early || s2Early) {
+                status = 'E';
+            } else {
+                status = 'P';
+            }
+        } else if (s1Present || s2Present) {
+            status = 'HD';
+        } else {
+            status = 'A';
+        }
+
+        return {
+            status,
+            session1_status: s1Present ? (s1Late ? 'Late' : 'Present') : 'Absent',
+            session2_status: s2Present ? (s2Late ? 'Late' : 'Present') : 'Absent',
+            explanation: `${s1PunchText} | ${s2PunchText}`,
+            punch_count: dayLogs.length * 2
+        };
+    } else {
+        // Standard 2-punch shift
+        const log = dayLogs[0];
+        if (!log) {
+            return { status: 'A', explanation: 'Missed', punch_count: 0 };
+        }
+
+        const inMins = dateToMins(log.check_in);
+        const isLate = inMins > (s1Start + grace1In);
+
+        if (log.check_out) {
+            const outMins = dateToMins(log.check_out);
+            const isEarly = outMins < (s1End - grace1Out);
+            let status = 'P';
+            if (isLate) status = 'L';
+            else if (isEarly) status = 'E';
+
+            return {
+                status,
+                explanation: `S1: ${isLate ? 'Late' : 'On-Time'} (${safeFormatTime(log.check_in)} - ${safeFormatTime(log.check_out)})`,
+                punch_count: 2
+            };
+        } else {
+            return {
+                status: 'A',
+                explanation: `S1: Incomplete (${safeFormatTime(log.check_in)} - --:--)`,
+                punch_count: 1
+            };
+        }
+    }
+}
+
+
 class AttendanceService {
     async getEmployeeId(userId, companyId, existingEmpId = null) {
         if (existingEmpId) return existingEmpId;
-        
+
         const employee = await db('employees').where({ user_id: userId, company_id: companyId }).first();
         if (!employee) {
             // Fallback: search by userId only if company_id mismatch is suspected
             const fallback = await db('employees').where({ user_id: userId }).first();
             if (fallback) return fallback.id;
-            
+
             throw new Error('Employee record not found for this user');
         }
         return employee.id;
@@ -73,15 +199,16 @@ class AttendanceService {
 
     async checkIn(user, companyId, location, ip) {
         const empId = await this.getEmployeeId(user.id, companyId, user.employee_id);
-        
+
         // 1. Fetch Employee with Shift Info and Scheme Info
         const employee = await db('employees')
             .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
             .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
             .where('employees.id', empId)
             .select(
-                'employees.*', 
-                'shifts.start_time as shift_start', 
+                'employees.*',
+                'shifts.start_time as shift_start',
+                'shifts.end_time as shift_end',
                 'shifts.grace_period as shift_grace',
                 'shifts.is_flexi as shift_is_flexi',
                 'attendance_schemes.grace_period as scheme_grace'
@@ -99,12 +226,24 @@ class AttendanceService {
         const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
         const dateStr = now.toISOString().split('T')[0];
 
+        let isCheckoutAttempt = false;
+        if (employee && employee.shift_end && !employee.shift_is_flexi) {
+            const shiftEndStr = employee.shift_end;
+            const [eHours, eMins] = shiftEndStr.split(':').map(Number);
+            const thresholdMins = eHours * 60 + eMins - 120; // 2 hours prior to shift end
+            const punchMins = now.getHours() * 60 + now.getMinutes();
+            if (punchMins >= thresholdMins) {
+                isCheckoutAttempt = true;
+                status = 'no_in';
+            }
+        }
+
         // Check if there is an approved Entry/Exit Request for this date and type 'late_in'
         const approvedRequest = await db('attendance_entry_requests')
             .where({ employee_id: empId, company_id: companyId, date: dateStr, request_type: 'late_in', status: 'approved' })
             .first();
 
-        if (!approvedRequest && !employee?.shift_is_flexi) {
+        if (!isCheckoutAttempt && !approvedRequest && !employee?.shift_is_flexi) {
             const shiftStart = employee?.shift_start || rules.shift_start || '09:00';
             const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
 
@@ -147,7 +286,7 @@ class AttendanceService {
 
     async checkOut(user, companyId, locationData = {}) {
         const empId = await this.getEmployeeId(user.id, companyId, user.employee_id);
-        
+
         // Fetch the active attendance record before punching out
         const activeEntry = await db('attendance')
             .where({ employee_id: empId, company_id: companyId, check_out: null })
@@ -175,10 +314,12 @@ class AttendanceService {
 
         if (!approvedRequest) {
             let isEarly = false;
+            const checkIn = new Date(activeEntry.check_in);
+            const workedHours = (now - checkIn) / (1000 * 60 * 60);
+            const minHours = parseFloat(employee?.min_hours) || 8;
+            const halfDayLimit = minHours / 2;
+
             if (employee?.is_flexi) {
-                const checkIn = new Date(activeEntry.check_in);
-                const workedHours = (now - checkIn) / (1000 * 60 * 60);
-                const minHours = parseFloat(employee.min_hours) || 8;
                 if (workedHours < minHours) {
                     isEarly = true;
                 }
@@ -190,6 +331,12 @@ class AttendanceService {
                 if (now < shiftEndLimit) {
                     isEarly = true;
                 }
+            }
+
+            // Only trigger early out request if employee has completed at least the half day hours.
+            // If they punch out before half day, we ignore the early out request.
+            if (isEarly && workedHours < halfDayLimit) {
+                isEarly = false;
             }
 
             if (isEarly) {
@@ -248,7 +395,7 @@ class AttendanceService {
     async getHistory(user, companyId, month, year, extended = false) {
         const empId = await this.getEmployeeId(user.id, companyId, user.employee_id);
         const attendance = await attendanceRepository.getHistory(empId, companyId, month, year);
-        
+
         if (!extended) {
             return attendance;
         }
@@ -297,7 +444,7 @@ class AttendanceService {
 
     async getMatrix(user, month, year) {
         const companyId = user.company_id;
-        
+
         // 1. Fetch Company Rules
         const rules = await db('working_rules').where({ company_id: companyId }).first() || {
             shift_start: '09:00',
@@ -315,13 +462,15 @@ class AttendanceService {
 
         const raw = await attendanceRepository.getCompanyMatrix(user, month, year);
         const daysInMonth = new Date(year, month, 0).getDate();
-        
+
         const matrix = raw.employees.map(emp => {
             const grid = {};
+            const grid_timings = {};
+            const grid_meta = {};
             const stats = { P: 0, L: 0, A: 0, PL: 0, UL: 0, OFF: 0, H: 0 };
 
             // Resolve employee specific weekoffs from scheme if assigned
-            const empWeekoffs = emp.scheme_weekoffs 
+            const empWeekoffs = emp.scheme_weekoffs
                 ? (typeof emp.scheme_weekoffs === 'string' ? JSON.parse(emp.scheme_weekoffs) : emp.scheme_weekoffs)
                 : weekoffs;
 
@@ -361,134 +510,186 @@ class AttendanceService {
                 if (empWeekoffs.includes(dayName)) {
                     status = 'OFF';
                     stats.OFF++;
-                } 
+                }
                 // B. Check Holidays
                 else if (holidays.some(h => new Date(h.date).getDate() === d)) {
                     status = 'H';
                     stats.H++;
                 }
-                else {
-                    // C. Check Attendance
-                    const dayAttendance = raw.attendance.find(a => 
-                        a.employee_id === emp.id && 
-                        new Date(a.check_in).getDate() === d
-                    );
-                    
-                    const getDayOfDate = (dateVal) => {
-                        if (!dateVal) return null;
-                        const dObj = new Date(dateVal);
-                        return dObj.getDate();
-                    };
+                // C. Check Attendance
+                const dayLogs = raw.attendance.filter(a =>
+                    a.employee_id === emp.id &&
+                    new Date(a.check_in).getDate() === d
+                ).sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
 
-                    const dayRegularization = raw.regularizations?.find(r => 
-                        r.employee_id === emp.id && 
-                        getDayOfDate(r.date) === d
-                    );
+                const getDayOfDate = (dateVal) => {
+                    if (!dateVal) return null;
+                    const dObj = new Date(dateVal);
+                    return dObj.getDate();
+                };
 
-                    const dayEarlyOut = raw.entryRequests?.find(er => 
-                        er.employee_id === emp.id && 
-                        getDayOfDate(er.date) === d
-                    );
-                    
-                    if (dayAttendance) {
-                        const dbStatus = dayAttendance.status ? dayAttendance.status.toLowerCase() : '';
-                        
-                        if (dbStatus === 'pending') {
-                            status = '-';
-                        } else if (dayRegularization || dbStatus === 'regularized' || dbStatus === 'r' || dayAttendance.punch_source === 'regularization') {
-                            status = 'R';
+                const dayRegularization = raw.regularizations?.find(r =>
+                    r.employee_id === emp.id &&
+                    getDayOfDate(r.date) === d
+                );
+
+                const dayEarlyOut = raw.entryRequests?.find(er =>
+                    er.employee_id === emp.id &&
+                    getDayOfDate(er.date) === d
+                );
+
+                if (dayLogs.length > 0) {
+                    const firstLog = dayLogs[0];
+                    const dbStatus = firstLog.status ? firstLog.status.toLowerCase() : '';
+
+                    if (dbStatus === 'pending') {
+                        status = '-';
+                    } else if (firstLog.punch_source === 'manual' || firstLog.punch_source === 'manual_override') {
+                        status = mapDbStatusToFrontend(dbStatus);
+                        if (status === 'P') stats.P++;
+                        else if (status === 'HD') stats.P += 0.5;
+                        else if (status === 'L') stats.L++;
+                        else if (status === 'E') stats.P++;
+                        else if (status === 'A') stats.A++;
+                    } else if (dayRegularization || dbStatus === 'regularized' || dbStatus === 'r' || firstLog.punch_source === 'regularization') {
+                        status = 'R';
+                        stats.P++;
+                    } else if (firstLog.punch_source === 'entry_request' || dayEarlyOut) {
+                        if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
+                            status = 'HD';
+                            stats.P += 0.5;
+                        } else if (dbStatus === 'late-in' || dbStatus === 'late_in' || dbStatus === 'late' || dbStatus === 'l') {
+                            status = 'L';
+                            stats.L++;
+                        } else if (dbStatus === 'present' || dbStatus === 'p') {
+                            status = 'P';
                             stats.P++;
-                        } else if (dayAttendance.punch_source === 'entry_request' || dayEarlyOut) {
-                            if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
-                                status = 'HD';
-                                stats.P += 0.5;
-                            } else if (dbStatus === 'late-in' || dbStatus === 'late_in' || dbStatus === 'late' || dbStatus === 'l') {
-                                status = 'L';
-                                stats.L++;
-                            } else if (dbStatus === 'present' || dbStatus === 'p') {
-                                status = 'P';
-                                stats.P++;
-                            } else if (dbStatus === 'absent' || dbStatus === 'a') {
-                                status = 'A';
-                                stats.A++;
-                            } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
-                                status = 'E';
-                                stats.P++;
-                            } else {
-                                status = 'E';
-                                stats.P++;
-                            }
                         } else if (dbStatus === 'absent' || dbStatus === 'a') {
                             status = 'A';
                             stats.A++;
-                        } else if (dbStatus === 'off') {
-                            status = 'OFF';
-                            stats.OFF++;
-                        } else if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
-                            status = 'HD';
-                            stats.P += 0.5;
                         } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
                             status = 'E';
                             stats.P++;
-                        } else if (dbStatus === 'short') {
-                            status = 'A';
-                            stats.A++;
-                        } else if (emp.shift_is_flexi) {
-                            // Flexi shift: always Present, never Late
-                            status = 'P';
-                            stats.P++;
                         } else {
-                            // DETECT LATE: check_in vs (shift_start + grace)
-                            const checkInTime = new Date(dayAttendance.check_in);
-                            
-                            // Use Employee's specific shift if available, otherwise company rules
-                            const shiftStart = emp.shift_start || rules.shift_start;
-                            const grace = emp.scheme_grace !== undefined && emp.scheme_grace !== null
-                                ? emp.scheme_grace
-                                : (emp.shift_grace !== undefined && emp.shift_grace !== null ? emp.shift_grace : rules.grace_period);
-
-                            const [sHours, sMins] = shiftStart.split(':').map(Number);
-                            const shiftAllowed = new Date(checkInTime);
-                            shiftAllowed.setHours(sHours, sMins + (parseInt(grace) || 0), 0, 0);
-
-                            if (checkInTime > shiftAllowed) {
-                                status = 'L'; // Late
-                                stats.L++;
-                            } else {
-                                status = 'P'; // Present
-                                stats.P++;
-                            }
+                            status = 'E';
+                            stats.P++;
                         }
-                    } else if (dayRegularization) {
-                        status = 'R';
-                        stats.P++;
-                    } else if (dayEarlyOut) {
+                    } else if (dbStatus === 'absent' || dbStatus === 'a') {
+                        status = 'A';
+                        stats.A++;
+                    } else if (dbStatus === 'off') {
+                        status = 'OFF';
+                        stats.OFF++;
+                    } else if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
+                        status = 'HD';
+                        stats.P += 0.5;
+                    } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
                         status = 'E';
                         stats.P++;
+                    } else if (dbStatus === 'short') {
+                        status = 'A';
+                        stats.A++;
+                    } else if (emp.shift_is_flexi) {
+                        status = 'P';
+                        stats.P++;
                     } else {
-                        // C. Check Leaves
-                        const onLeave = raw.leaves.find(l => 
-                            l.employee_id === emp.id &&
-                            new Date(l.start_date) <= date &&
-                            new Date(l.end_date) >= date
-                        );
+                        // Compute status using split-shift helper
+                        const calc = calculateSplitShiftStatus(dayLogs, emp, rules);
+                        status = calc.status;
+                        if (status === 'P') stats.P++;
+                        else if (status === 'HD') stats.P += 0.5;
+                        else if (status === 'L') stats.L++;
+                        else if (status === 'E') stats.P++; // Early out still counts as present/hours completed
+                        else if (status === 'A') stats.A++;
+                    }
+                } else if (dayRegularization) {
+                    status = 'R';
+                    stats.P++;
+                } else if (dayEarlyOut) {
+                    status = 'E';
+                    stats.P++;
+                } else {
+                    // C. Check Leaves
+                    const onLeave = raw.leaves.find(l =>
+                        l.employee_id === emp.id &&
+                        new Date(l.start_date) <= date &&
+                        new Date(l.end_date) >= date
+                    );
 
-                        if (onLeave) {
-                            const isPaid = !onLeave.leave_type_name.toLowerCase().includes('unpaid') && 
-                                           !onLeave.leave_type_name.toLowerCase().includes('lop');
-                            status = isPaid ? 'PL' : 'UL';
-                            if (isPaid) stats.PL++; else stats.UL++;
-                        } else {
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
-                            if (date < today) {
-                                status = 'A'; // Absent
-                                stats.A++;
+                    if (onLeave) {
+                        const isPaid = !onLeave.leave_type_name.toLowerCase().includes('unpaid') &&
+                            !onLeave.leave_type_name.toLowerCase().includes('lop');
+                        status = isPaid ? 'PL' : 'UL';
+                        if (isPaid) stats.PL++; else stats.UL++;
+                    } else {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (date < today) {
+                            status = 'A'; // Absent
+                            stats.A++;
+                        }
+                    }
+                }
+                let in1 = null, out1 = null, in2 = null, out2 = null;
+                let isGrace = false;
+
+                const timeToMinsLocal = (timeStr) => {
+                    if (!timeStr) return 0;
+                    const [h, m] = timeStr.split(':').map(Number);
+                    return h * 60 + m;
+                };
+                const dateToMinsLocal = (dateVal) => {
+                    if (!dateVal) return 0;
+                    const dObj = new Date(dateVal);
+                    return dObj.getHours() * 60 + dObj.getMinutes();
+                };
+
+                const reqPunches = parseInt(emp.shift_total_punches || 2);
+                if (dayLogs && dayLogs.length > 0) {
+                    const s1Start = timeToMinsLocal(emp.shift_start || '09:00');
+                    const grace1In = parseInt(emp.shift_grace || rules.grace_period || 15);
+
+                    if (reqPunches === 4) {
+                        const s2Start = timeToMinsLocal(emp.shift_session2_start || '14:00');
+                        const grace2In = parseInt(emp.shift_session2_grace_in || 15);
+                        const s2InMargin = parseInt(emp.shift_session2_in_margin || 30);
+
+                        const s1Logs = dayLogs.filter(log => dateToMinsLocal(log.check_in) < (s2Start - s2InMargin));
+                        const s2Logs = dayLogs.filter(log => dateToMinsLocal(log.check_in) >= (s2Start - s2InMargin));
+
+                        if (s1Logs[0]) {
+                            in1 = s1Logs[0].check_in;
+                            out1 = s1Logs[0].check_out;
+                            const inMins1 = dateToMinsLocal(s1Logs[0].check_in);
+                            if (inMins1 > s1Start && inMins1 <= (s1Start + grace1In)) {
+                                isGrace = true;
+                            }
+                        }
+                        if (s2Logs[0]) {
+                            in2 = s2Logs[0].check_in;
+                            out2 = s2Logs[0].check_out;
+                            const inMins2 = dateToMinsLocal(s2Logs[0].check_in);
+                            if (inMins2 > s2Start && inMins2 <= (s2Start + grace2In)) {
+                                isGrace = true;
+                            }
+                        }
+                    } else {
+                        if (dayLogs[0]) {
+                            in1 = dayLogs[0].check_in;
+                            out1 = dayLogs[0].check_out;
+                            const inMins = dateToMinsLocal(dayLogs[0].check_in);
+                            if (inMins > s1Start && inMins <= (s1Start + grace1In)) {
+                                isGrace = true;
                             }
                         }
                     }
                 }
                 grid[d] = status;
+                grid_timings[d] = { in1, out1, in2, out2 };
+                grid_meta[d] = {
+                    is_override: dayLogs.length > 0 && (dayLogs[0].punch_source === 'manual' || dayLogs[0].punch_source === 'manual_override'),
+                    is_grace: isGrace
+                };
             }
 
             return {
@@ -496,8 +697,11 @@ class AttendanceService {
                 name: `${emp.first_name} ${emp.last_name}`,
                 code: emp.employee_id_number,
                 role: emp.designation,
+                department: emp.department_name || 'General',
                 location: emp.office_location || 'Unassigned',
                 days: grid,
+                timings: grid_timings,
+                meta: grid_meta,
                 stats
             };
         });
@@ -523,6 +727,7 @@ class AttendanceService {
                     status: dbStatus,
                     check_in: check_in || existing.check_in,
                     check_out: check_out || existing.check_out,
+                    punch_source: 'manual',
                     updated_at: db.fn.now()
                 });
         } else {
@@ -532,6 +737,7 @@ class AttendanceService {
                 status: dbStatus,
                 check_in: check_in || `${date} 09:00:00`,
                 check_out: check_out || `${date} 18:00:00`,
+                punch_source: 'manual',
                 created_at: db.fn.now()
             });
         }
@@ -539,7 +745,7 @@ class AttendanceService {
     }
     async getWhosInStats(user, dateStr) {
         const companyId = user.company_id;
-        
+
         // Robust Date Handling (Avoid UTC shifts for Local reporting)
         let dateObj;
         if (dateStr) {
@@ -564,13 +770,16 @@ class AttendanceService {
         const employees = await db('employees')
             .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
             .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
+            .leftJoin('departments', 'employees.department_id', 'departments.id')
             .where({ 'employees.company_id': companyId, 'employees.status': 'active' })
             .select(
-                'employees.id', 
-                'employees.first_name', 
-                'employees.last_name', 
+                'employees.id',
+                'employees.first_name',
+                'employees.last_name',
                 'employees.employee_id_number',
                 'employees.office_location',
+                'employees.designation',
+                'departments.name as department_name',
                 'shifts.start_time as shift_start',
                 'shifts.grace_period as shift_grace',
                 'shifts.name as shift_name',
@@ -583,9 +792,9 @@ class AttendanceService {
             .where({ company_id: companyId })
             .whereRaw('DATE(check_in) = ?', [formattedDate])
             .select(
-                'employee_id', 
-                'check_in', 
-                'check_out', 
+                'employee_id',
+                'check_in',
+                'check_out',
                 'status',
                 'latitude',
                 'longitude',
@@ -611,7 +820,7 @@ class AttendanceService {
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.company_id', companyId)
             .where('esa.from_date', '<=', formattedDate)
-            .andWhere(function() {
+            .andWhere(function () {
                 this.where('esa.to_date', '>=', formattedDate).orWhereNull('esa.to_date');
             })
             .select('esa.employee_id', 's.start_time', 's.grace_period', 's.name', 's.is_flexi')
@@ -627,18 +836,18 @@ class AttendanceService {
             if (onLeave.includes(emp.id)) continue;
 
             const record = attendance.find(a => a.employee_id === emp.id);
-            
+
             // Resolve overridden shift
             const activeAssignment = assignments.find(a => a.employee_id === emp.id);
-            
+
             // Determine if this employee is on a flexi/anytime shift
             const isFlexi = activeAssignment ? !!activeAssignment.is_flexi : !!emp.shift_is_flexi;
 
             const shiftStart = activeAssignment ? activeAssignment.start_time : (emp.shift_start || rules.shift_start);
-            const grace = activeAssignment 
-                ? activeAssignment.grace_period 
-                : (emp.scheme_grace !== undefined && emp.scheme_grace !== null 
-                    ? emp.scheme_grace 
+            const grace = activeAssignment
+                ? activeAssignment.grace_period
+                : (emp.scheme_grace !== undefined && emp.scheme_grace !== null
+                    ? emp.scheme_grace
                     : (emp.shift_grace !== undefined && emp.shift_grace !== null ? emp.shift_grace : rules.grace_period));
             const shiftName = activeAssignment ? activeAssignment.name : (emp.shift_name || 'General');
 
@@ -648,13 +857,15 @@ class AttendanceService {
                     id: emp.employee_id_number,
                     time: isFlexi ? 'Flexi' : shiftStart,
                     shift_name: shiftName,
-                    office_location: emp.office_location || 'Unassigned'
+                    office_location: emp.office_location || 'Unassigned',
+                    designation: emp.designation || 'Staff',
+                    department: emp.department_name || 'General'
                 });
             } else {
                 const checkIn = new Date(record.check_in);
                 const timeStr = checkIn.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
                 const checkOutTimeStr = record.check_out ? new Date(record.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
-                
+
                 const baseEntry = {
                     name: `${emp.first_name} ${emp.last_name}`,
                     id: emp.employee_id_number,
@@ -671,7 +882,9 @@ class AttendanceService {
                     out_punch_location: record.out_punch_location,
                     out_remarks: record.out_remarks,
                     check_out: checkOutTimeStr,
-                    office_location: emp.office_location || 'Unassigned'
+                    office_location: emp.office_location || 'Unassigned',
+                    designation: emp.designation || 'Staff',
+                    department: emp.department_name || 'General'
                 };
 
                 // Flexi shift employees are always "On-Time" — no late calculation
@@ -721,16 +934,26 @@ class AttendanceService {
     }
 
     async getEmployeesByShift(companyId, shiftId, fromDate, toDate) {
-        // Fetch all active employees in the company
+        // Fetch all active employees in the company with department/designation details
         const employees = await db('employees')
-            .where({ company_id: companyId, status: 'active' })
-            .select('id', 'first_name', 'last_name', 'employee_id_number', 'shift_id', 'office_location');
+            .leftJoin('departments', 'employees.department_id', 'departments.id')
+            .where({ 'employees.company_id': companyId, 'employees.status': 'active' })
+            .select(
+                'employees.id',
+                'employees.first_name',
+                'employees.last_name',
+                'employees.employee_id_number',
+                'employees.shift_id',
+                'employees.office_location',
+                'employees.designation',
+                'departments.name as department_name'
+            );
 
         // Fetch all shift assignments active during the period
         const assignments = await db('employee_shift_assignments')
             .where('company_id', companyId)
             .where('from_date', '<=', toDate || fromDate)
-            .andWhere(function() {
+            .andWhere(function () {
                 this.where('to_date', '>=', fromDate).orWhereNull('to_date');
             })
             .select('employee_id', 'shift_id', 'id')
@@ -745,7 +968,7 @@ class AttendanceService {
         // Filter employees based on resolved shift
         const filtered = employees.filter(emp => {
             const resolvedShiftId = assignmentMap[emp.id] !== undefined ? assignmentMap[emp.id] : emp.shift_id;
-            
+
             if (shiftId === 'all' || String(shiftId).toLowerCase() === 'all') {
                 return true;
             }
@@ -757,7 +980,9 @@ class AttendanceService {
             first_name: emp.first_name,
             last_name: emp.last_name,
             employee_id_number: emp.employee_id_number,
-            office_location: emp.office_location
+            office_location: emp.office_location,
+            designation: emp.designation,
+            department_name: emp.department_name
         }));
     }
 
@@ -765,11 +990,11 @@ class AttendanceService {
         const { employee_ids, from_date, to_date } = data;
         const start = new Date(from_date);
         const end = new Date(to_date || from_date);
-        
+
         await db.transaction(async (trx) => {
             for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
                 const dateStr = d.toISOString().split('T')[0];
-                
+
                 for (const empId of employee_ids) {
                     // Check existing attendance
                     const existing = await trx('attendance')
@@ -849,15 +1074,25 @@ class AttendanceService {
 
     async getDateWiseAttendance(companyId, date) {
         const employees = await db('employees')
-            .where({ company_id: companyId })
-            .select('id', 'first_name', 'last_name', 'employee_id_number', 'shift_id', 'office_location');
+            .leftJoin('departments', 'employees.department_id', 'departments.id')
+            .where({ 'employees.company_id': companyId })
+            .select(
+                'employees.id',
+                'employees.first_name',
+                'employees.last_name',
+                'employees.employee_id_number',
+                'employees.shift_id',
+                'employees.office_location',
+                'employees.designation',
+                'departments.name as department_name'
+            );
 
         // Fetch shift assignments active on this specific date (order by ID descending to respect latest override)
         const assignments = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.company_id', companyId)
             .where('esa.from_date', '<=', date)
-            .andWhere(function() {
+            .andWhere(function () {
                 this.where('esa.to_date', '>=', date).orWhereNull('esa.to_date');
             })
             .select('esa.employee_id', 's.name as shift_name')
@@ -885,6 +1120,8 @@ class AttendanceService {
                 last_name: emp.last_name,
                 employee_id_number: emp.employee_id_number,
                 office_location: emp.office_location,
+                designation: emp.designation,
+                department_name: emp.department_name,
                 shift_name: shiftName,
                 shift_code: shiftName,
                 status: mapDbStatusToFrontend(record ? (record.status || 'present') : 'A'),
@@ -899,7 +1136,7 @@ class AttendanceService {
     async manualUpdateAttendance(user, companyId, data) {
         const { employee_id, date, status } = data;
         const dbStatus = mapFrontendStatusToDb(status);
-        
+
         await db.transaction(async (trx) => {
             const existing = await trx('attendance')
                 .where({ employee_id, company_id: companyId })
@@ -913,6 +1150,7 @@ class AttendanceService {
                     .where({ id: existing.id })
                     .update({
                         status: dbStatus,
+                        punch_source: 'manual',
                         updated_at: db.fn.now()
                     });
             } else {
@@ -922,6 +1160,7 @@ class AttendanceService {
                     check_in: `${date} 09:00:00`,
                     check_out: `${date} 18:00:00`,
                     status: dbStatus,
+                    punch_source: 'manual',
                     created_at: db.fn.now()
                 });
             }
@@ -994,11 +1233,21 @@ class AttendanceService {
     async getEligibleEmployees(companyId) {
         console.log('>>> [DEBUG]: Fetching Eligible Employees for Company:', companyId);
         const today = new Date().toISOString().split('T')[0];
-        
-        // Fetch all employees (removed strict status check to ensure visibility)
+
+        // Fetch all employees with department/designation details
         const employees = await db('employees')
-            .where({ company_id: companyId })
-            .select('id', 'first_name', 'last_name', 'employee_id_number', 'status', 'office_location');
+            .leftJoin('departments', 'employees.department_id', 'departments.id')
+            .where({ 'employees.company_id': companyId })
+            .select(
+                'employees.id',
+                'employees.first_name',
+                'employees.last_name',
+                'employees.employee_id_number',
+                'employees.status',
+                'employees.office_location',
+                'employees.designation',
+                'departments.name as department_name'
+            );
 
         console.log(`>>> [DEBUG]: Found ${employees.length} employees`);
 
@@ -1007,7 +1256,7 @@ class AttendanceService {
             .join('shifts', 'employee_shift_assignments.shift_id', 'shifts.id')
             .where('employee_shift_assignments.company_id', companyId)
             .where('from_date', '<=', today)
-            .andWhere(function() {
+            .andWhere(function () {
                 this.where('to_date', '>=', today).orWhereNull('to_date');
             })
             .select('employee_id', 'shifts.name as shift_name');
@@ -1024,7 +1273,7 @@ class AttendanceService {
     }
     async assignShift(user, companyId, data) {
         const { employee_ids, shift_id, from_date, to_date } = data;
-        
+
         if (!employee_ids || !shift_id || !from_date) {
             throw new Error('Employees, Shift, and From Date are required');
         }
@@ -1056,8 +1305,13 @@ class AttendanceService {
         return { message: 'Shifts assigned successfully' };
     }
     async createShift(companyId, data) {
-        const { name, start_time, end_time, grace_period, grace_count_limit, is_night_shift, is_flexi, min_hours } = data;
-        
+        const {
+            name, start_time, end_time, grace_period, grace_count_limit, is_night_shift, is_flexi, min_hours,
+            total_punches_required, session2_start_time, session2_end_time,
+            session1_grace_out, session2_grace_in, session2_grace_out,
+            session1_in_margin, session1_out_margin, session2_in_margin, session2_out_margin
+        } = data;
+
         // For flexi shifts, start/end time are optional (informational only)
         if (!name) {
             throw new Error('Shift Name is required');
@@ -1069,13 +1323,23 @@ class AttendanceService {
         const [id] = await db('shifts').insert({
             company_id: companyId,
             name,
-            start_time: start_time || '00:00',
-            end_time: end_time || '23:59',
-            grace_period: grace_period || 15,
-            grace_count_limit: grace_count_limit || 3,
+            start_time: start_time || '09:00',
+            end_time: end_time || '18:00',
+            grace_period: grace_period !== undefined ? grace_period : 15,
+            grace_count_limit: grace_count_limit !== undefined ? grace_count_limit : 3,
             is_night_shift: !!is_night_shift,
             is_flexi: !!is_flexi,
-            min_hours: is_flexi ? (parseFloat(min_hours) || 8.0) : 8.0,
+            min_hours: min_hours !== undefined && min_hours !== null ? parseFloat(min_hours) : 8.0,
+            total_punches_required: total_punches_required !== undefined ? parseInt(total_punches_required) : 2,
+            session2_start_time: session2_start_time || null,
+            session2_end_time: session2_end_time || null,
+            session1_grace_out: session1_grace_out !== undefined ? parseInt(session1_grace_out) : 0,
+            session2_grace_in: session2_grace_in !== undefined ? parseInt(session2_grace_in) : 15,
+            session2_grace_out: session2_grace_out !== undefined ? parseInt(session2_grace_out) : 0,
+            session1_in_margin: session1_in_margin !== undefined ? parseInt(session1_in_margin) : 0,
+            session1_out_margin: session1_out_margin !== undefined ? parseInt(session1_out_margin) : 0,
+            session2_in_margin: session2_in_margin !== undefined ? parseInt(session2_in_margin) : 0,
+            session2_out_margin: session2_out_margin !== undefined ? parseInt(session2_out_margin) : 0,
             created_at: db.fn.now(),
             updated_at: db.fn.now()
         });
@@ -1084,8 +1348,13 @@ class AttendanceService {
     }
 
     async updateShift(companyId, id, data) {
-        const { name, start_time, end_time, grace_period, grace_count_limit, is_night_shift, is_flexi, min_hours } = data;
-        
+        const {
+            name, start_time, end_time, grace_period, grace_count_limit, is_night_shift, is_flexi, min_hours,
+            total_punches_required, session2_start_time, session2_end_time,
+            session1_grace_out, session2_grace_in, session2_grace_out,
+            session1_in_margin, session1_out_margin, session2_in_margin, session2_out_margin
+        } = data;
+
         if (!id) {
             throw new Error('Shift ID is required');
         }
@@ -1094,13 +1363,23 @@ class AttendanceService {
             .where({ company_id: companyId, id })
             .update({
                 name,
-                start_time: start_time || '00:00',
-                end_time: end_time || '23:59',
+                start_time: start_time || '09:00',
+                end_time: end_time || '18:00',
                 grace_period: grace_period !== undefined ? grace_period : 15,
                 grace_count_limit: grace_count_limit !== undefined ? grace_count_limit : 3,
                 is_night_shift: !!is_night_shift,
                 is_flexi: !!is_flexi,
-                min_hours: is_flexi ? (parseFloat(min_hours) || 8.0) : 8.0,
+                min_hours: min_hours !== undefined && min_hours !== null ? parseFloat(min_hours) : 8.0,
+                total_punches_required: total_punches_required !== undefined ? parseInt(total_punches_required) : 2,
+                session2_start_time: session2_start_time || null,
+                session2_end_time: session2_end_time || null,
+                session1_grace_out: session1_grace_out !== undefined ? parseInt(session1_grace_out) : 0,
+                session2_grace_in: session2_grace_in !== undefined ? parseInt(session2_grace_in) : 15,
+                session2_grace_out: session2_grace_out !== undefined ? parseInt(session2_grace_out) : 0,
+                session1_in_margin: session1_in_margin !== undefined ? parseInt(session1_in_margin) : 0,
+                session1_out_margin: session1_out_margin !== undefined ? parseInt(session1_out_margin) : 0,
+                session2_in_margin: session2_in_margin !== undefined ? parseInt(session2_in_margin) : 0,
+                session2_out_margin: session2_out_margin !== undefined ? parseInt(session2_out_margin) : 0,
                 updated_at: db.fn.now()
             });
 
@@ -1111,7 +1390,7 @@ class AttendanceService {
         if (!id) {
             throw new Error('Shift ID is required');
         }
-        
+
         // Safety: update employees referencing this shift to null
         await db('employees')
             .where({ company_id: companyId, shift_id: id })
@@ -1144,17 +1423,17 @@ class AttendanceService {
         if (companyId) {
             employeeQuery = employeeQuery.where({ 'e.company_id': companyId });
         }
-        
+
         if (filters.employee_id && filters.employee_id !== 'All') {
             employeeQuery = employeeQuery.where('e.id', filters.employee_id);
         }
-        
+
         let employees = await employeeQuery.select(
-            'e.id', 
-            'e.first_name', 
-            'e.last_name', 
-            'e.employee_id_number', 
-            'e.designation', 
+            'e.id',
+            'e.first_name',
+            'e.last_name',
+            'e.employee_id_number',
+            'e.designation',
             'e.office_location as location',
             'e.department_id',
             's.name as default_shift_name',
@@ -1163,7 +1442,7 @@ class AttendanceService {
             'asch.id as scheme_id',
             'd.name as department_name'
         );
-        
+
         // Demo fallback for immediate visibility
         if (employees.length === 0) {
             employees = [
@@ -1210,14 +1489,14 @@ class AttendanceService {
         const qb = db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.from_date', '<=', toDate)
-            .andWhere(function() {
+            .andWhere(function () {
                 this.where('esa.to_date', '>=', fromDate).orWhereNull('esa.to_date');
             });
-            
+
         if (companyId) {
             qb.where('esa.company_id', companyId);
         }
-        
+
         const assignmentList = await qb.select('esa.id', 'esa.employee_id', 'esa.from_date', 'esa.to_date', 's.name')
             .orderBy('esa.id', 'desc');
 
@@ -1235,7 +1514,7 @@ class AttendanceService {
         // 3. Build Roster Matrix
         const roster = employees.map(emp => {
             const empAssignments = assignmentList.filter(a => a.employee_id === emp.id);
-            const empWeekoffs = emp.scheme_weekoffs 
+            const empWeekoffs = emp.scheme_weekoffs
                 ? (typeof emp.scheme_weekoffs === 'string' ? JSON.parse(emp.scheme_weekoffs) : emp.scheme_weekoffs)
                 : companyWeekoffs;
             const empLeaves = leaves.filter(l => l.employee_id === emp.id);
@@ -1359,6 +1638,17 @@ class AttendanceService {
             .select(
                 'e.id', 'e.first_name', 'e.last_name', 'e.employee_id_number', 'e.designation', 'e.city as location',
                 's.name as default_shift_name', 's.start_time as default_shift_start', 's.end_time as default_shift_end',
+                's.total_punches_required as default_shift_total_punches',
+                's.session2_start_time as default_shift_session2_start',
+                's.session2_end_time as default_shift_session2_end',
+                's.grace_period as default_shift_grace_period',
+                's.session1_grace_out as default_shift_session1_grace_out',
+                's.session2_grace_in as default_shift_session2_grace_in',
+                's.session2_grace_out as default_shift_session2_grace_out',
+                's.session1_in_margin as default_shift_session1_in_margin',
+                's.session1_out_margin as default_shift_session1_out_margin',
+                's.session2_in_margin as default_shift_session2_in_margin',
+                's.session2_out_margin as default_shift_session2_out_margin',
                 'asch.weekoffs as scheme_weekoffs'
             )
             .first();
@@ -1372,10 +1662,10 @@ class AttendanceService {
             weekoffs: JSON.stringify(['Sunday'])
         };
         const companyWeekoffs = typeof rules.weekoffs === 'string' ? JSON.parse(rules.weekoffs) : (rules.weekoffs || []);
-        const empWeekoffs = emp.scheme_weekoffs 
+        const empWeekoffs = emp.scheme_weekoffs
             ? (typeof emp.scheme_weekoffs === 'string' ? JSON.parse(emp.scheme_weekoffs) : emp.scheme_weekoffs)
             : companyWeekoffs;
-        
+
         const dateObj = new Date(dateStr);
         const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
         const dayName = dayNames[dateObj.getDay()];
@@ -1396,11 +1686,13 @@ class AttendanceService {
             )
             .first();
 
-        // 5. Fetch Attendance
-        const attendance = await db('attendance')
+        // 5. Fetch All Attendance logs
+        const attendanceLogs = await db('attendance')
             .where({ employee_id: employeeId, company_id: companyId })
             .whereRaw('DATE(check_in) = ?', [dateStr])
-            .first();
+            .orderBy('check_in', 'asc');
+
+        const attendance = attendanceLogs[0] || null;
 
         // 6. Fetch Leave
         const leave = await db('leaves as l')
@@ -1459,18 +1751,42 @@ class AttendanceService {
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employeeId)
             .where('esa.from_date', '<=', dateStr)
-            .andWhere(function() {
+            .andWhere(function () {
                 this.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
             })
-            .select('s.name', 's.start_time', 's.end_time')
+            .select(
+                's.name', 's.start_time', 's.end_time', 's.total_punches_required',
+                's.session2_start_time', 's.session2_end_time', 's.grace_period',
+                's.session1_grace_out', 's.session2_grace_in', 's.session2_grace_out',
+                's.session1_in_margin', 's.session1_out_margin', 's.session2_in_margin', 's.session2_out_margin'
+            )
             .orderBy('esa.id', 'desc')
             .first();
 
         const activeShift = assignments || {
             name: emp.default_shift_name || 'General Shift',
             start_time: emp.default_shift_start || '09:00',
-            end_time: emp.default_shift_end || '18:00'
+            end_time: emp.default_shift_end || '18:00',
+            total_punches_required: emp.default_shift_total_punches || 2,
+            session2_start_time: emp.default_shift_session2_start || null,
+            session2_end_time: emp.default_shift_session2_end || null,
+            grace_period: emp.default_shift_grace_period || 15,
+            session1_grace_out: emp.default_shift_session1_grace_out || 0,
+            session2_grace_in: emp.default_shift_session2_grace_in || 15,
+            session2_grace_out: emp.default_shift_session2_grace_out || 0,
+            session1_in_margin: emp.default_shift_session1_in_margin || 0,
+            session1_out_margin: emp.default_shift_session1_out_margin || 0,
+            session2_in_margin: emp.default_shift_session2_in_margin || 0,
+            session2_out_margin: emp.default_shift_session2_out_margin || 0
         };
+
+        let splitShiftDetails = null;
+        if (attendanceLogs.length > 0) {
+            splitShiftDetails = calculateSplitShiftStatus(attendanceLogs, activeShift, rules);
+            if (attendance && (attendance.punch_source === 'manual' || attendance.punch_source === 'manual_override')) {
+                splitShiftDetails.status = mapDbStatusToFrontend(attendance.status);
+            }
+        }
 
         return {
             employee: {
@@ -1484,11 +1800,13 @@ class AttendanceService {
             day_name: dayName,
             is_weekoff: isStandardWeekoff,
             active_shift: activeShift,
+            split_shift_details: splitShiftDetails,
+            attendance_logs: attendanceLogs,
             attendance: attendance ? {
                 id: attendance.id,
                 check_in: attendance.check_in,
                 check_out: attendance.check_out,
-                status: attendance.status,
+                status: splitShiftDetails ? splitShiftDetails.status : attendance.status,
                 punch_source: attendance.punch_source,
                 device_id: attendance.device_id,
                 latitude: attendance.latitude,
@@ -1537,8 +1855,8 @@ class AttendanceService {
                 punch_time: entryRequest.punch_time,
                 status: entryRequest.status,
                 created_at: entryRequest.created_at,
-                approved_by: entryRequest.approved_by_first_name 
-                    ? `${entryRequest.approved_by_first_name} ${entryRequest.approved_by_last_name}` 
+                approved_by: entryRequest.approved_by_first_name
+                    ? `${entryRequest.approved_by_first_name} ${entryRequest.approved_by_last_name}`
                     : (entryRequest.approver_email || 'Admin'),
                 approver_role: entryRequest.approver_role
             } : null,
@@ -1554,7 +1872,7 @@ class AttendanceService {
 
     async processMachineLog(payload) {
         console.log('>>> [BIOMETRIC]: Processing push logs:', JSON.stringify(payload));
-        
+
         let logs = [];
         if (Array.isArray(payload)) {
             logs = payload;
@@ -1619,8 +1937,8 @@ class AttendanceService {
                         .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
                         .where('employees.id', empId)
                         .select(
-                            'employees.*', 
-                            'shifts.start_time as shift_start', 
+                            'employees.*',
+                            'shifts.start_time as shift_start',
                             'shifts.grace_period as shift_grace',
                             'attendance_schemes.grace_period as scheme_grace'
                         )
@@ -1657,7 +1975,7 @@ class AttendanceService {
                     results.details.push({ empCode, time: rawTime, action: 'check-in', status });
                 } else {
                     const currentCheckIn = new Date(existing.check_in);
-                    
+
                     if (punchTime > currentCheckIn) {
                         if (!existing.check_out || punchTime > new Date(existing.check_out)) {
                             await db('attendance')
@@ -1667,7 +1985,7 @@ class AttendanceService {
                                     punch_source: 'biometric',
                                     device_id: deviceId
                                 });
-                            
+
                             results.successCount++;
                             results.details.push({ empCode, time: rawTime, action: 'check-out' });
                         } else {
@@ -1719,9 +2037,10 @@ class AttendanceService {
     }
 
     async getEmployeesForWeekendOverride(companyId) {
-        const employees = await db('employees')
-            .where('company_id', companyId)
-            .select('id', 'first_name', 'last_name', 'employee_id_number', 'department_id', 'designation', 'office_location');
+        const employees = await db('employees as e')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
+            .where('e.company_id', companyId)
+            .select('e.id', 'e.first_name', 'e.last_name', 'e.employee_id_number', 'e.department_id', 'e.designation', 'e.office_location', 'd.name as department_name');
         return employees;
     }
 
@@ -1851,7 +2170,7 @@ class AttendanceService {
 
         await db.transaction(async (trx) => {
             let shiftId = null;
-            
+
             if (schemeId) {
                 // Get shift_id from scheme to sync it
                 const scheme = await trx('attendance_schemes')
@@ -1865,12 +2184,12 @@ class AttendanceService {
 
             for (const empId of employeeIds) {
                 const updates = { attendance_scheme_id: schemeId || null };
-                
+
                 // For backward compatibility and UI consistency, also sync shift_id if scheme has a shift
                 if (shiftId) {
                     updates.shift_id = shiftId;
                 }
-                
+
                 await trx('employees')
                     .where({ company_id: companyId, id: empId })
                     .update(updates);
@@ -1883,7 +2202,7 @@ class AttendanceService {
     async getTodayNotCheckedIn(companyId, user) {
         const today = new Date().toISOString().split('T')[0];
         const isAdmin = ['company_admin', 'super_admin'].includes(user.role_name);
-        
+
         let empQuery = db('employees as e')
             .leftJoin('shifts as s', 'e.shift_id', 's.id')
             .where({ 'e.company_id': companyId, 'e.status': 'active' });
@@ -2117,7 +2436,7 @@ class AttendanceService {
             const admins = await db('users')
                 .where({ company_id: companyId, role_name: 'company_admin' })
                 .select('id');
-            
+
             admins.forEach(admin => {
                 if (!targetUserIds.includes(admin.id)) {
                     targetUserIds.push(admin.id);

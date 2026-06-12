@@ -12,6 +12,8 @@ const EmployeeRecords = () => {
     const [activeTab, setActiveTab] = useState('balances'); // 'balances' or 'applications'
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOutlet, setSelectedOutlet] = useState('All');
+    const [selectedDept, setSelectedDept] = useState('All');
+    const [selectedDesignation, setSelectedDesignation] = useState('All');
     const [loading, setLoading] = useState(true);
     const [balances, setBalances] = useState([]);
     const [applications, setApplications] = useState([]);
@@ -55,11 +57,11 @@ const EmployeeRecords = () => {
     };
 
     const handleExportBalances = () => {
-        if (!balances || balances.length === 0) {
+        if (!filteredBalances || filteredBalances.length === 0) {
             alert("No balances data to export.");
             return;
         }
-        const dataToExport = balances.map(emp => {
+        const dataToExport = filteredBalances.map(emp => {
             const row = {
                 employee_id: emp.id,
                 name: emp.name,
@@ -96,11 +98,11 @@ const EmployeeRecords = () => {
     };
 
     const handleExportApplications = () => {
-        if (!applications || applications.length === 0) {
+        if (!filteredApplications || filteredApplications.length === 0) {
             alert("No leave applications to export.");
             return;
         }
-        const dataToExport = applications.map(app => ({
+        const dataToExport = filteredApplications.map(app => ({
             employee_id: app.employee_id || '',
             name: `${app.first_name || ''} ${app.last_name || ''}`.trim(),
             leave_type: app.leave_type_name || '',
@@ -129,25 +131,39 @@ const EmployeeRecords = () => {
         exportToCSV(dataToExport, `Leave_Applications_Log_${new Date().getFullYear()}.csv`, headers);
     };
 
-    // Unique outlets list
+    // Unique lists
     const uniqueOutlets = ['All', ...[...new Set([
         ...balances.map(b => b.office_location),
         ...applications.map(a => a.office_location)
     ].filter(Boolean))].sort()];
 
-    // Filtered data based on search & outlet
+    const uniqueDepts = ['All', ...[...new Set([
+        ...balances.map(b => b.department_name),
+        ...applications.map(a => a.department_name)
+    ].filter(Boolean))].sort()];
+
+    const uniqueDesignations = ['All', ...[...new Set([
+        ...balances.map(b => b.designation),
+        ...applications.map(a => a.designation)
+    ].filter(Boolean))].sort()];
+
+    // Filtered data based on search & outlet & dept & designation
     const filteredBalances = balances.filter(emp => {
         const matchesSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (emp.designation && emp.designation.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesOutlet = selectedOutlet === 'All' || emp.office_location === selectedOutlet;
-        return matchesSearch && matchesOutlet;
+        const matchesDept = selectedDept === 'All' || emp.department_name === selectedDept;
+        const matchesDesignation = selectedDesignation === 'All' || emp.designation === selectedDesignation;
+        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
     });
 
     const filteredApplications = applications.filter(app => {
         const matchesSearch = `${app.first_name} ${app.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
             app.leave_type_name.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesOutlet = selectedOutlet === 'All' || app.office_location === selectedOutlet;
-        return matchesSearch && matchesOutlet;
+        const matchesDept = selectedDept === 'All' || app.department_name === selectedDept;
+        const matchesDesignation = selectedDesignation === 'All' || app.designation === selectedDesignation;
+        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
     });
 
     // Approve / Reject Leave Handler
@@ -375,6 +391,34 @@ const EmployeeRecords = () => {
                             <option value="All">All Outlets</option>
                             {uniqueOutlets.filter(o => o !== 'All').map(o => (
                                 <option key={o} value={o}>{o}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                    {/* Department Filter */}
+                    <div className="relative w-full sm:w-48 shrink-0">
+                        <select
+                            value={selectedDept}
+                            onChange={(e) => setSelectedDept(e.target.value)}
+                            className="w-full appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                        >
+                            <option value="All">All Departments</option>
+                            {uniqueDepts.filter(d => d !== 'All').map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                    {/* Designation Filter */}
+                    <div className="relative w-full sm:w-48 shrink-0">
+                        <select
+                            value={selectedDesignation}
+                            onChange={(e) => setSelectedDesignation(e.target.value)}
+                            className="w-full appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-3.5 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                        >
+                            <option value="All">All Designations</option>
+                            {uniqueDesignations.filter(d => d !== 'All').map(d => (
+                                <option key={d} value={d}>{d}</option>
                             ))}
                         </select>
                         <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

@@ -38,6 +38,7 @@ import BookDemoPage from './pages/BookDemoPage';
 import InspectAssets from './pages/InspectAssets';
 import LegalPage from './pages/LegalPage';
 import CaseStudiesPage from './pages/CaseStudiesPage';
+import ComicsPage from './pages/ComicsPage';
 import GlobalBottomNav from './components/layout/GlobalBottomNav';
 import LeaveOverview from './pages/leave-attendance/Overview';
 import AttendanceOverview from './pages/leave-attendance/AttendanceOverview';
@@ -116,9 +117,14 @@ function App() {
             document.title = branding.app_name;
             localStorage.setItem('platform_app_name', branding.app_name);
           }
-          // Save global brand color for AppShell to pick up
+           // Save global brand color for AppShell to pick up
           if (branding.primary_color) {
             localStorage.setItem('platform_primary_color', branding.primary_color);
+            // Dynamic theme update for entire portfolio style system
+            document.documentElement.style.setProperty('--primary-purple', branding.primary_color);
+            document.documentElement.style.setProperty('--dark-purple', branding.primary_color);
+            document.documentElement.style.setProperty('--light-purple', branding.primary_color + '22');
+            document.documentElement.style.setProperty('--cta-gradient', `linear-gradient(135deg, ${branding.primary_color}, ${branding.primary_color}dd)`);
           }
           // Update Favicon Link
           if (branding.favicon_url) {
@@ -137,6 +143,19 @@ function App() {
       }
     };
     loadDynamicBranding();
+
+    // Capture PWA install prompt event
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      window.deferredPrompt = e;
+      // Dispatch custom event to notify components
+      window.dispatchEvent(new Event('app-installable'));
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   return (
@@ -157,6 +176,7 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/book-demo" element={<BookDemoPage />} />
         <Route path="/case-studies" element={<CaseStudiesPage />} />
+        <Route path="/comics" element={<ComicsPage />} />
         <Route path="/inspect" element={<InspectAssets />} />
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />

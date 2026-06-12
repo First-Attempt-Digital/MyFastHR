@@ -45,6 +45,7 @@ const AssignScheme = () => {
     const [selectedEmployees, setSelectedEmployees] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [deptFilter, setDeptFilter] = useState('All');
+    const [desgFilter, setDesgFilter] = useState('All');
     const [schemeFilter, setSchemeFilter] = useState('All');
     const [outletFilter, setOutletFilter] = useState('All');
 
@@ -291,6 +292,7 @@ const AssignScheme = () => {
             const matchesSearch = fullName.includes(search) || empId.includes(search);
 
             const matchesDept = deptFilter === 'All' || emp.department_name === deptFilter;
+            const matchesDesignation = desgFilter === 'All' || emp.designation === desgFilter;
             const matchesOutlet = outletFilter === 'All' || emp.office_location === outletFilter;
             
             let matchesScheme = true;
@@ -302,9 +304,9 @@ const AssignScheme = () => {
                 }
             }
 
-            return matchesSearch && matchesDept && matchesScheme && matchesOutlet;
+            return matchesSearch && matchesDept && matchesDesignation && matchesScheme && matchesOutlet;
         });
-    }, [assignments, searchQuery, deptFilter, schemeFilter, outletFilter]);
+    }, [assignments, searchQuery, deptFilter, desgFilter, schemeFilter, outletFilter]);
 
     // Outlets list
     const uniqueOutlets = useMemo(() => {
@@ -315,6 +317,12 @@ const AssignScheme = () => {
     const departments = useMemo(() => {
         const depts = new Set(assignments.map(a => a.department_name).filter(Boolean));
         return Array.from(depts);
+    }, [assignments]);
+
+    // Designations list
+    const designations = useMemo(() => {
+        const desgs = new Set(assignments.map(a => a.designation).filter(Boolean));
+        return Array.from(desgs);
     }, [assignments]);
 
     if (forbidden) return (
@@ -762,6 +770,21 @@ const AssignScheme = () => {
                                     >
                                         <option value="All">All Departments</option>
                                         {departments.map(d => (
+                                            <option key={d} value={d}>{d}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+
+                                {/* Designation Filter */}
+                                <div className="relative">
+                                    <select
+                                        value={desgFilter}
+                                        onChange={e => setDesgFilter(e.target.value)}
+                                        className="appearance-none bg-slate-50 border border-slate-100 rounded-xl pl-3 pr-7 h-9 text-[10px] font-bold text-slate-600 outline-none focus:border-indigo-300"
+                                    >
+                                        <option value="All">All Designations</option>
+                                        {designations.map(d => (
                                             <option key={d} value={d}>{d}</option>
                                         ))}
                                     </select>

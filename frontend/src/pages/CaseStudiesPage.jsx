@@ -1,25 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Building2, Users, FileText, ArrowRight, 
   ArrowLeft, CheckCircle2, ChevronRight, BarChart3, TrendingUp 
 } from 'lucide-react';
 import { fetchBranding, getAssetUrl } from '../utils/api';
-import GlobalHeaderMenu from '../components/layout/GlobalHeaderMenu';
-import MobileAuthDropdown from '../components/layout/MobileAuthDropdown';
-import '../styles/landing.css'; // Reuse landing styling & transitions
+import UniversalHeader from '../components/layout/UniversalHeader';
+import UniversalFooter from '../components/layout/UniversalFooter';
+import '../styles/landing.css'; 
+import BlurText from '../components/common/BlurText';
+import SplitText from '../components/common/SplitText';
+import ScrollReveal from '../components/common/ScrollReveal';
+import Antigravity from '../components/common/Antigravity';
 
 const CaseStudiesPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [logoUrl, setLogoUrl] = useState('/logo.png');
   const [logoHeight, setLogoHeight] = useState(40);
   const [logoError, setLogoError] = useState(false);
   const [appName, setAppName] = useState('MyFastHR');
 
-  const [activeSector, setActiveSector] = useState('all');
-  const [companyScale, setCompanyScale] = useState(50); // Sliders count
+  const getInitialSector = () => {
+    const params = new URLSearchParams(location.search);
+    return params.get('sector') || 'all';
+  };
+
+  const [activeSector, setActiveSector] = useState(getInitialSector);
+  const [companyScale, setCompanyScale] = useState(50);
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setActiveSector(params.get('sector') || 'all');
+  }, [location.search]);
 
   useEffect(() => {
     const loadBranding = async () => {
@@ -65,12 +80,72 @@ const CaseStudiesPage = () => {
               { label: 'Payroll compiling time', before: '32 Hours', after: '20 Minutes', status: 'saved' },
               { label: 'Biometric discrepancies', before: '14%', after: '0%', status: 'prevented' }
             ],
-            color: '#7A3F91',
-            bg: '#F2EAF7',
+            color: 'var(--primary-purple)',
+            bg: 'var(--light-purple)',
             summaryText: `CASE STUDY: HIGHWAY KING ENTERPRISES\nSector: Logistics & Operations\nSize: 250+ Employees\n\nCHALLENGE:\nHighway King had manual attendance discrepancies across multiple physical hubs. Payroll took 4 whole operational days each month.\n\nSOLUTION:\nDeploying MyFastHR Biometric Sync Node. Real-time logging of punch coordinates directly with Knex schema updates.\n\nIMPACT:\n- Payroll compiler processing down from 32 hours to 20 minutes.\n- Biometric discrepancy rating dropped from 14% to 0%.`
           },
           {
             id: 2,
+            title: 'Vardhman Textiles Ltd.',
+            sector: 'manufacturing',
+            size: '500+ Factory Workers',
+            challenge: 'Multiple shift scheduling, manual overtime calculation errors, and delay in monthly payroll audit compliance.',
+            solution: 'Deployed dynamic roster scheduling with automated late-coming & overtime penalty compiler.',
+            metrics: [
+              { label: 'Overtime calculation errors', before: '11%', after: '0.2%', status: 'prevented' },
+              { label: 'Roster sync SLA', before: '3 Days', after: 'Real-time', status: 'synchronized' }
+            ],
+            color: '#0284C7',
+            bg: '#E0F2FE',
+            summaryText: `CASE STUDY: VARDHMAN TEXTILES LTD.\nSector: Manufacturing\nSize: 500+ Factory Workers\n\nCHALLENGE:\nMulti-shift scheduling and physical punch errors made overtime tracking highly inaccurate, delaying payroll runs.\n\nSOLUTION:\nMyFastHR dynamic shift roster with automatic overtime penalty computation models.\n\nIMPACT:\n- Overtime calculation disputes reduced from 11% to 0.2%.\n- Shift sync delays minimized to real-time syncs.`
+          },
+          {
+            id: 3,
+            title: 'Shree Cement Builders',
+            sector: 'construction',
+            size: '350+ Construction Staff',
+            challenge: 'Managing daily wage employee logs across 8 construction sites with high proxy attendance rates.',
+            solution: 'Mobile GPS geo-fenced checks combined with remote manager override authorizations.',
+            metrics: [
+              { label: 'Proxy attendance cases', before: '18%', after: '0%', status: 'prevented' },
+              { label: 'Wage distribution delay', before: '6 Days', after: '1 Hour', status: 'saved' }
+            ],
+            color: '#4F46E5',
+            bg: '#EEF2FF',
+            summaryText: `CASE STUDY: SHREE CEMENT BUILDERS\nSector: Construction\nSize: 350+ Construction Staff\n\nCHALLENGE:\nProxy attendance and lack of verification at dispersed building sites inflated actual shift expenses.\n\nSOLUTION:\nGPS geo-fenced mobile verification and on-site supervisor approval controls.\n\nIMPACT:\n- Proxy attendance rates dropped to zero.\n- Instant wage ledger compiler reduced manual verification overhead from 6 days to 1 hour.`
+          },
+          {
+            id: 4,
+            title: 'Kanak Valley Supermarkets',
+            sector: 'retail',
+            size: '180+ Cashiers & Floor Staff',
+            challenge: 'High employee churn rate, document onboarding delays, and mismatch in biometric check-in data.',
+            solution: 'Super Admin OCR Document Vault verification with direct QR-based staff onboarding.',
+            metrics: [
+              { label: 'Onboarding lifecycle', before: '4 Days', after: '5 Minutes', status: 'saved' },
+              { label: 'Data mismatch issues', before: '12%', after: '0%', status: 'resolved' }
+            ],
+            color: '#DB2777',
+            bg: '#FCE7F3',
+            summaryText: `CASE STUDY: KANAK VALLEY SUPERMARKETS\nSector: Retail\nSize: 180+ Staff\n\nCHALLENGE:\nOnboarding staff across stores took days due to background checks and physical document logs.\n\nSOLUTION:\nIntegrated OCR Document Vault and instant company self-onboarding portal.\n\nIMPACT:\n- Candidate onboarding finished within 5 minutes instead of 4 days.\n- System data mismatch cases drops to 0%.`
+          },
+          {
+            id: 5,
+            title: 'Narayana Health Hubs',
+            sector: 'healthcare',
+            size: '300+ Medical Staff',
+            challenge: 'Doctor & nurse rotation mismatches, weekend shift overrides, and night shift allowance calculations.',
+            solution: 'Custom dynamic Shift Roster and Weekend Override allocation rules.',
+            metrics: [
+              { label: 'Rotation dispute claims', before: '15%', after: '0.1%', status: 'prevented' },
+              { label: 'Shift allowance computation', before: '24 Hours', after: 'Instant', status: 'saved' }
+            ],
+            color: '#059669',
+            bg: '#D1FAE5',
+            summaryText: `CASE STUDY: NARAYANA HEALTH HUBS\nSector: Healthcare\nSize: 300+ Medical Staff\n\nCHALLENGE:\nTracking active duty doctors and nurse shifts manually resulted in monthly payroll disputes.\n\nSOLUTION:\nMyFastHR Healthcare roster module featuring weekend shifts and automatic allowance processing.\n\nIMPACT:\n- Roaster disputes reduced from 15% to 0.1%.\n- Dynamic night allowances calculated instantly.`
+          },
+          {
+            id: 6,
             title: 'First Attempt Skills Training',
             sector: 'education',
             size: '120+ Staff members',
@@ -85,7 +160,7 @@ const CaseStudiesPage = () => {
             summaryText: `CASE STUDY: FIRST ATTEMPT SKILLS TRAINING\nSector: Education / Professional Training\nSize: 120+ Staff members\n\nCHALLENGE:\nManual document checks and compliance audits caused massive back-and-forth communication loops.\n\nSOLUTION:\nKYC Approval Vault in MyFastHR. Allowed direct staff uploads with approval indicators.\n\nIMPACT:\n- Audit approval times reduced from 5 days to 30 seconds.\n- Fully secure Document Vault storage running AES-256 encryptions.`
           },
           {
-            id: 3,
+            id: 7,
             title: 'Divyanshu Tech Labs',
             sector: 'it',
             size: '80+ Developers',
@@ -116,56 +191,48 @@ const CaseStudiesPage = () => {
   const estAuditSaving = Math.round(companyScale * 140 * 12);
 
   return (
-    <div className="landing-body min-h-screen flex flex-col font-sans relative">
+    <div className="landing-body min-h-screen flex flex-col font-sans relative bg-white text-slate-800">
       {/* Decorative backdrops */}
-      <div className="bg-mesh" />
-      <div className="bg-mesh-right" />
+      <div className="bg-mesh animate-pulse opacity-40" />
+      <div className="bg-mesh-right opacity-45" />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#F2EAF7]/85 backdrop-blur-md border-b-[3.5px] border-[#2B0D3E] px-6 h-[72px] flex items-center">
-        <div className="max-w-7xl mx-auto flex items-center justify-between w-full">
-          <GlobalHeaderMenu 
-            logoUrl={logoUrl}
-            appName={appName}
-            logoHeight={logoHeight}
-            logoError={logoError}
-            setLogoError={setLogoError}
-          />
-          <nav className="hidden md:flex items-center gap-5 lg:gap-7 text-sm font-bold text-[#2B0D3E]">
-            <button onClick={() => navigate('/')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Home</button>
-            <button onClick={() => navigate('/features')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Features</button>
-            <button onClick={() => navigate('/pricing')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Pricing</button>
-            <button onClick={() => navigate('/support')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Support</button>
-            <button onClick={() => navigate('/infrastructure')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Infra</button>
-            <button onClick={() => navigate('/blog')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Blog</button>
-            <button onClick={() => navigate('/about')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">About</button>
-            <button onClick={() => navigate('/case-studies')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Case Studies</button>
-          </nav>
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => navigate('/book-demo')}
-              className="hidden md:block px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-[#2B0D3E] border-[2.5px] border-[#2B0D3E] bg-[#C59DD9]/40 hover:bg-[#C59DD9]/70 transition-all shadow-[2px_2px_0px_0px_#2B0D3E]"
-            >
-              Book Demo
-            </button>
-            <MobileAuthDropdown />
-          </div>
-        </div>
-      </header>
+      {/* Universal Header */}
+      <UniversalHeader />
 
       {/* Hero Intro */}
       <section className="relative px-6 py-16 text-center overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none opacity-40 z-0">
+          <Antigravity
+            count={120}
+            magnetRadius={6}
+            ringRadius={7}
+            waveSpeed={0.4}
+            waveAmplitude={1}
+            particleSize={1.5}
+            lerpSpeed={0.05}
+            color={'#8b5cf6'}
+            autoAnimate={true}
+            particleVariance={1}
+            particleShape="sphere"
+          />
+        </div>
         <div className="max-w-4xl mx-auto space-y-6 relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border-2 border-[#2B0D3E] bg-[#C59DD9]/20 shadow-[2px_2px_0px_0px_#2B0D3E] text-[10px] font-black uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-100 bg-purple-50/20 text-xs font-bold uppercase tracking-wider">
             📊 Metric-Proven Efficiency
           </div>
-          <h1 className="text-4xl sm:text-6xl font-black text-[#2B0D3E] font-outfit leading-tight tracking-tight">
-            Client Success & <br />
-            <span className="text-[#7A3F91] underline decoration-[#C59DD9] decoration-wavy">Case Studies</span>
+          <h1 className="text-4xl sm:text-6xl font-black text-slate-900 leading-tight tracking-tight">
+            <SplitText text="Client Success &" className="inline-block" tag="span" textAlign="center" delay={30} /> <br />
+            <span style={{ color: 'var(--primary-purple)' }}><BlurText text="Case Studies" className="inline-flex" /></span>
           </h1>
-          <p className="text-base sm:text-lg font-semibold text-[#2B0D3E]/80 max-w-2xl mx-auto">
-            See how operations hubs, skill institutes, and dev labs eliminated compliance overhead and payroll latency by shifting logs to MyFastHR Mainframe nodes.
-          </p>
+          <SplitText 
+            text="See how operations hubs, skill institutes, and dev labs eliminated compliance overhead and payroll latency by shifting logs to MyFastHR Mainframe nodes." 
+            className="text-xs sm:text-sm md:text-base font-semibold text-gray-500 max-w-2xl mx-auto block"
+            tag="p"
+            textAlign="center"
+            splitType="words"
+            delay={20}
+            duration={0.8}
+          />
         </div>
       </section>
 
@@ -176,22 +243,32 @@ const CaseStudiesPage = () => {
         <div className="flex flex-wrap justify-center gap-3">
           {[
             { id: 'all', label: 'All Industries' },
-            { id: 'logistics', label: 'Logistics / Hubs' },
-            { id: 'education', label: 'Education / Training' },
-            { id: 'it', label: 'IT & Software Dev' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSector(tab.id)}
-              className={`px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl border-2 transition-all active:scale-95 ${
-                activeSector === tab.id
-                  ? 'bg-[#7A3F91] text-white border-[#2B0D3E] shadow-[3px_3px_0px_0px_#2B0D3E]'
-                  : 'bg-white text-[#2B0D3E] border-[#2B0D3E] shadow-[2px_2px_0px_0px_#2B0D3E] hover:bg-[#F2EAF7]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: 'manufacturing', label: 'Manufacturing' },
+            { id: 'construction', label: 'Construction' },
+            { id: 'retail', label: 'Retail' },
+            { id: 'healthcare', label: 'Healthcare' },
+            { id: 'logistics', label: 'Logistics' },
+            { id: 'education', label: 'Education' },
+            { id: 'it', label: 'IT & Tech' }
+          ].map(tab => {
+            const isActive = activeSector === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSector(tab.id)}
+                className={`px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl border transition-all cursor-pointer ${
+                  isActive
+                    ? 'text-white shadow-md border-transparent'
+                    : 'bg-white text-slate-700 border-purple-100 hover:border-purple-200 hover:bg-slate-50'
+                }`}
+                style={{
+                  backgroundColor: isActive ? 'var(--primary-purple)' : undefined
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Dynamic Cards Grid */}
@@ -199,46 +276,52 @@ const CaseStudiesPage = () => {
           {filteredCases.map(c => (
             <div 
               key={c.id}
-              className="brutalist-box bg-white rounded-[32px] p-6 text-left flex flex-col justify-between space-y-6 hover:scale-[1.02] transition-transform"
+              className="bg-white rounded-[24px] p-6 text-left flex flex-col justify-between space-y-6 border border-purple-100 shadow-[0_8px_30px_rgba(96,40,217,0.03)] hover:shadow-[0_12px_40px_rgba(96,40,217,0.08)] hover:-translate-y-1 transition-all duration-300"
             >
               {/* Header */}
               <div className="space-y-3">
                 <div className="flex justify-between items-start">
                   <span 
-                    style={{ backgroundColor: c.bg, color: c.color, borderColor: '#2B0D3E' }}
-                    className="text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full border"
+                    style={{ 
+                      backgroundColor: c.bg.startsWith('var(') ? 'var(--light-purple)' : c.bg, 
+                      color: c.color.startsWith('var(') ? 'var(--primary-purple)' : c.color, 
+                      borderColor: 'transparent' 
+                    }}
+                    className="text-[9px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border"
                   >
                     {c.sector}
                   </span>
-                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{c.size}</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.size}</span>
                 </div>
-                <h3 className="text-xl font-black text-[#2B0D3E] font-outfit">{c.title}</h3>
+                <h3 className="text-xl font-bold text-slate-900">{c.title}</h3>
               </div>
 
               {/* Challenge / Solution details */}
-              <div className="space-y-4 pt-4 border-t border-[#F2EAF7]">
+              <div className="space-y-4 pt-4 border-t border-purple-50">
                 <div className="space-y-1">
-                  <span className="text-[9px] font-black uppercase text-[#2B0D3E]/50 tracking-widest block">Operational Challenge</span>
-                  <p className="text-xs font-semibold text-[#2B0D3E]/90 leading-relaxed">{c.challenge}</p>
+                  <span className="text-[9px] font-bold uppercase text-gray-400 tracking-widest block">Operational Challenge</span>
+                  <ScrollReveal containerClassName="text-xs font-semibold text-slate-650 leading-relaxed text-slate-650 block text-left" baseOpacity={0.1}>
+                    {c.challenge}
+                  </ScrollReveal>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[9px] font-black uppercase text-[#7A3F91] tracking-widest block">Mainframe Solution</span>
-                  <p className="text-xs font-semibold text-[#2B0D3E]/90 leading-relaxed">{c.solution}</p>
+                  <span className="text-[9px] font-bold uppercase tracking-widest block" style={{ color: 'var(--primary-purple)' }}>Mainframe Solution</span>
+                  <p className="text-xs font-semibold text-slate-650 leading-relaxed text-slate-650">{c.solution}</p>
                 </div>
               </div>
 
               {/* Visual Metrics comparison */}
-              <div className="space-y-3 pt-4 border-t border-[#F2EAF7] flex-grow">
-                <span className="text-[9px] font-black uppercase text-[#2B0D3E]/50 tracking-widest block mb-2">Efficiency Metres</span>
+              <div className="space-y-3 pt-4 border-t border-purple-50 flex-grow">
+                <span className="text-[9px] font-bold uppercase text-gray-400 tracking-widest block mb-2">Efficiency Metrics</span>
                 {c.metrics.map((m, idx) => (
-                  <div key={idx} className="bg-[#F2EAF7]/40 p-3 rounded-xl border border-[#2B0D3E]/10 space-y-2">
-                    <div className="flex justify-between text-[10px] font-bold text-[#2B0D3E]">
+                  <div key={idx} className="bg-purple-50/20 p-3 rounded-xl border border-purple-100/40 space-y-2">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-700">
                       <span>{m.label}</span>
-                      <span className="text-[#7A3F91] font-black lowercase">({m.status})</span>
+                      <span className="font-bold lowercase text-gray-400">({m.status})</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-red-500 line-through">{m.before}</span>
-                      <ChevronRight size={14} className="text-[#2B0D3E]/50" />
+                      <span className="text-xs font-bold text-rose-500 line-through">{m.before}</span>
+                      <ChevronRight size={14} className="text-gray-450 text-gray-400" />
                       <span className="text-sm font-black text-emerald-600 flex items-center gap-1">
                         <CheckCircle2 size={12} />
                         {m.after}
@@ -254,26 +337,26 @@ const CaseStudiesPage = () => {
 
       </section>
 
-      {/* Interactive Savings Estimator Widget */}
-      <section className="px-6 py-20 bg-[#F2EAF7] border-t-[3.5px] border-[#2B0D3E]">
-        <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center text-left">
+      {/* Savings Estimator Widget */}
+      <section className="px-6 py-20 bg-purple-50/10 border-t border-purple-100">
+        <div className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center text-left">
           
           {/* Controls */}
           <div className="lg:col-span-6 space-y-6">
-            <span className="text-xs font-black uppercase tracking-widest text-[#7A3F91] bg-white border border-[#C59DD9] px-3 py-1 rounded-full">
+            <span className="text-xs font-bold uppercase tracking-widest bg-white border border-purple-100 px-3 py-1 rounded-full" style={{ color: 'var(--primary-purple)' }}>
               Mainframe Savings Estimator
             </span>
-            <h2 className="text-3xl font-black text-[#2B0D3E] font-outfit tracking-tight">
+            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
               Estimate Your Corporate Impact
             </h2>
-            <p className="text-sm font-semibold text-[#2B0D3E]/80">
+            <p className="text-sm font-semibold text-gray-500">
               Input your workforce scale to see potential annual savings based on the averaged performance metrics of Highway King & First Attempt Skills Training.
             </p>
 
-            <div className="space-y-3 bg-white p-5 border-[2.5px] border-[#2B0D3E] rounded-2xl shadow-[4px_4px_0px_0px_#2B0D3E]">
+            <div className="space-y-3 bg-white p-5 border border-purple-100 rounded-2xl shadow-sm">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-black uppercase text-[#2B0D3E]">Total Active Staff</span>
-                <span className="text-sm font-black text-[#7A3F91] font-outfit">{companyScale} Employees</span>
+                <span className="text-xs font-bold uppercase text-slate-700">Total Active Staff</span>
+                <span className="text-sm font-bold" style={{ color: 'var(--primary-purple)' }}>{companyScale} Employees</span>
               </div>
               <input
                 type="range"
@@ -282,7 +365,8 @@ const CaseStudiesPage = () => {
                 step="10"
                 value={companyScale}
                 onChange={(e) => setCompanyScale(parseInt(e.target.value))}
-                className="w-full h-2 bg-[#C59DD9]/40 rounded-lg appearance-none cursor-pointer accent-[#7A3F91]"
+                className="w-full h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer"
+                style={{ accentColor: 'var(--primary-purple)' }}
               />
             </div>
           </div>
@@ -290,68 +374,29 @@ const CaseStudiesPage = () => {
           {/* Estimates display */}
           <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Stat 1 */}
-            <div className="brutalist-box bg-white p-6 rounded-2xl">
-              <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Est. HR Hours Saved / Yr</span>
-              <span className="text-3xl font-black text-[#2B0D3E] font-outfit block mt-1">
+            <div className="bg-white p-6 rounded-2xl border border-purple-100 shadow-[0_8px_30px_rgba(96,40,217,0.03)] text-left space-y-1">
+              <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Est. HR Hours Saved / Yr</span>
+              <span className="text-3xl font-bold text-slate-950 block mt-1">
                 {estHoursSaved} Hours
               </span>
-              <p className="text-[9px] font-medium text-[#2B0D3E]/60 mt-1">Freeing management time from payroll rosters.</p>
+              <p className="text-[9px] font-semibold text-gray-400 mt-1">Freeing management time from payroll rosters.</p>
             </div>
 
             {/* Stat 2 */}
-            <div className="brutalist-box bg-[#7A3F91] text-white p-6 rounded-2xl shadow-[4px_4px_0px_0px_#2B0D3E] border-[2.5px] border-[#2B0D3E]">
-              <span className="text-[10px] font-black uppercase text-white/70 tracking-wider">Audit Leakages Restored</span>
-              <span className="text-3xl font-black text-[#C59DD9] font-outfit block mt-1">
+            <div className="text-white p-6 rounded-2xl shadow-lg text-left space-y-1" style={{ background: 'var(--cta-gradient)' }}>
+              <span className="text-[10px] font-bold uppercase text-white/80 tracking-wider">Audit Leakages Restored</span>
+              <span className="text-3xl font-black block mt-1">
                 ₹{estAuditSaving.toLocaleString()}
               </span>
-              <p className="text-[9px] font-medium text-white/80 mt-1">By preventing biometric mismatches & document gaps.</p>
+              <p className="text-[9px] font-semibold text-white/70 mt-1">By preventing biometric mismatches & document gaps.</p>
             </div>
           </div>
 
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-[#2B0D3E] text-[#F2EAF7] px-6 py-12 border-t-[3.5px] border-black mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
-            {!logoError ? (
-              <img 
-                src={logoUrl} 
-                alt={`${appName} Logo`} 
-                className="h-8 w-auto object-contain brightness-0 invert" 
-                onError={() => setLogoError(true)}
-              />
-            ) : (
-              <span className="text-xl font-black font-outfit text-white">{appName}</span>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-6">
-            <button 
-              onClick={() => navigate('/support')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Support
-            </button>
-            <button 
-              onClick={() => navigate('/privacy')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Privacy Policy
-            </button>
-            <button 
-              onClick={() => navigate('/terms')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Terms
-            </button>
-            <div className="text-xs font-bold text-[#C59DD9]">
-              © {new Date().getFullYear()} {appName} Corp. All rights reserved. Made in Jaipur.
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Universal Footer */}
+      <UniversalFooter />
     </div>
   );
 };

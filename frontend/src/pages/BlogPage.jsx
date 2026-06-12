@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   BookOpen, Search, ArrowLeft, ArrowRight, 
@@ -6,9 +6,14 @@ import {
   Sparkles, CheckCircle2, ChevronRight, X
 } from 'lucide-react';
 import { fetchBranding, getAssetUrl } from '../utils/api';
-import GlobalHeaderMenu from '../components/layout/GlobalHeaderMenu';
-import MobileAuthDropdown from '../components/layout/MobileAuthDropdown';
+import UniversalHeader from '../components/layout/UniversalHeader';
+import UniversalFooter from '../components/layout/UniversalFooter';
 import '../styles/landing.css';
+import BlurText from '../components/common/BlurText';
+import SplitText from '../components/common/SplitText';
+import ScrollReveal from '../components/common/ScrollReveal';
+import VariableProximity from '../components/common/VariableProximity';
+import Antigravity from '../components/common/Antigravity';
 
 const defaultBlogs = [
   {
@@ -93,6 +98,8 @@ const defaultBlogs = [
 
 const BlogPage = () => {
   const navigate = useNavigate();
+  const pageRef = useRef(null);
+  const blogListContainerRef = useRef(null);
   const [logoUrl, setLogoUrl] = useState('/logo.png');
   const [appName, setAppName] = useState('MyFastHR');
   const [logoHeight, setLogoHeight] = useState(40);
@@ -165,89 +172,67 @@ const BlogPage = () => {
   const categories = ['All', 'HR Tech', 'Payroll', 'Compliance', 'Culture'];
 
   return (
-    <div className="landing-body min-h-screen flex flex-col font-sans relative overflow-x-hidden">
-      {/* Decorative Blur Backdrops */}
-      <div className="bg-mesh animate-pulse" />
-      <div className="bg-mesh-right" />
-
-      {/* 1. Header Navbar */}
-      <header className="sticky top-0 z-50 bg-[#F2EAF7]/85 backdrop-blur-md border-b-[3.5px] border-[#2B0D3E] px-6 h-[72px] flex items-center">
-        <div className="max-w-7xl mx-auto flex items-center justify-between w-full">
-          {/* Logo with mobile responsive menu */}
-          <GlobalHeaderMenu 
-            logoUrl={logoUrl}
-            appName={appName}
-            logoHeight={logoHeight}
-            logoError={logoError}
-            setLogoError={setLogoError}
-          />
-
-          {/* Navigation Links */}
-          <nav className="hidden md:flex items-center gap-5 lg:gap-7 text-sm font-bold text-[#2B0D3E]">
-            <button onClick={() => navigate('/')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Home</button>
-            <button onClick={() => navigate('/features')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Features</button>
-            <button onClick={() => navigate('/pricing')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Pricing</button>
-            <button onClick={() => navigate('/support')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Support</button>
-            <button onClick={() => navigate('/infrastructure')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Infra</button>
-            <button onClick={() => navigate('/blog')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Blog</button>
-            <button onClick={() => navigate('/about')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">About</button>
-            <button onClick={() => navigate('/case-studies')} className="hover:text-[#7A3F91] transition-colors font-bold text-sm bg-transparent border-none outline-none cursor-pointer">Case Studies</button>
-          </nav>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-4">
-              <button 
-                onClick={() => navigate('/book-demo')}
-                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-[#2B0D3E] border-[2.5px] border-[#2B0D3E] bg-[#C59DD9]/40 hover:bg-[#C59DD9]/70 transition-all active:scale-95 shadow-[2px_2px_0px_0px_#2B0D3E] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              >
-                Book Demo
-              </button>
-              <button 
-                onClick={() => navigate('/employee')}
-                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-[#2B0D3E] border-[2.5px] border-[#2B0D3E] bg-white hover:bg-[#C59DD9]/20 transition-all active:scale-95 shadow-[2px_2px_0px_0px_#2B0D3E] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none"
-              >
-                Employee Login
-              </button>
-              <button 
-                onClick={() => navigate('/login')}
-                className="px-5 py-2 text-xs font-black uppercase tracking-wider rounded-xl text-white bg-[#7A3F91] border-[2.5px] border-[#2B0D3E] shadow-[3px_3px_0px_0px_#2B0D3E] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_#2B0D3E] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all"
-              >
-                Get Started
-              </button>
-            </div>
-            <MobileAuthDropdown />
-          </div>
-        </div>
-      </header>
+    <div ref={pageRef} className="landing-body min-h-screen flex flex-col bg-white font-sans relative overflow-x-hidden">
+      {/* Dynamic Header */}
+      <UniversalHeader />
 
       {/* 2. Hero Header Section */}
-      <section className="px-6 py-12 lg:py-20 text-center relative z-10">
-        <div className="max-w-3xl mx-auto space-y-6 reveal-on-scroll reveal-up">
+      <section className="relative px-6 py-16 lg:py-24 text-center bg-gradient-to-b from-purple-50/50 to-white overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none opacity-40 z-0">
+          <Antigravity
+            count={120}
+            magnetRadius={6}
+            ringRadius={7}
+            waveSpeed={0.4}
+            waveAmplitude={1}
+            particleSize={1.5}
+            lerpSpeed={0.05}
+            color={'#8b5cf6'}
+            autoAnimate={true}
+            particleVariance={1}
+            particleShape="sphere"
+          />
+        </div>
+        <div className="relative z-10 max-w-3xl mx-auto space-y-6 reveal-on-scroll reveal-up">
           <button 
             onClick={() => navigate('/')}
-            className="inline-flex items-center gap-2 px-4 py-1.5 clay-pill text-xs font-black uppercase text-[#7A3F91] hover:scale-105 transition-transform"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase text-gray-600 bg-white border border-gray-200 hover:scale-105 transition-all cursor-pointer shadow-sm"
           >
-            <ArrowLeft size={14} /> Back to main landing
+            <ArrowLeft size={14} /> 
+            <VariableProximity
+              label="Back to Home"
+              fromFontVariationSettings="'wght' 700"
+              toFontVariationSettings="'wght' 950"
+              containerRef={pageRef}
+              radius={120}
+              falloff="linear"
+            />
           </button>
           
-          <h1 className="text-4xl sm:text-6xl font-black text-[#2B0D3E] font-outfit leading-none tracking-tight">
-            Corporate Insights. <br/>
-            <span className="text-[#7A3F91] underline decoration-[#C59DD9] decoration-wavy">Engineered for Teams.</span>
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight leading-none">
+            <SplitText text="Corporate Insights." className="inline-block" tag="span" textAlign="center" delay={30} /> <br/>
+            <span className="italic" style={{ color: 'var(--primary-purple)' }}><BlurText text="Engineered for Teams." className="inline-flex" /></span>
           </h1>
-          <p className="text-sm sm:text-base font-semibold text-[#2B0D3E]/80 max-w-xl mx-auto leading-relaxed">
-            Troubleshooting logs, industry guidelines, and system architectures compiled by our engineering and product teams.
-          </p>
+          <SplitText 
+            text="Troubleshooting logs, industry guidelines, and system architectures compiled by our engineering and product teams." 
+            className="text-xs sm:text-sm md:text-base font-semibold text-gray-500 max-w-xl mx-auto leading-relaxed block"
+            tag="p"
+            textAlign="center"
+            splitType="words"
+            delay={20}
+            duration={0.8}
+          />
 
           {/* Search Box Input */}
           <div className="max-w-md mx-auto pt-4 relative">
-            <div className="flex items-center bg-white border-[3px] border-[#2B0D3E] rounded-2xl shadow-[4px_4px_0px_0px_#2B0D3E] overflow-hidden px-4">
-              <Search className="text-[#2B0D3E]/50 shrink-0" size={18} />
+            <div className="flex items-center bg-white border border-purple-100 rounded-2xl shadow-[0_8px_30px_rgba(96,40,217,0.03)] overflow-hidden px-4 focus-within:border-[#6028D9]/40 transition-colors">
+              <Search className="text-gray-400 shrink-0" size={18} />
               <input 
                 type="text" 
                 placeholder="Search articles, categories, or keywords..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full py-3.5 px-3 outline-none text-xs font-bold text-[#2B0D3E] placeholder-[#2B0D3E]/40 bg-transparent"
+                className="w-full py-3.5 px-3 outline-none text-xs font-bold text-slate-800 placeholder-gray-400 bg-transparent border-none"
               />
             </div>
           </div>
@@ -256,20 +241,34 @@ const BlogPage = () => {
 
       {/* 3. Category Filter Tabs */}
       <section className="px-6 pb-8 relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-wrap justify-center gap-3 reveal-on-scroll reveal-scale">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-6 py-2.5 rounded-full border-2 font-black text-xs uppercase tracking-wider transition-all shadow-[2.5px_2.5px_0px_0px_#2B0D3E] active:translate-y-0.5 active:shadow-none ${
-                selectedCategory === cat
-                  ? 'bg-[#7A3F91] text-white border-[#2B0D3E]'
-                  : 'bg-white text-[#2B0D3E] border-[#2B0D3E]/30 hover:border-[#2B0D3E] hover:bg-[#F2EAF7]/30'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="max-w-7xl mx-auto flex flex-wrap justify-center gap-3">
+          {categories.map((cat) => {
+            const isActive = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 border cursor-pointer ${
+                  isActive
+                    ? 'text-white border-transparent'
+                    : 'bg-white text-gray-600 border-[#E9D5FF] hover:border-[#6028D9] hover:bg-purple-50/50'
+                }`}
+                style={{
+                  backgroundColor: isActive ? 'var(--primary-purple)' : undefined,
+                  boxShadow: isActive ? '0 4px 14px rgba(96, 40, 217, 0.25)' : '0 2px 6px rgba(0,0,0,0.02)'
+                }}
+              >
+                <VariableProximity
+                  label={cat}
+                  fromFontVariationSettings="'wght' 700"
+                  toFontVariationSettings="'wght' 950"
+                  containerRef={pageRef}
+                  radius={120}
+                  falloff="linear"
+                />
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -277,63 +276,148 @@ const BlogPage = () => {
       <section className="px-6 pb-24 relative z-10">
         <div className="max-w-7xl mx-auto">
           {filteredBlogs.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredBlogs.map((blog, idx) => {
-                const delays = ['reveal-delay-100', 'reveal-delay-200', 'reveal-delay-300'];
-                return (
-                  <div 
-                    key={blog.id}
-                    className={`brutalist-box rounded-[32px] p-6 bg-white border-[3px] border-[#2B0D3E] shadow-[6px_6px_0px_0px_#2B0D3E] hover:translate-y-[-4px] hover:shadow-[8px_8px_0px_0px_#2B0D3E] transition-all flex flex-col justify-between reveal-on-scroll reveal-up ${delays[idx % 3]}`}
-                  >
-                    <div className="space-y-4">
-                      {/* Image Block */}
-                      <div className="w-full aspect-[16/10] rounded-2xl border-2 border-[#2B0D3E] bg-[#F2EAF7] overflow-hidden relative shadow-[2px_2px_0px_0px_#2B0D3E]">
-                        <img 
-                          src={blog.image} 
-                          alt={blog.title}
-                          className="w-full h-full object-cover"
+            <div ref={blogListContainerRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" style={{ position: 'relative' }}>
+              {filteredBlogs.map((blog) => (
+                <div 
+                  key={blog.id}
+                  className="bg-white rounded-3xl p-6 border border-purple-100 hover:border-[#6028D9]/40 hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between shadow-[0_8px_30px_rgba(96,40,217,0.03)] hover:shadow-[0_12px_40px_rgba(96,40,217,0.08)]"
+                >
+                  <div className="space-y-4">
+                    {/* Image Block */}
+                    <div className="w-full aspect-[16/10] rounded-2xl bg-purple-50/50 overflow-hidden relative border border-purple-100">
+                      <img 
+                        src={blog.image} 
+                        alt={blog.title}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                      />
+                      <span 
+                        className="absolute top-3 left-3 px-3 py-1 text-[9px] font-bold uppercase tracking-wider rounded-lg text-white animate-pulse"
+                        style={{ backgroundColor: 'var(--primary-purple)' }}
+                      >
+                        <VariableProximity
+                          label={blog.category}
+                          fromFontVariationSettings="'wght' 700"
+                          toFontVariationSettings="'wght' 950"
+                          containerRef={pageRef}
+                          radius={120}
+                          falloff="linear"
                         />
-                        <span className="absolute top-3 left-3 px-3 py-1 bg-white text-[9px] font-black uppercase tracking-wider rounded-lg border-2 border-[#2B0D3E] shadow-[1.5px_1.5px_0px_0px_#2B0D3E]">
-                          {blog.category}
-                        </span>
-                      </div>
-
-                      {/* Header details */}
-                      <div className="flex items-center gap-4 text-[10px] font-bold text-[#2B0D3E]/50 uppercase tracking-wider">
-                        <span className="flex items-center gap-1"><Calendar size={12} /> {blog.date}</span>
-                        <span className="flex items-center gap-1"><Clock size={12} /> {blog.readTime}</span>
-                      </div>
-
-                      {/* Title & Excerpt */}
-                      <h3 className="text-lg font-black text-[#2B0D3E] font-outfit leading-tight hover:text-[#7A3F91] transition-colors">{blog.title}</h3>
-                      <p className="text-xs font-semibold text-[#2B0D3E]/70 leading-relaxed line-clamp-3">{blog.excerpt}</p>
+                      </span>
                     </div>
 
-                    <div className="pt-6 border-t border-[#2B0D3E]/10 flex items-center justify-between mt-6">
-                      <span className="text-[10px] font-black text-[#2B0D3E]/40 uppercase tracking-widest">{blog.author}</span>
-                      <button 
-                        onClick={() => setSelectedBlog(blog)}
-                        className="px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl text-white bg-[#7A3F91] border-2 border-[#2B0D3E] shadow-[2px_2px_0px_0px_#2B0D3E] hover:translate-x-[0.5px] hover:translate-y-[0.5px] hover:shadow-[1px_1px_0px_0px_#2B0D3E] transition-all"
-                      >
-                        Read Node
-                      </button>
+                    {/* Header details */}
+                    <div className="flex items-center gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={12} /> 
+                        <VariableProximity
+                          label={blog.date}
+                          fromFontVariationSettings="'wght' 500"
+                          toFontVariationSettings="'wght' 900"
+                          containerRef={pageRef}
+                          radius={120}
+                          falloff="linear"
+                        />
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={12} /> 
+                        <VariableProximity
+                          label={blog.readTime}
+                          fromFontVariationSettings="'wght' 500"
+                          toFontVariationSettings="'wght' 900"
+                          containerRef={pageRef}
+                          radius={120}
+                          falloff="linear"
+                        />
+                      </span>
+                    </div>
+
+                    {/* Title & Excerpt */}
+                    <h3 className="text-lg font-bold text-slate-900 leading-tight hover:text-[var(--primary-purple)] transition-colors">
+                      <VariableProximity
+                        label={blog.title}
+                        fromFontVariationSettings="'wght' 400"
+                        toFontVariationSettings="'wght' 900"
+                        containerRef={blogListContainerRef}
+                        radius={120}
+                        falloff="linear"
+                      />
+                    </h3>
+                    <div className="text-xs text-gray-500 leading-relaxed line-clamp-3 font-medium block text-left" style={{ position: 'relative' }}>
+                      <VariableProximity
+                        label={blog.excerpt}
+                        fromFontVariationSettings="'wght' 400"
+                        toFontVariationSettings="'wght' 900"
+                        containerRef={blogListContainerRef}
+                        radius={120}
+                        falloff="linear"
+                      />
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="pt-6 border-t border-purple-50 mt-6 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      <VariableProximity
+                        label={blog.author}
+                        fromFontVariationSettings="'wght' 500"
+                        toFontVariationSettings="'wght' 900"
+                        containerRef={pageRef}
+                        radius={120}
+                        falloff="linear"
+                      />
+                    </span>
+                    <button 
+                      onClick={() => setSelectedBlog(blog)}
+                      className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider rounded-xl text-white border-none cursor-pointer hover:shadow-lg transition-all"
+                      style={{ background: 'var(--cta-gradient)' }}
+                    >
+                      <VariableProximity
+                        label="Read Node"
+                        fromFontVariationSettings="'wght' 700"
+                        toFontVariationSettings="'wght' 950"
+                        containerRef={pageRef}
+                        radius={120}
+                        falloff="linear"
+                      />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
-            <div className="brutalist-box rounded-3xl p-16 bg-white border-[3px] border-[#2B0D3E] text-center space-y-4 shadow-[6px_6px_0px_0px_#2B0D3E] max-w-lg mx-auto reveal-on-scroll reveal-scale">
-              <BookOpen className="text-[#7A3F91] mx-auto animate-bounce" size={40} />
-              <h3 className="text-lg font-black text-[#2B0D3E] font-outfit">No Articles Matching Query</h3>
-              <p className="text-xs font-semibold text-[#2B0D3E]/60 leading-relaxed">
-                We couldn't find any documents matched with "{searchQuery}". Try other key tokens or reset category filters.
+            <div className="bg-white rounded-3xl border border-purple-100 p-16 text-center space-y-4 shadow-sm max-w-lg mx-auto">
+              <BookOpen className="mx-auto text-gray-300" size={40} />
+              <h3 className="text-lg font-bold text-slate-800">
+                <VariableProximity
+                  label="No Articles Matching Query"
+                  fromFontVariationSettings="'wght' 700"
+                  toFontVariationSettings="'wght' 950"
+                  containerRef={pageRef}
+                  radius={120}
+                  falloff="linear"
+                />
+              </h3>
+              <p className="text-xs font-semibold text-gray-500 leading-relaxed">
+                <VariableProximity
+                  label={`We couldn't find any documents matched with "${searchQuery}". Try other key tokens or reset category filters.`}
+                  fromFontVariationSettings="'wght' 400"
+                  toFontVariationSettings="'wght' 900"
+                  containerRef={pageRef}
+                  radius={120}
+                  falloff="linear"
+                />
               </p>
               <button 
                 onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
-                className="px-5 py-2.5 brutalist-btn text-xs rounded-xl"
+                className="btn-primary px-5 py-2.5 text-xs rounded-xl cursor-pointer"
               >
-                Reset Search
+                <VariableProximity
+                  label="Reset Search"
+                  fromFontVariationSettings="'wght' 700"
+                  toFontVariationSettings="'wght' 950"
+                  containerRef={pageRef}
+                  radius={120}
+                  falloff="linear"
+                />
               </button>
             </div>
           )}
@@ -346,57 +430,134 @@ const BlogPage = () => {
           {/* Backdrop */}
           <div 
             onClick={() => setSelectedBlog(null)} 
-            className="absolute inset-0 bg-[#2B0D3E]/75 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
           />
 
           {/* Modal Container */}
-          <div className="w-full max-w-3xl brutalist-box bg-white rounded-[36px] border-[3.5px] border-[#2B0D3E] shadow-[8px_8px_0px_0px_#2B0D3E] relative z-10 overflow-hidden flex flex-col max-h-[90vh] animate-fade-in-up">
+          <div className="w-full max-w-3xl bg-white rounded-[32px] border border-purple-100 shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-bottom duration-300">
             
             {/* Modal Header */}
-            <div className="p-6 border-b-[3px] border-[#2B0D3E] flex justify-between items-center bg-[#F2EAF7]/50">
+            <div className="p-6 border-b border-purple-50 flex justify-between items-center bg-purple-50/25">
               <div className="flex items-center gap-3">
-                <span className="px-3.5 py-1 bg-[#7A3F91] text-white text-[10px] font-black uppercase tracking-wider rounded-lg border-2 border-[#2B0D3E] shadow-[2px_2px_0px_0px_#2B0D3E]">
-                  {selectedBlog.category}
+                <span 
+                  className="px-3.5 py-1 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg"
+                  style={{ backgroundColor: 'var(--primary-purple)' }}
+                >
+                  <VariableProximity
+                    label={selectedBlog.category}
+                    fromFontVariationSettings="'wght' 700"
+                    toFontVariationSettings="'wght' 950"
+                    containerRef={pageRef}
+                    radius={120}
+                    falloff="linear"
+                  />
                 </span>
-                <span className="text-[10px] font-black text-[#2B0D3E]/50 uppercase tracking-widest">{selectedBlog.readTime}</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  <VariableProximity
+                    label={selectedBlog.readTime}
+                    fromFontVariationSettings="'wght' 500"
+                    toFontVariationSettings="'wght' 900"
+                    containerRef={pageRef}
+                    radius={120}
+                    falloff="linear"
+                  />
+                </span>
               </div>
               <button 
                 onClick={() => setSelectedBlog(null)}
-                className="w-10 h-10 rounded-xl bg-white border-2 border-[#2B0D3E] shadow-[2.5px_2.5px_0px_0px_#2B0D3E] hover:translate-y-0.5 hover:shadow-none flex items-center justify-center text-[#2B0D3E] transition-all"
+                className="w-8 h-8 rounded-full bg-white border border-gray-200 hover:bg-gray-50 flex items-center justify-center text-gray-500 transition-all cursor-pointer"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Modal Scrollable Content */}
-            <div className="p-6 lg:p-10 overflow-y-auto space-y-8 custom-scroll">
+            <div className="p-6 lg:p-10 overflow-y-auto space-y-8 text-left">
               <div className="space-y-4">
-                <h2 className="text-2xl sm:text-3xl font-black text-[#2B0D3E] font-outfit leading-tight">{selectedBlog.title}</h2>
-                <div className="flex flex-wrap items-center gap-4 text-[10px] font-bold text-[#2B0D3E]/60 uppercase tracking-wider">
-                  <span className="flex items-center gap-1.5"><User size={12} className="text-[#7A3F91]" /> By {selectedBlog.author}</span>
-                  <span className="flex items-center gap-1.5"><Calendar size={12} className="text-[#7A3F91]" /> Published {selectedBlog.date}</span>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 leading-tight">
+                  <VariableProximity
+                    label={selectedBlog.title}
+                    fromFontVariationSettings="'wght' 700"
+                    toFontVariationSettings="'wght' 950"
+                    containerRef={pageRef}
+                    radius={120}
+                    falloff="linear"
+                  />
+                </h2>
+                <div className="flex flex-wrap items-center gap-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5">
+                    <User size={12} style={{ color: 'var(--primary-purple)' }} /> 
+                    <VariableProximity
+                      label={`By ${selectedBlog.author}`}
+                      fromFontVariationSettings="'wght' 500"
+                      toFontVariationSettings="'wght' 900"
+                      containerRef={pageRef}
+                      radius={120}
+                      falloff="linear"
+                    />
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Calendar size={12} style={{ color: 'var(--primary-purple)' }} /> 
+                    <VariableProximity
+                      label={`Published ${selectedBlog.date}`}
+                      fromFontVariationSettings="'wght' 500"
+                      toFontVariationSettings="'wght' 900"
+                      containerRef={pageRef}
+                      radius={120}
+                      falloff="linear"
+                    />
+                  </span>
                 </div>
               </div>
 
               {/* Content body */}
-              <div className="text-sm font-semibold text-[#2B0D3E]/85 leading-relaxed space-y-4 text-left">
+              <div className="text-sm font-medium text-gray-600 leading-relaxed space-y-4 text-left">
                 {selectedBlog.content.split('\n\n').map((paragraph, pIdx) => (
-                  <p key={pIdx}>{paragraph}</p>
+                  <p key={pIdx}>
+                    <VariableProximity
+                      label={paragraph}
+                      fromFontVariationSettings="'wght' 400"
+                      toFontVariationSettings="'wght' 900"
+                      containerRef={pageRef}
+                      radius={120}
+                      falloff="linear"
+                    />
+                  </p>
                 ))}
               </div>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2 pt-4">
                 {selectedBlog.tags.map((tag) => (
-                  <span key={tag} className="px-3 py-1 bg-[#F2EAF7] border border-[#2B0D3E]/20 text-[9px] font-black uppercase text-[#7A3F91] rounded-lg">
-                    #{tag}
+                  <span 
+                    key={tag} 
+                    className="px-3 py-1 text-[9px] font-bold uppercase rounded-lg"
+                    style={{ backgroundColor: 'var(--light-purple)', color: 'var(--primary-purple)' }}
+                  >
+                    <VariableProximity
+                      label={`#${tag}`}
+                      fromFontVariationSettings="'wght' 700"
+                      toFontVariationSettings="'wght' 950"
+                      containerRef={pageRef}
+                      radius={120}
+                      falloff="linear"
+                    />
                   </span>
                 ))}
               </div>
 
               {/* Related Blogs Block */}
-              <div className="pt-8 border-t border-[#2B0D3E]/10 space-y-4">
-                <h4 className="text-xs font-black uppercase text-[#2B0D3E]/50 tracking-widest text-left">Related Articles</h4>
+              <div className="pt-8 border-t border-purple-50 space-y-4">
+                <h4 className="text-xs font-bold uppercase text-gray-400 tracking-widest text-left">
+                  <VariableProximity
+                    label="Related Articles"
+                    fromFontVariationSettings="'wght' 700"
+                    toFontVariationSettings="'wght' 950"
+                    containerRef={pageRef}
+                    radius={120}
+                    falloff="linear"
+                  />
+                </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {selectedBlog.relatedIds.map((rId) => {
                     const relatedBlog = defaultBlogs.find(b => b.id === rId);
@@ -405,12 +566,40 @@ const BlogPage = () => {
                       <div 
                         key={relatedBlog.id}
                         onClick={() => setSelectedBlog(relatedBlog)}
-                        className="p-4 bg-white border-2 border-[#2B0D3E] rounded-2xl shadow-[3px_3px_0px_0px_#2B0D3E] hover:translate-y-[-2px] hover:shadow-[4px_4px_0px_0px_#2B0D3E] transition-all cursor-pointer flex flex-col justify-between text-left"
+                        className="p-4 bg-white border border-purple-100 rounded-2xl hover:border-purple-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between text-left"
                       >
-                        <h5 className="text-xs font-black text-[#2B0D3E] font-outfit leading-tight line-clamp-2">{relatedBlog.title}</h5>
-                        <div className="flex justify-between items-center text-[8px] font-bold text-[#7A3F91]/80 uppercase tracking-wider pt-3 mt-3 border-t border-[#2B0D3E]/5">
-                          <span>{relatedBlog.category}</span>
-                          <span className="flex items-center gap-0.5">Read <ChevronRight size={10} /></span>
+                        <h5 className="text-xs font-bold text-slate-800 leading-tight line-clamp-2">
+                          <VariableProximity
+                            label={relatedBlog.title}
+                            fromFontVariationSettings="'wght' 700"
+                            toFontVariationSettings="'wght' 950"
+                            containerRef={pageRef}
+                            radius={120}
+                            falloff="linear"
+                          />
+                        </h5>
+                        <div className="flex justify-between items-center text-[8px] font-bold uppercase tracking-wider pt-3 mt-3 border-t border-purple-50" style={{ color: 'var(--primary-purple)' }}>
+                          <span>
+                            <VariableProximity
+                              label={relatedBlog.category}
+                              fromFontVariationSettings="'wght' 700"
+                              toFontVariationSettings="'wght' 950;;"
+                              containerRef={pageRef}
+                              radius={120}
+                              falloff="linear"
+                            />
+                          </span>
+                          <span className="flex items-center gap-0.5">
+                            <VariableProximity
+                              label="Read"
+                              fromFontVariationSettings="'wght' 700"
+                              toFontVariationSettings="'wght' 950"
+                              containerRef={pageRef}
+                              radius={120}
+                              falloff="linear"
+                            />
+                            <ChevronRight size={10} />
+                          </span>
                         </div>
                       </div>
                     );
@@ -420,12 +609,20 @@ const BlogPage = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t-[3px] border-[#2B0D3E] bg-[#F2EAF7]/30 flex justify-end">
+            <div className="p-4 border-t border-purple-50 bg-purple-50/10 flex justify-end">
               <button 
                 onClick={() => setSelectedBlog(null)}
-                className="px-6 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl text-[#2B0D3E] bg-white border-2 border-[#2B0D3E] shadow-[2.5px_2.5px_0px_0px_#2B0D3E] hover:translate-y-0.5 hover:shadow-none transition-all"
+                className="px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-xl text-white border-none cursor-pointer"
+                style={{ backgroundColor: 'var(--primary-purple)' }}
               >
-                Close Article
+                <VariableProximity
+                  label="Close Article"
+                  fromFontVariationSettings="'wght' 700"
+                  toFontVariationSettings="'wght' 950"
+                  containerRef={pageRef}
+                  radius={120}
+                  falloff="linear"
+                />
               </button>
             </div>
 
@@ -433,47 +630,8 @@ const BlogPage = () => {
         </div>
       )}
 
-      {/* 6. Footer */}
-      <footer className="bg-[#2B0D3E] text-[#F2EAF7] px-6 py-12 border-t-[3.5px] border-black mt-auto relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
-            {!logoError ? (
-              <img 
-                src={logoUrl} 
-                alt={`${appName} Logo`} 
-                className="h-8 w-auto object-contain brightness-0 invert" 
-                onError={() => setLogoError(true)}
-              />
-            ) : (
-              <span className="text-xl font-black font-outfit text-white">{appName}</span>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-6">
-            <button 
-              onClick={() => navigate('/support')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Support
-            </button>
-            <button 
-              onClick={() => navigate('/privacy')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Privacy Policy
-            </button>
-            <button 
-              onClick={() => navigate('/terms')}
-              className="text-xs font-black uppercase text-[#C59DD9] hover:text-white transition-colors bg-transparent border-none outline-none cursor-pointer"
-            >
-              Terms
-            </button>
-            <div className="text-xs font-bold text-[#C59DD9]">
-              © {new Date().getFullYear()} {appName} Corp. All rights reserved. Made in Jaipur.
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Dynamic Footer */}
+      <UniversalFooter />
     </div>
   );
 };

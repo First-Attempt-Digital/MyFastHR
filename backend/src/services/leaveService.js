@@ -244,6 +244,7 @@ class LeaveService {
         const adjustments = await db('leave_adjustments as la')
             .join('employees as e', 'la.employee_id', 'e.id')
             .join('leave_types as lt', 'la.leave_type_id', 'lt.id')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
             .where('la.company_id', companyId)
             .whereNotNull('la.batch_id')
             .select(
@@ -262,6 +263,9 @@ class LeaveService {
                 'e.employee_id_number',
                 'e.status as employee_status',
                 'e.joining_date',
+                'e.designation',
+                'e.office_location',
+                db.raw('COALESCE(d.name, e.department) as department_name'),
                 'lt.name as leave_type_name'
             )
             .orderBy('la.batch_id', 'desc')
@@ -292,7 +296,10 @@ class LeaveService {
                 last_name: adj.last_name,
                 status: adj.employee_status,
                 joining_date: adj.joining_date,
-                days: Number(adj.days)
+                days: Number(adj.days),
+                designation: adj.designation,
+                office_location: adj.office_location,
+                department_name: adj.department_name
             });
             batchesMap[bId].headcount += 1;
         }

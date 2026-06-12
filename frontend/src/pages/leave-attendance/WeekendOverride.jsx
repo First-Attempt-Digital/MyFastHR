@@ -22,6 +22,8 @@ const WeekendOverride = () => {
     const [selectedEmployees, setSelectedEmployees] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
     const [overrideForm, setOverrideForm] = useState({
         override_date: '',
         override_type: 'working', // 'working' = weekoff→working, 'off' = working→off
@@ -130,11 +132,11 @@ const WeekendOverride = () => {
     };
 
     const handleExport = () => {
-        if (!overrides || overrides.length === 0) {
+        if (!filteredOverrides || filteredOverrides.length === 0) {
             alert("No data available to export.");
             return;
         }
-        const dataToExport = overrides.map(o => ({
+        const dataToExport = filteredOverrides.map(o => ({
             "Employee Code": o.employee_id_number || '—',
             "Employee Name": `${o.first_name || ''} ${o.last_name || ''}`.trim(),
             "Override Date": formatDate(o.override_date),
@@ -149,6 +151,20 @@ const WeekendOverride = () => {
         return ['all', ...[...new Set(employees.map(e => e.office_location).filter(Boolean))].sort()];
     }, [employees]);
 
+    const uniqueDepartments = useMemo(() => {
+        return ['all', ...[...new Set([
+            ...employees.map(e => e.department_name),
+            ...overrides.map(o => o.department_name)
+        ].filter(Boolean))].sort()];
+    }, [employees, overrides]);
+
+    const uniqueDesignations = useMemo(() => {
+        return ['all', ...[...new Set([
+            ...employees.map(e => e.designation),
+            ...overrides.map(o => o.designation)
+        ].filter(Boolean))].sort()];
+    }, [employees, overrides]);
+
     const filteredEmployees = useMemo(() => {
         return employees.filter(emp => {
             const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
@@ -156,16 +172,20 @@ const WeekendOverride = () => {
             const search = searchQuery.toLowerCase();
             const matchesSearch = fullName.includes(search) || empId.includes(search);
             const matchesOutlet = selectedOutlet === 'all' || emp.office_location === selectedOutlet;
-            return matchesSearch && matchesOutlet;
+            const matchesDept = selectedDept === 'all' || emp.department_name === selectedDept;
+            const matchesDesignation = selectedDesignation === 'all' || emp.designation === selectedDesignation;
+            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [employees, searchQuery, selectedOutlet]);
+    }, [employees, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
 
     const filteredOverrides = useMemo(() => {
         return overrides.filter(o => {
             const matchesOutlet = selectedOutlet === 'all' || o.office_location === selectedOutlet;
-            return matchesOutlet;
+            const matchesDept = selectedDept === 'all' || o.department_name === selectedDept;
+            const matchesDesignation = selectedDesignation === 'all' || o.designation === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [overrides, selectedOutlet]);
+    }, [overrides, selectedOutlet, selectedDept, selectedDesignation]);
 
     const getDayName = (dateStr) => {
         if (!dateStr) return '';
@@ -325,6 +345,34 @@ const WeekendOverride = () => {
                                     {uniqueLocations.map(loc => (
                                         <option key={loc} value={loc}>
                                             {loc === 'all' ? 'All Outlets' : loc}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                            <div className="relative">
+                                <select
+                                    value={selectedDept}
+                                    onChange={(e) => setSelectedDept(e.target.value)}
+                                    className="appearance-none bg-slate-50 border border-slate-100 rounded-lg pl-3 pr-7 py-2 text-[10px] font-bold text-slate-600 outline-none focus:border-indigo-300"
+                                >
+                                    {uniqueDepartments.map(dept => (
+                                        <option key={dept} value={dept}>
+                                            {dept === 'all' ? 'All Depts' : dept}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+                            <div className="relative">
+                                <select
+                                    value={selectedDesignation}
+                                    onChange={(e) => setSelectedDesignation(e.target.value)}
+                                    className="appearance-none bg-slate-50 border border-slate-100 rounded-lg pl-3 pr-7 py-2 text-[10px] font-bold text-slate-600 outline-none focus:border-indigo-300"
+                                >
+                                    {uniqueDesignations.map(desg => (
+                                        <option key={desg} value={desg}>
+                                            {desg === 'all' ? 'All Designations' : desg}
                                         </option>
                                     ))}
                                 </select>
@@ -596,6 +644,28 @@ const WeekendOverride = () => {
                                         {uniqueLocations.map(loc => (
                                             <option key={loc} value={loc}>
                                                 {loc === 'all' ? 'All Outlets' : loc}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedDept}
+                                        onChange={(e) => setSelectedDept(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                    >
+                                        {uniqueDepartments.map(dept => (
+                                            <option key={dept} value={dept}>
+                                                {dept === 'all' ? 'All Depts' : dept}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedDesignation}
+                                        onChange={(e) => setSelectedDesignation(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                    >
+                                        {uniqueDesignations.map(desg => (
+                                            <option key={desg} value={desg}>
+                                                {desg === 'all' ? 'All Designations' : desg}
                                             </option>
                                         ))}
                                     </select>

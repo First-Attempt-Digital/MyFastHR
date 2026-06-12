@@ -71,8 +71,10 @@ const ShiftRoaster = () => {
     const [departments, setDepartments] = useState([]);
     const [schemes, setSchemes] = useState([]);
     const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('All');
 
     const uniqueLocations = ['all', ...[...new Set(rosterData.map(e => e.location).filter(Boolean))].sort()];
+    const uniqueDesignations = ['All', ...[...new Set(rosterData.map(e => e.designation).filter(Boolean))].sort()];
 
     // Shift overriding states
     const [selectedCell, setSelectedCell] = useState(null); // { employee, date, day }
@@ -163,12 +165,12 @@ const ShiftRoaster = () => {
     ];
 
     const handleExport = () => {
-        if (!rosterData || rosterData.length === 0) {
+        if (!filteredRoster || filteredRoster.length === 0) {
             alert('No roster data to export.');
             return;
         }
 
-        const dataToExport = rosterData.map(row => {
+        const dataToExport = filteredRoster.map(row => {
             const exportRow = {
                 employee_code: row.employee_id_number || '',
                 name: `${row.first_name || ''} ${row.last_name || ''}`.trim(),
@@ -270,7 +272,10 @@ const ShiftRoaster = () => {
         const outletMatch = selectedOutlet === 'all' || 
             String(emp.location).toLowerCase() === selectedOutlet.toLowerCase();
 
-        return searchMatch && categoryMatch && cycleMatch && outletMatch;
+        const designationMatch = selectedDesignation === 'All' ||
+            String(emp.designation).toLowerCase() === selectedDesignation.toLowerCase();
+
+        return searchMatch && categoryMatch && cycleMatch && outletMatch && designationMatch;
     });
 
     return (
@@ -355,13 +360,13 @@ const ShiftRoaster = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Category:</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Department:</span>
                         <select 
                             value={filters.category}
                             onChange={(e) => setFilters({...filters, category: e.target.value})}
                             className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500 cursor-pointer"
                         >
-                            <option value="All">All Categories</option>
+                            <option value="All">All Departments</option>
                             {departments.map(d => (
                                 <option key={d.id} value={d.id}>{d.name}</option>
                             ))}
@@ -378,6 +383,21 @@ const ShiftRoaster = () => {
                             {uniqueLocations.map(loc => (
                                 <option key={loc} value={loc}>
                                     {loc === 'all' ? 'All Outlets' : loc}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Designation:</span>
+                        <select 
+                            value={selectedDesignation}
+                            onChange={(e) => setSelectedDesignation(e.target.value)}
+                            className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                            {uniqueDesignations.map(desg => (
+                                <option key={desg} value={desg}>
+                                    {desg === 'All' ? 'All Designations' : desg}
                                 </option>
                             ))}
                         </select>

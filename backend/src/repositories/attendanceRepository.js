@@ -11,7 +11,7 @@ class AttendanceRepository {
             })
             .whereRaw('DATE(check_in) = CURRENT_DATE')
             .first();
-            
+
         if (existing) throw new Error('Already punched in today');
 
         return await db('attendance').insert({
@@ -104,16 +104,29 @@ class AttendanceRepository {
         const employees = await employeeQuery
             .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
             .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
+            .leftJoin('departments', 'employees.department_id', 'departments.id')
             .select(
-                'employees.id', 
-                'employees.first_name', 
-                'employees.last_name', 
-                'employees.designation', 
+                'employees.id',
+                'employees.first_name',
+                'employees.last_name',
+                'employees.designation',
                 'employees.employee_id_number',
                 'employees.office_location',
+                'departments.name as department_name',
                 'shifts.start_time as shift_start',
+                'shifts.end_time as shift_end',
                 'shifts.grace_period as shift_grace',
                 'shifts.is_flexi as shift_is_flexi',
+                'shifts.total_punches_required as shift_total_punches',
+                'shifts.session2_start_time as shift_session2_start',
+                'shifts.session2_end_time as shift_session2_end',
+                'shifts.session1_grace_out as shift_session1_grace_out',
+                'shifts.session2_grace_in as shift_session2_grace_in',
+                'shifts.session2_grace_out as shift_session2_grace_out',
+                'shifts.session1_in_margin as shift_session1_in_margin',
+                'shifts.session1_out_margin as shift_session1_out_margin',
+                'shifts.session2_in_margin as shift_session2_in_margin',
+                'shifts.session2_out_margin as shift_session2_out_margin',
                 'attendance_schemes.grace_period as scheme_grace',
                 'attendance_schemes.weekoffs as scheme_weekoffs',
                 'employees.joining_date',

@@ -283,6 +283,8 @@ const Payroll = () => {
     const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
     const [showPayrollGuide, setShowPayrollGuide] = useState(false);
     const [selectedOutlet, setSelectedOutlet] = useState('All');
+    const [selectedDept, setSelectedDept] = useState('All');
+    const [selectedDesignation, setSelectedDesignation] = useState('All');
 
     // Payroll Controls State
     const [controls, setControls] = useState({
@@ -531,12 +533,13 @@ const Payroll = () => {
 
     useEffect(() => {
         fetchControls();
+        fetchEmployees();
         if (selectedTab === 'overview') {
             fetchSummary();
         } else if (selectedTab === 'register') {
             fetchRegister();
         } else if (selectedTab === 'inputs') {
-            fetchEmployees();
+            // Handled by fetchEmployees() above
         } else if (selectedTab === 'global-rules') {
             fetchGlobalRules();
         } else if (selectedTab === 'shift-rules') {
@@ -546,7 +549,6 @@ const Payroll = () => {
             fetchRepayments();
         } else if (selectedTab === 'separations') {
             fetchSeparations();
-            fetchEmployees();
         }
     }, [selectedTab, selectedMonth]);
 
@@ -1038,11 +1040,11 @@ const Payroll = () => {
     };
 
     const handleExportSeparationsCSV = () => {
-        if (!separations || separations.length === 0) {
+        if (!filteredSeparations || filteredSeparations.length === 0) {
             alert("No separations records available to export.");
             return;
         }
-        const dataToExport = separations.map(s => ({
+        const dataToExport = filteredSeparations.map(s => ({
             employee_id_number: s.employee_id_number,
             name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
             designation: s.designation,
@@ -1773,53 +1775,97 @@ const Payroll = () => {
         return ['All', ...Array.from(outlets).sort()];
     }, [employees, registerData, loans, separations]);
 
+    const uniqueDepartments = useMemo(() => {
+        const depts = new Set();
+        const check = (e) => {
+            const d = e.department_name || e.department;
+            if (d) depts.add(d);
+        };
+        if (Array.isArray(employees)) employees.forEach(check);
+        if (Array.isArray(registerData)) registerData.forEach(check);
+        if (Array.isArray(loans)) loans.forEach(check);
+        if (Array.isArray(separations)) separations.forEach(check);
+        return ['All', ...Array.from(depts).sort()];
+    }, [employees, registerData, loans, separations]);
+
+    const uniqueDesignations = useMemo(() => {
+        const desgs = new Set();
+        const check = (e) => {
+            const d = e.designation || e.role;
+            if (d) desgs.add(d);
+        };
+        if (Array.isArray(employees)) employees.forEach(check);
+        if (Array.isArray(registerData)) registerData.forEach(check);
+        if (Array.isArray(loans)) loans.forEach(check);
+        if (Array.isArray(separations)) separations.forEach(check);
+        return ['All', ...Array.from(desgs).sort()];
+    }, [employees, registerData, loans, separations]);
+
     // Filter register data
     const filteredRegisterData = useMemo(() => {
         if (!Array.isArray(registerData)) return [];
         return registerData.filter(reg => {
-            return selectedOutlet === 'All' || reg.location === selectedOutlet || reg.office_location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || reg.location === selectedOutlet || reg.office_location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || reg.department_name === selectedDept || reg.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || reg.designation === selectedDesignation || reg.role === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [registerData, selectedOutlet]);
+    }, [registerData, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Filter loans
     const filteredLoans = useMemo(() => {
         if (!Array.isArray(loans)) return [];
         return loans.filter(loan => {
-            return selectedOutlet === 'All' || loan.office_location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || loan.office_location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || loan.department_name === selectedDept || loan.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || loan.designation === selectedDesignation || loan.role === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [loans, selectedOutlet]);
+    }, [loans, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Filter separations
     const filteredSeparations = useMemo(() => {
         if (!Array.isArray(separations)) return [];
         return separations.filter(s => {
-            return selectedOutlet === 'All' || s.office_location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || s.office_location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || s.department_name === selectedDept || s.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || s.designation === selectedDesignation || s.role === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [separations, selectedOutlet]);
+    }, [separations, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Filter statements
     const filteredStatements = useMemo(() => {
         if (!Array.isArray(statements)) return [];
         return statements.filter(stmt => {
-            return selectedOutlet === 'All' || stmt.office_location === selectedOutlet || stmt.location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || stmt.office_location === selectedOutlet || stmt.location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || stmt.department_name === selectedDept || stmt.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || stmt.designation === selectedDesignation || stmt.role === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [statements, selectedOutlet]);
+    }, [statements, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Filter employees
     const filteredEmployees = useMemo(() => {
         if (!Array.isArray(employees)) return [];
         return employees.filter(emp => {
-            return selectedOutlet === 'All' || emp.office_location === selectedOutlet || emp.location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || emp.office_location === selectedOutlet || emp.location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || emp.department_name === selectedDept || emp.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || emp.designation === selectedDesignation || emp.role === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [employees, selectedOutlet]);
+    }, [employees, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Filter repayments
     const filteredRepayments = useMemo(() => {
         if (!Array.isArray(repayments)) return [];
         return repayments.filter(r => {
-            return selectedOutlet === 'All' || r.office_location === selectedOutlet;
+            const matchesOutlet = selectedOutlet === 'All' || r.office_location === selectedOutlet;
+            const matchesDept = selectedDept === 'All' || r.department_name === selectedDept || r.department === selectedDept;
+            const matchesDesignation = selectedDesignation === 'All' || r.designation === selectedDesignation || r.role === selectedDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
         });
-    }, [repayments, selectedOutlet]);
+    }, [repayments, selectedOutlet, selectedDept, selectedDesignation]);
 
     const chartData = useMemo(() => {
         return [
@@ -1841,19 +1887,47 @@ const Payroll = () => {
                     <p className="text-slate-500 text-xs mt-0.5">Manage dynamic salary sheets, global statutory contributions (PF, ESIC, PT, Gratuity), and payroll formulas inside one gorgeous console.</p>
                 </div>
 
-                {/* Outlet filter */}
-                <div className="relative min-w-[180px] shrink-0">
-                    <select
-                        value={selectedOutlet}
-                        onChange={(e) => setSelectedOutlet(e.target.value)}
-                        className="w-full appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2.5 text-xs font-black text-slate-700 outline-none pr-10 shadow-sm cursor-pointer"
-                    >
-                        <option value="All">All Outlets</option>
-                        {uniqueOutlets.filter(o => o !== 'All').map(o => (
-                            <option key={o} value={o}>{o}</option>
-                        ))}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                {/* Outlet, Department, Designation filters */}
+                <div className="flex gap-2.5 flex-wrap w-full md:w-auto">
+                    <div className="relative min-w-[150px] shrink-0">
+                        <select
+                            value={selectedOutlet}
+                            onChange={(e) => setSelectedOutlet(e.target.value)}
+                            className="w-full appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2.5 text-xs font-black text-slate-700 outline-none pr-10 shadow-sm cursor-pointer"
+                        >
+                            <option value="All">All Outlets</option>
+                            {uniqueOutlets.filter(o => o !== 'All').map(o => (
+                                <option key={o} value={o}>{o}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                    <div className="relative min-w-[150px] shrink-0">
+                        <select
+                            value={selectedDept}
+                            onChange={(e) => setSelectedDept(e.target.value)}
+                            className="w-full appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2.5 text-xs font-black text-slate-700 outline-none pr-10 shadow-sm cursor-pointer"
+                        >
+                            <option value="All">All Departments</option>
+                            {uniqueDepartments.filter(d => d !== 'All').map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                    <div className="relative min-w-[150px] shrink-0">
+                        <select
+                            value={selectedDesignation}
+                            onChange={(e) => setSelectedDesignation(e.target.value)}
+                            className="w-full appearance-none bg-white border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2.5 text-xs font-black text-slate-700 outline-none pr-10 shadow-sm cursor-pointer"
+                        >
+                            <option value="All">All Designations</option>
+                            {uniqueDesignations.filter(d => d !== 'All').map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
                 </div>
             </div>
 
@@ -2438,7 +2512,7 @@ const Payroll = () => {
                                                                     rawVal = parts[0] + '.' + parts.slice(1).join('');
                                                                 }
                                                                 const val = rawVal === '' ? '' : parseFloat(rawVal) || 0;
-                                                                
+
                                                                 setRegisterData(prev => prev.map(item => {
                                                                     if (item.employee_id === reg.employee_id) {
                                                                         const numBonus = val === '' ? 0 : val;
@@ -2450,7 +2524,7 @@ const Payroll = () => {
                                                                         const pf = parseFloat(item.employee_pf) || 0;
                                                                         const esic = parseFloat(item.employee_esic) || 0;
                                                                         const loan = parseFloat(item.loan_emi_deduction) || 0;
-                                                                        
+
                                                                         const net = base + allowances - deductions - late - pf - esic - loan - manualDeduct + numBonus;
                                                                         const newNet = Math.max(0, net).toFixed(2);
                                                                         return { ...item, overtime_bonus: val, net_salary: newNet };
@@ -2501,7 +2575,7 @@ const Payroll = () => {
                                                                     rawVal = parts[0] + '.' + parts.slice(1).join('');
                                                                 }
                                                                 const val = rawVal === '' ? '' : parseFloat(rawVal) || 0;
-                                                                
+
                                                                 setRegisterData(prev => prev.map(item => {
                                                                     if (item.employee_id === reg.employee_id) {
                                                                         const numDeduct = val === '' ? 0 : val;
@@ -2513,7 +2587,7 @@ const Payroll = () => {
                                                                         const pf = parseFloat(item.employee_pf) || 0;
                                                                         const esic = parseFloat(item.employee_esic) || 0;
                                                                         const loan = parseFloat(item.loan_emi_deduction) || 0;
-                                                                        
+
                                                                         const net = base + allowances - deductions - late - pf - esic - loan - numDeduct + bonus;
                                                                         const newNet = Math.max(0, net).toFixed(2);
                                                                         return { ...item, manual_deduction_override: val, net_salary: newNet };
@@ -4076,8 +4150,8 @@ const Payroll = () => {
                                         disabled={controls.inputs_locked}
                                         onClick={() => setShowAddLoan(true)}
                                         className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-1.5 ${controls.inputs_locked
-                                                ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
-                                                : 'bg-[#4361ee] hover:bg-indigo-700 text-white shadow-indigo-500/10'
+                                            ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                                            : 'bg-[#4361ee] hover:bg-indigo-700 text-white shadow-indigo-500/10'
                                             }`}
                                     >
                                         <Plus size={14} /> Register Advance
@@ -4343,20 +4417,26 @@ const Payroll = () => {
                                             <div className="space-y-1.5">
                                                 <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Loan Principal Amount (₹) *</label>
                                                 <input
-                                                    type="number"
+                                                    type="text"
                                                     placeholder="e.g. 15000"
                                                     value={newLoanData.amount}
-                                                    onChange={(e) => setNewLoanData({ ...newLoanData, amount: e.target.value })}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                                        setNewLoanData({ ...newLoanData, amount: val });
+                                                    }}
                                                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
                                                 />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Monthly EMI Cut (₹) *</label>
                                                 <input
-                                                    type="number"
+                                                    type="text"
                                                     placeholder="e.g. 3000"
                                                     value={newLoanData.monthly_emi}
-                                                    onChange={(e) => setNewLoanData({ ...newLoanData, monthly_emi: e.target.value })}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                                        setNewLoanData({ ...newLoanData, monthly_emi: val });
+                                                    }}
                                                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
                                                 />
                                             </div>
@@ -4374,8 +4454,8 @@ const Payroll = () => {
                                             disabled={controls.inputs_locked}
                                             onClick={handleCreateLoan}
                                             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${controls.inputs_locked
-                                                    ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
-                                                    : 'bg-[#4361ee] hover:bg-indigo-700 text-white'
+                                                ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                                                : 'bg-[#4361ee] hover:bg-indigo-700 text-white'
                                                 }`}
                                         >
                                             Disburse Loan
@@ -4422,10 +4502,13 @@ const Payroll = () => {
                                         <div className="space-y-1.5">
                                             <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Repayment Amount (₹) *</label>
                                             <input
-                                                type="number"
+                                                type="text"
                                                 placeholder="Enter amount paid"
                                                 value={repayData.amount_paid}
-                                                onChange={(e) => setRepayData({ ...repayData, amount_paid: e.target.value })}
+                                                onChange={(e) => {
+                                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                                    setRepayData({ ...repayData, amount_paid: val });
+                                                }}
                                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black outline-none focus:ring-2 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all"
                                             />
                                         </div>
@@ -5620,7 +5703,7 @@ const Payroll = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-2">
                             <div className="space-y-3.5 pr-2 border-r border-slate-100">
                                 <h4 className="text-xs font-black text-indigo-650 uppercase tracking-widest">Phase 1: Inputs & Attendance</h4>
-                                
+
                                 <div className="flex gap-3">
                                     <div className="w-6 h-6 rounded-full bg-indigo-50 text-[#4361ee] font-black text-xs flex items-center justify-center shrink-0">1</div>
                                     <div className="space-y-0.5">
@@ -5756,9 +5839,9 @@ const Payroll = () => {
                 </div>
             )}
 
-             {/* PRINT OVERRIDES STYLE BLOCK */}
-             <style dangerouslySetInnerHTML={{
-                 __html: `
+            {/* PRINT OVERRIDES STYLE BLOCK */}
+            <style dangerouslySetInnerHTML={{
+                __html: `
                  @media print {
                      body * {
                          visibility: hidden !important;
