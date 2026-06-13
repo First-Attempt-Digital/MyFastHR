@@ -6,10 +6,17 @@ function toLocalYMD(dateVal) {
     if (!dateVal) return null;
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return null;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+}
+
+function dateToISTMins(dateVal) {
+    if (!dateVal) return 0;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return 0;
+    const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false };
+    const istStr = d.toLocaleTimeString('en-GB', options);
+    const [h, m] = istStr.split(':').map(Number);
+    return h * 60 + m;
 }
 
 function safeFormatTime(dateTimeVal) {
@@ -66,9 +73,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
     };
 
     const dateToMins = (dateVal) => {
-        if (!dateVal) return 0;
-        const d = new Date(dateVal);
-        return d.getHours() * 60 + d.getMinutes();
+        return dateToISTMins(dateVal);
     };
 
     const s1Start = timeToMins(shift.start_time || shift.shift_start || '09:00');
@@ -224,14 +229,14 @@ class AttendanceService {
         let status = 'present';
         const now = new Date();
         const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
-        const dateStr = now.toISOString().split('T')[0];
+        const dateStr = toLocalYMD(now);
 
         let isCheckoutAttempt = false;
         if (employee && employee.shift_end && !employee.shift_is_flexi) {
             const shiftEndStr = employee.shift_end;
             const [eHours, eMins] = shiftEndStr.split(':').map(Number);
             const thresholdMins = eHours * 60 + eMins - 120; // 2 hours prior to shift end
-            const punchMins = now.getHours() * 60 + now.getMinutes();
+            const punchMins = dateToISTMins(now);
             if (punchMins >= thresholdMins) {
                 isCheckoutAttempt = true;
                 status = 'no_in';
@@ -248,10 +253,10 @@ class AttendanceService {
             const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
 
             const [sHours, sMins] = shiftStart.split(':').map(Number);
-            const shiftAllowed = new Date(now);
-            shiftAllowed.setHours(sHours, sMins + (parseInt(grace) || 0), 0, 0);
+            const shiftStartLimitMins = sHours * 60 + sMins + (parseInt(grace) || 0);
+            const nowMins = dateToISTMins(now);
 
-            if (now > shiftAllowed) {
+            if (nowMins > shiftStartLimitMins) {
                 // AUTO-CREATE PENDING ENTRY/EXIT REQUEST
                 const existingRequest = await db('attendance_entry_requests')
                     .where({ employee_id: empId, company_id: companyId, date: dateStr, request_type: 'late_in' })
@@ -305,7 +310,7 @@ class AttendanceService {
 
         const now = new Date();
         const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
-        const dateStr = now.toISOString().split('T')[0];
+        const dateStr = toLocalYMD(now);
 
         // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
         const approvedRequest = await db('attendance_entry_requests')
@@ -326,9 +331,9 @@ class AttendanceService {
             } else {
                 const shiftEnd = employee?.end_time || '18:00';
                 const [eHours, eMins] = shiftEnd.split(':').map(Number);
-                const shiftEndLimit = new Date(now);
-                shiftEndLimit.setHours(eHours, eMins, 0, 0);
-                if (now < shiftEndLimit) {
+                const shiftEndMins = eHours * 60 + eMins;
+                const nowMins = dateToISTMins(now);
+                if (nowMins < shiftEndMins) {
                     isEarly = true;
                 }
             }
@@ -639,9 +644,7 @@ class AttendanceService {
                     return h * 60 + m;
                 };
                 const dateToMinsLocal = (dateVal) => {
-                    if (!dateVal) return 0;
-                    const dObj = new Date(dateVal);
-                    return dObj.getHours() * 60 + dObj.getMinutes();
+                    return dateToISTMins(dateVal);
                 };
 
                 const reqPunches = parseInt(emp.shift_total_punches || 2);
@@ -892,8 +895,11 @@ class AttendanceService {
                     onTime.push({ ...baseEntry, early: 'Flexi' });
                 } else {
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
-                    const shiftStartLimit = new Date(dateObj);
-                    shiftStartLimit.setHours(sHours, sMins + (parseInt(grace) || 0), 0, 0);
+                    const totalMins = sMins + (parseInt(grace) || 0);
+                    const allowedHours = String(sHours + Math.floor(totalMins / 60)).padStart(2, '0');
+                    const allowedMins = String(totalMins % 60).padStart(2, '0');
+                    const targetDateStr = dateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+                    const shiftStartLimit = new Date(`${targetDateStr} ${allowedHours}:${allowedMins}:00 +05:30`);
 
                     const isLate = checkIn > shiftStartLimit;
 

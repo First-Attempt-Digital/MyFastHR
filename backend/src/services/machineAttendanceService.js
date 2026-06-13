@@ -21,6 +21,23 @@ function dbDateToUTC(dateVal) {
     ));
 }
 
+function dateToISTMins(dateVal) {
+    if (!dateVal) return 0;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return 0;
+    const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false };
+    const istStr = d.toLocaleTimeString('en-GB', options);
+    const [h, m] = istStr.split(':').map(Number);
+    return h * 60 + m;
+}
+
+function dateToISTDateString(dateVal) {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+}
+
 class MachineAttendanceService {
     /**
      * Registers a biometric device and generates a secure API key.
@@ -220,12 +237,11 @@ class MachineAttendanceService {
             }
 
             // 3. Process Check-In / Check-Out Business Logic
-            const dateStr = punchTime.toISOString().split('T')[0];
+            const dateStr = dateToISTDateString(punchTime);
 
             // 3a. Check for night shift: look back on the previous date for an open check-in (< 16 hours old)
-            const prevDateObj = new Date(punchTime);
-            prevDateObj.setDate(prevDateObj.getDate() - 1);
-            const prevDateStr = prevDateObj.toISOString().split('T')[0];
+            const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
+            const prevDateStr = dateToISTDateString(prevDateObj);
 
             let activeLog = null;
 
@@ -280,7 +296,7 @@ class MachineAttendanceService {
                     const shiftEndStr = employeeWithShift.shift_end;
                     const [eHours, eMins] = shiftEndStr.split(':').map(Number);
                     const thresholdMins = eHours * 60 + eMins - 120; // 2 hours prior to shift end
-                    const punchMins = punchTime.getHours() * 60 + punchTime.getMinutes();
+                    const punchMins = dateToISTMins(punchTime);
                     if (punchMins >= thresholdMins) {
                         isCheckoutAttempt = true;
                         status = 'no_in';
