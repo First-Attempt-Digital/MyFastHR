@@ -151,6 +151,14 @@ const syncDatabaseSchema = async () => {
             console.log('>>> [DB-SYNC]: Employees table schema is already up to date.');
         }
 
+        // Auto-fix for employee_number_series missing auto_increment
+        try {
+            const hasSeriesTable = await db.schema.hasTable('employee_number_series');
+            if (hasSeriesTable) {
+                await db.raw('ALTER TABLE employee_number_series MODIFY COLUMN id INT AUTO_INCREMENT').catch(() => {});
+            }
+        } catch (e) { /* ignore */ }
+
         // Add login_otps table for email login
         const hasOtpsTable = await db.schema.hasTable('login_otps');
         if (!hasOtpsTable) {

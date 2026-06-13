@@ -113,11 +113,24 @@ pm2 reload ecosystem.config.js --env production || pm2 reload "${PM2_APP_NAME}"
 
 # 8. Post-deployment self-check verification
 log "Verifying server response..."
-sleep 3
-RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api || true)
 
-if [ "${RESPONSE_CODE}" -ne 200 ] && [ "${RESPONSE_CODE}" -ne 302 ]; then
-    error "Web service is not responsive (HTTP status: ${RESPONSE_CODE}). Tracing error logs..."
+MAX_RETRIES=15
+RETRY_COUNT=0
+SUCCESS=false
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/api || true)
+    if [ "${RESPONSE_CODE}" -eq 200 ] || [ "${RESPONSE_CODE}" -eq 302 ]; then
+        SUCCESS=true
+        break
+    fi
+    log "Waiting for web service... (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES)"
+    sleep 2
+    RETRY_COUNT=$((RETRY_COUNT+1))
+done
+
+if [ "$SUCCESS" = false ]; then
+    error "Web service is not responsive after ${MAX_RETRIES} attempts. Tracing error logs..."
     pm2 logs "${PM2_APP_NAME}" --lines 50
     false # Triggers trap ERR -> rollback
 fi
