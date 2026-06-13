@@ -47,6 +47,7 @@ function mapDbStatusToFrontend(status) {
     if (s === 'off') return 'OFF';
     if (s === 'regularized' || s === 'r') return 'R';
     if (s === 'half-day' || s === 'hd' || s === 'half_day') return 'HD';
+    if (s === 'checked_in' || s === 'ci' || s === 'checked-in') return 'CI';
     return 'P';
 }
 
@@ -58,6 +59,7 @@ function mapFrontendStatusToDb(status) {
     if (s === 'OFF') return 'off';
     if (s === 'R') return 'regularized';
     if (s === 'HD') return 'half-day';
+    if (s === 'CI') return 'present';
     if (s === 'E' || s === 'EO') return 'early_out';
     return 'present';
 }
@@ -177,11 +179,26 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                 punch_count: 2
             };
         } else {
-            return {
-                status: 'A',
-                explanation: `S1: Incomplete (${safeFormatTime(log.check_in)} - --:--)`,
-                punch_count: 1
-            };
+            // Check if this punch is for today
+            const checkInDate = new Date(log.check_in);
+            const options = { timeZone: 'Asia/Kolkata' };
+            const checkInYMD = checkInDate.toLocaleDateString('sv-SE', options);
+            const todayYMD = new Date().toLocaleDateString('sv-SE', options);
+            const isToday = (checkInYMD === todayYMD);
+
+            if (isToday) {
+                return {
+                    status: 'CI',
+                    explanation: `S1: Checked In (${isLate ? 'Late' : 'On-Time'}) (${safeFormatTime(log.check_in)} - --:--)`,
+                    punch_count: 1
+                };
+            } else {
+                return {
+                    status: 'A',
+                    explanation: `S1: Incomplete (${safeFormatTime(log.check_in)} - --:--)`,
+                    punch_count: 1
+                };
+            }
         }
     }
 }

@@ -302,6 +302,8 @@ const AttendanceMuster = () => {
                 return 'bg-cyan-50 text-cyan-600 border border-cyan-200/60 font-black';
             case 'NC':
                 return 'bg-rose-100 text-rose-700 border border-rose-300 font-extrabold shadow-sm animate-pulse';
+            case 'CI':
+                return 'bg-blue-50 text-blue-600 border border-blue-200/60 font-black animate-pulse';
             default:
                 return 'bg-transparent text-slate-300 font-normal border border-transparent';
         }
@@ -320,6 +322,7 @@ const AttendanceMuster = () => {
             case 'R': return 'Regularized';
             case 'HD': return 'Half Day';
             case 'NC': return 'Checkout Attempt (Zero Check-In)';
+            case 'CI': return 'Checked In (Active)';
             default: return 'No Data';
         }
     };
@@ -539,6 +542,7 @@ const AttendanceMuster = () => {
                                     { label: 'E (Early Out)', style: 'bg-orange-50 text-orange-600 border-orange-200' },
                                     { label: 'R (Regularized)', style: 'bg-teal-50 text-teal-600 border-teal-200' },
                                     { label: 'HD (Half Day)', style: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
+                                    { label: 'CI (Checked In)', style: 'bg-blue-50 text-blue-600 border-blue-200 animate-pulse' },
                                     { label: 'A (Absent)', style: 'bg-rose-50 text-rose-600 border-rose-200' },
                                     { label: 'OFF (Weekly Off)', style: 'bg-slate-100 text-slate-400 border-slate-200' },
                                     { label: 'H (Holiday)', style: 'bg-sky-50 text-sky-600 border-sky-200' },
