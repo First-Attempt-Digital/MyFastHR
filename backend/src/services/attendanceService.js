@@ -322,7 +322,7 @@ class AttendanceService {
         const employee = await db('employees')
             .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
             .where('employees.id', empId)
-            .select('shifts.is_flexi', 'shifts.min_hours', 'shifts.end_time')
+            .select('shifts.is_flexi', 'shifts.min_hours', 'shifts.start_time', 'shifts.end_time')
             .first();
 
         const now = new Date();
@@ -334,34 +334,46 @@ class AttendanceService {
             .where({ employee_id: empId, company_id: companyId, date: dateStr, request_type: 'early_out', status: 'approved' })
             .first();
 
-        if (!approvedRequest) {
-            let isEarly = false;
-            const checkIn = new Date(activeEntry.check_in);
-            const workedHours = (now - checkIn) / (1000 * 60 * 60);
+        let isEarlyCheckoutAttempt = false;
+        const checkIn = new Date(activeEntry.check_in);
+        const workedHours = (now - checkIn) / (1000 * 60 * 60);
+
+        let halfDayLimit = 4; // default
+        if (employee?.is_flexi) {
             const minHours = parseFloat(employee?.min_hours) || 8;
-            const halfDayLimit = minHours / 2;
-
-            if (employee?.is_flexi) {
-                if (workedHours < minHours) {
-                    isEarly = true;
-                }
-            } else {
-                const shiftEnd = employee?.end_time || '18:00';
-                const [eHours, eMins] = shiftEnd.split(':').map(Number);
-                const shiftEndMins = eHours * 60 + eMins;
-                const nowMins = dateToISTMins(now);
-                if (nowMins < shiftEndMins) {
-                    isEarly = true;
-                }
+            halfDayLimit = minHours / 2;
+            if (workedHours < minHours) {
+                isEarlyCheckoutAttempt = true;
             }
+        } else {
+            const shiftStart = employee?.start_time || '09:00';
+            const shiftEnd = employee?.end_time || '18:00';
+            const [sHours, sMins] = shiftStart.split(':').map(Number);
+            const [eHours, eMins] = shiftEnd.split(':').map(Number);
+            const shiftStartMins = sHours * 60 + sMins;
+            let shiftEndMins = eHours * 60 + eMins;
+            let shiftDurationMins = shiftEndMins - shiftStartMins;
+            if (shiftDurationMins < 0) {
+                shiftDurationMins += 24 * 60; // handle midnight crossing
+            }
+            const shiftDurationHours = shiftDurationMins / 60;
+            halfDayLimit = shiftDurationHours / 2;
 
+            const nowMins = dateToISTMins(now);
+            if (nowMins < shiftEndMins) {
+                isEarlyCheckoutAttempt = true;
+            }
+        }
+
+        if (!approvedRequest) {
             // Only trigger early out request if employee has completed at least the half day hours.
             // If they punch out before half day, we ignore the early out request.
-            if (isEarly && workedHours < halfDayLimit) {
-                isEarly = false;
+            let triggersEarlyOutRequest = isEarlyCheckoutAttempt;
+            if (triggersEarlyOutRequest && workedHours < halfDayLimit) {
+                triggersEarlyOutRequest = false;
             }
 
-            if (isEarly) {
+            if (triggersEarlyOutRequest) {
                 // AUTO-CREATE PENDING ENTRY/EXIT REQUEST
                 const existingRequest = await db('attendance_entry_requests')
                     .where({ employee_id: empId, company_id: companyId, date: dateStr, request_type: 'early_out' })
@@ -392,24 +404,30 @@ class AttendanceService {
 
         await attendanceRepository.punchOut(empId, companyId, locationData);
 
-        // Flexi shift: calculate worked hours and update status accordingly
+        // Recalculate and update status in database on checkout
+        let newStatus = activeEntry.status || 'present';
         if (employee?.is_flexi) {
-            const checkIn = new Date(activeEntry.check_in);
-            const workedHours = (now - checkIn) / (1000 * 60 * 60);
             const minHours = parseFloat(employee.min_hours) || 8;
-            const halfDayThreshold = minHours / 2;
-
-            let newStatus = 'present';
-            if (workedHours < halfDayThreshold) {
+            if (workedHours < halfDayLimit) {
                 newStatus = 'short';
             } else if (workedHours < minHours) {
                 newStatus = 'half-day';
+            } else {
+                newStatus = 'present';
             }
-
-            await db('attendance')
-                .where({ id: activeEntry.id })
-                .update({ status: newStatus });
+        } else {
+            if (workedHours < halfDayLimit) {
+                newStatus = 'short';
+            } else if (isEarlyCheckoutAttempt) {
+                newStatus = 'early_out';
+            } else if (newStatus !== 'pending') {
+                newStatus = 'present';
+            }
         }
+
+        await db('attendance')
+            .where({ id: activeEntry.id })
+            .update({ status: newStatus });
 
         return await attendanceRepository.getCurrentStatus(empId, companyId);
     }
