@@ -132,13 +132,33 @@ class RegularizationService {
 
         // If approved, upsert attendance record
         if (status === 'approved') {
-            const checkInTime = request.check_in ? `${request.date} ${request.check_in}` : `${request.date} 09:00:00`;
-            const checkOutTime = request.check_out ? `${request.date} ${request.check_out}` : `${request.date} 18:00:00`;
+            let dateStr = request.date;
+            if (dateStr instanceof Date) {
+                const year = dateStr.getFullYear();
+                const month = String(dateStr.getMonth() + 1).padStart(2, '0');
+                const day = String(dateStr.getDate()).padStart(2, '0');
+                dateStr = `${year}-${month}-${day}`;
+            } else if (typeof dateStr === 'string') {
+                if (dateStr.includes('T')) {
+                    dateStr = dateStr.split('T')[0];
+                } else if (dateStr.includes(' ')) {
+                    const parsed = new Date(dateStr);
+                    if (!isNaN(parsed.getTime())) {
+                        const year = parsed.getFullYear();
+                        const month = String(parsed.getMonth() + 1).padStart(2, '0');
+                        const day = String(parsed.getDate()).padStart(2, '0');
+                        dateStr = `${year}-${month}-${day}`;
+                    }
+                }
+            }
+
+            const checkInTime = request.check_in ? `${dateStr} ${request.check_in}` : `${dateStr} 09:00:00`;
+            const checkOutTime = request.check_out ? `${dateStr} ${request.check_out}` : `${dateStr} 18:00:00`;
             const attendanceStatus = request.regularization_type === 'half_day' ? 'half-day' : 'present';
 
             const existingAtt = await db('attendance')
                 .where({ employee_id: request.employee_id })
-                .whereRaw('DATE(check_in) = ?', [request.date])
+                .whereRaw('DATE(check_in) = ?', [dateStr])
                 .first();
 
             if (existingAtt) {
