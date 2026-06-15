@@ -280,9 +280,33 @@ class MachineAttendanceService {
                         'shifts.end_time as shift_end',
                         'shifts.grace_period as shift_grace',
                         'shifts.is_flexi as shift_is_flexi',
+                        'shifts.session1_in_margin as shift_in_margin',
+                        'shifts.session1_out_margin as shift_out_margin',
                         'attendance_schemes.grace_period as scheme_grace'
                     )
                     .first();
+
+                // IN MARGIN CHECK
+                if (employeeWithShift && !employeeWithShift.shift_is_flexi) {
+                    const shiftStart = employeeWithShift.shift_start || '09:00';
+                    const inMargin = employeeWithShift.shift_in_margin !== undefined ? parseInt(employeeWithShift.shift_in_margin) : 0;
+                    if (inMargin > 0) {
+                        const [sHours, sMins] = shiftStart.split(':').map(Number);
+                        const shiftStartDate = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                        const earliestCheckIn = new Date(shiftStartDate.getTime() - inMargin * 60 * 1000);
+                        if (punchTime < earliestCheckIn) {
+                            await db('biometric_raw_logs').insert({
+                                company_id: companyId,
+                                device_serial: deviceSerial,
+                                employee_code,
+                                punch_time: punchTimeStr,
+                                status: 'skipped',
+                                error_details: `Punch in before allowed margin (earliest allowed: ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })})`
+                            });
+                            return { status: 'skipped', reason: 'Punch in before allowed margin' };
+                        }
+                    }
+                }
 
                 const rules = await db('working_rules').where({ company_id: companyId }).first() || {
                     shift_start: '09:00',
@@ -415,8 +439,45 @@ class MachineAttendanceService {
                 const employee = await db('employees')
                     .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
                     .where('employees.id', employeeId)
-                    .select('shifts.is_flexi', 'shifts.min_hours', 'shifts.start_time', 'shifts.end_time')
+                    .select(
+                        'shifts.is_flexi', 
+                        'shifts.min_hours', 
+                        'shifts.start_time', 
+                        'shifts.end_time',
+                        'shifts.session1_in_margin as shift_in_margin',
+                        'shifts.session1_out_margin as shift_out_margin'
+                    )
                     .first();
+
+                // OUT MARGIN CHECK
+                if (employee && !employee.is_flexi) {
+                    const shiftStart = employee.start_time || '09:00';
+                    const shiftEnd = employee.end_time || '18:00';
+                    const outMargin = employee.shift_out_margin !== undefined ? parseInt(employee.shift_out_margin) : 0;
+                    if (outMargin > 0) {
+                        const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
+                        const [sHours, sMins] = shiftStart.split(':').map(Number);
+                        const [eHours, eMins] = shiftEnd.split(':').map(Number);
+                        const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                        let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                        if (shiftEndDate < shiftStartDate) {
+                            // Midnight crossing
+                            shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                        }
+                        const earliestPunchOut = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
+                        if (punchTime < earliestPunchOut) {
+                            await db('biometric_raw_logs').insert({
+                                company_id: companyId,
+                                device_serial: deviceSerial,
+                                employee_code,
+                                punch_time: punchTimeStr,
+                                status: 'skipped',
+                                error_details: `Punch out before allowed margin (earliest allowed: ${earliestPunchOut.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })})`
+                            });
+                            return { status: 'skipped', reason: 'Punch out before allowed margin' };
+                        }
+                    }
+                }
 
                 const checkIn = dbDateToUTC(activeLog.check_in);
                 const workedHours = (punchTime - checkIn) / (1000 * 60 * 60);
