@@ -260,63 +260,139 @@ class MachineAttendanceService {
                 }
             }
 
+            // Fetch Employee with Shift Info and Scheme Info
+            const employeeWithShift = await db('employees')
+                .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
+                .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
+                .where('employees.id', employeeId)
+                .select(
+                    'employees.*', 
+                    'shifts.start_time as shift_start', 
+                    'shifts.end_time as shift_end',
+                    'shifts.grace_period as shift_grace',
+                    'shifts.is_flexi as shift_is_flexi',
+                    'shifts.total_punches_required as shift_total_punches',
+                    'shifts.session1_in_margin as shift_in_margin',
+                    'shifts.session1_out_margin as shift_out_margin',
+                    'shifts.session2_start_time',
+                    'shifts.session2_end_time',
+                    'shifts.session2_in_margin',
+                    'shifts.session2_out_margin',
+                    'shifts.session1_grace_out',
+                    'shifts.session2_grace_in',
+                    'shifts.session2_grace_out',
+                    'attendance_schemes.grace_period as scheme_grace',
+                    'attendance_schemes.half_day_hours as scheme_half_day_hours'
+                )
+                .first();
+
+            // Resolve overridden shift for this date
+            const targetShiftDate = activeLog 
+                ? dateToISTDateString(dbDateToUTC(activeLog.check_in)) 
+                : dateStr;
+
+            if (employeeWithShift) {
+                const activeAssignment = await db('employee_shift_assignments as esa')
+                    .join('shifts as s', 'esa.shift_id', 's.id')
+                    .where('esa.employee_id', employeeId)
+                    .where('esa.from_date', '<=', targetShiftDate)
+                    .andWhere(function () {
+                        this.where('esa.to_date', '>=', targetShiftDate).orWhereNull('esa.to_date');
+                    })
+                    .select(
+                        's.is_flexi',
+                        's.min_hours',
+                        's.start_time',
+                        's.end_time',
+                        's.grace_period as shift_grace',
+                        's.total_punches_required as shift_total_punches',
+                        's.session1_in_margin as shift_in_margin',
+                        's.session1_out_margin as shift_out_margin',
+                        's.session2_start_time',
+                        's.session2_end_time',
+                        's.session2_in_margin',
+                        's.session2_out_margin',
+                        's.session1_grace_out',
+                        's.session2_grace_in',
+                        's.session2_grace_out'
+                    )
+                    .orderBy('esa.id', 'desc')
+                    .first();
+
+                if (activeAssignment) {
+                    employeeWithShift.shift_is_flexi = activeAssignment.is_flexi;
+                    employeeWithShift.min_hours = activeAssignment.min_hours;
+                    employeeWithShift.shift_start = activeAssignment.start_time;
+                    employeeWithShift.shift_end = activeAssignment.end_time;
+                    employeeWithShift.shift_grace = activeAssignment.shift_grace;
+                    employeeWithShift.shift_total_punches = activeAssignment.shift_total_punches;
+                    employeeWithShift.shift_in_margin = activeAssignment.shift_in_margin;
+                    employeeWithShift.shift_out_margin = activeAssignment.shift_out_margin;
+                    employeeWithShift.session2_start_time = activeAssignment.session2_start_time;
+                    employeeWithShift.session2_end_time = activeAssignment.session2_end_time;
+                    employeeWithShift.session2_in_margin = activeAssignment.session2_in_margin;
+                    employeeWithShift.session2_out_margin = activeAssignment.session2_out_margin;
+                    employeeWithShift.session1_grace_out = activeAssignment.session1_grace_out;
+                    employeeWithShift.session2_grace_in = activeAssignment.session2_grace_in;
+                    employeeWithShift.session2_grace_out = activeAssignment.session2_grace_out;
+                }
+            }
+
+            // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
+            let isSession2 = false;
+            let session2CutoffMins = 0;
+            const reqPunches = parseInt(employeeWithShift?.shift_total_punches || 2);
+            if (reqPunches === 4) {
+                const punchMins = dateToISTMins(punchTime);
+                const s2StartStr = employeeWithShift?.session2_start_time || '14:00';
+                const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
+                const s2StartMins = s2Hours * 60 + s2Mins;
+                const s2InMargin = parseInt(employeeWithShift?.session2_in_margin || 30);
+                session2CutoffMins = s2StartMins - s2InMargin;
+                if (punchMins >= session2CutoffMins) {
+                    isSession2 = true;
+                }
+            }
+
+            // Overwrite/map shift parameters for Session 2 if active
+            if (isSession2 && employeeWithShift) {
+                employeeWithShift.shift_start = employeeWithShift.session2_start_time || '14:00';
+                employeeWithShift.shift_end = employeeWithShift.session2_end_time || '18:00';
+                employeeWithShift.shift_in_margin = employeeWithShift.session2_in_margin !== undefined ? employeeWithShift.session2_in_margin : 30;
+                employeeWithShift.shift_out_margin = employeeWithShift.session2_out_margin !== undefined ? employeeWithShift.session2_out_margin : 0;
+                employeeWithShift.shift_grace = employeeWithShift.session2_grace_in !== undefined ? employeeWithShift.session2_grace_in : 15;
+            }
+
             // If no night shift open log, search on the same day
             if (!activeLog) {
-                activeLog = await db('attendance')
-                    .where({ employee_id: employeeId, company_id: companyId })
-                    .whereRaw('DATE(check_in) = ?', [dateStr])
-                    .first();
+                if (reqPunches === 4) {
+                    const cutoffHour = Math.floor(session2CutoffMins / 60);
+                    const cutoffMin = session2CutoffMins % 60;
+                    const cutoffTimeStr = `${dateStr} ${String(cutoffHour).padStart(2, '0')}:${String(cutoffMin).padStart(2, '0')}:00`;
+                    
+                    if (isSession2) {
+                        activeLog = await db('attendance')
+                            .where({ employee_id: employeeId, company_id: companyId })
+                            .whereRaw('DATE(check_in) = ?', [dateStr])
+                            .whereRaw('check_in >= ?', [cutoffTimeStr])
+                            .first();
+                    } else {
+                        activeLog = await db('attendance')
+                            .where({ employee_id: employeeId, company_id: companyId })
+                            .whereRaw('DATE(check_in) = ?', [dateStr])
+                            .whereRaw('check_in < ?', [cutoffTimeStr])
+                            .first();
+                    }
+                } else {
+                    activeLog = await db('attendance')
+                        .where({ employee_id: employeeId, company_id: companyId })
+                        .whereRaw('DATE(check_in) = ?', [dateStr])
+                        .first();
+                }
             }
 
             if (!activeLog) {
                 // --- CHECK-IN ROUTINE ---
-                const employeeWithShift = await db('employees')
-                    .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
-                    .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
-                    .where('employees.id', employeeId)
-                    .select(
-                        'employees.*', 
-                        'shifts.start_time as shift_start', 
-                        'shifts.end_time as shift_end',
-                        'shifts.grace_period as shift_grace',
-                        'shifts.is_flexi as shift_is_flexi',
-                        'shifts.session1_in_margin as shift_in_margin',
-                        'shifts.session1_out_margin as shift_out_margin',
-                        'attendance_schemes.grace_period as scheme_grace'
-                    )
-                    .first();
-
-                // Resolve overridden shift for check-in date
-                if (employeeWithShift) {
-                    const activeAssignment = await db('employee_shift_assignments as esa')
-                        .join('shifts as s', 'esa.shift_id', 's.id')
-                        .where('esa.employee_id', employeeId)
-                        .where('esa.from_date', '<=', dateStr)
-                        .andWhere(function () {
-                            this.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
-                        })
-                        .select(
-                            's.is_flexi',
-                            's.min_hours',
-                            's.start_time',
-                            's.end_time',
-                            's.grace_period as shift_grace',
-                            's.session1_in_margin as shift_in_margin',
-                            's.session1_out_margin as shift_out_margin'
-                        )
-                        .orderBy('esa.id', 'desc')
-                        .first();
-
-                    if (activeAssignment) {
-                        employeeWithShift.shift_is_flexi = activeAssignment.is_flexi;
-                        employeeWithShift.min_hours = activeAssignment.min_hours;
-                        employeeWithShift.shift_start = activeAssignment.start_time;
-                        employeeWithShift.shift_end = activeAssignment.end_time;
-                        employeeWithShift.shift_grace = activeAssignment.shift_grace;
-                        employeeWithShift.shift_in_margin = activeAssignment.shift_in_margin;
-                        employeeWithShift.shift_out_margin = activeAssignment.shift_out_margin;
-                    }
-                }
 
                 // IN MARGIN CHECK
                 if (employeeWithShift && !employeeWithShift.shift_is_flexi) {
@@ -477,56 +553,7 @@ class MachineAttendanceService {
                     return { status: 'skipped', reason: 'Punch time prior to check-in' };
                 }
 
-                const employee = await db('employees')
-                    .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
-                    .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
-                    .where('employees.id', employeeId)
-                    .select(
-                        'shifts.is_flexi', 
-                        'shifts.min_hours', 
-                        'shifts.start_time', 
-                        'shifts.end_time',
-                        'shifts.grace_period as shift_grace',
-                        'shifts.session1_in_margin as shift_in_margin',
-                        'shifts.session1_out_margin as shift_out_margin',
-                        'attendance_schemes.half_day_hours as scheme_half_day_hours',
-                        'attendance_schemes.grace_period as scheme_grace'
-                    )
-                    .first();
-
-                // Resolve overridden shift for this check-in date
-                if (employee) {
-                    const checkInDateStr = dateToISTDateString(currentCheckIn);
-                    const activeAssignment = await db('employee_shift_assignments as esa')
-                        .join('shifts as s', 'esa.shift_id', 's.id')
-                        .where('esa.employee_id', employeeId)
-                        .where('esa.from_date', '<=', checkInDateStr)
-                        .andWhere(function () {
-                            this.where('esa.to_date', '>=', checkInDateStr).orWhereNull('esa.to_date');
-                        })
-                        .select(
-                            's.is_flexi',
-                            's.min_hours',
-                            's.start_time',
-                            's.end_time',
-                            's.grace_period as shift_grace',
-                            's.session1_in_margin as shift_in_margin',
-                            's.session1_out_margin as shift_out_margin'
-                        )
-                        .orderBy('esa.id', 'desc')
-                        .first();
-
-                    if (activeAssignment) {
-                        employee.is_flexi = activeAssignment.is_flexi;
-                        employee.min_hours = activeAssignment.min_hours;
-                        employee.start_time = activeAssignment.start_time;
-                        employee.end_time = activeAssignment.end_time;
-                        employee.shift_grace = activeAssignment.shift_grace;
-                        employee.shift_in_margin = activeAssignment.shift_in_margin;
-                        employee.shift_out_margin = activeAssignment.shift_out_margin;
-                    }
-                }
-
+                const employee = employeeWithShift;
                 const rules = await db('working_rules').where({ company_id: companyId }).first() || {};
 
                 const checkIn = dbDateToUTC(activeLog.check_in);

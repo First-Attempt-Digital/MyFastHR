@@ -234,6 +234,16 @@ class AttendanceService {
                 'shifts.end_time as shift_end',
                 'shifts.grace_period as shift_grace',
                 'shifts.is_flexi as shift_is_flexi',
+                'shifts.total_punches_required as shift_total_punches',
+                'shifts.session1_in_margin as shift_in_margin',
+                'shifts.session1_out_margin as shift_out_margin',
+                'shifts.session2_start_time',
+                'shifts.session2_end_time',
+                'shifts.session2_in_margin',
+                'shifts.session2_out_margin',
+                'shifts.session1_grace_out',
+                'shifts.session2_grace_in',
+                'shifts.session2_grace_out',
                 'attendance_schemes.grace_period as scheme_grace'
             )
             .first();
@@ -264,8 +274,16 @@ class AttendanceService {
                     's.start_time',
                     's.end_time',
                     's.grace_period as shift_grace',
+                    's.total_punches_required as shift_total_punches',
                     's.session1_in_margin as shift_in_margin',
-                    's.session1_out_margin as shift_out_margin'
+                    's.session1_out_margin as shift_out_margin',
+                    's.session2_start_time',
+                    's.session2_end_time',
+                    's.session2_in_margin',
+                    's.session2_out_margin',
+                    's.session1_grace_out',
+                    's.session2_grace_in',
+                    's.session2_grace_out'
                 )
                 .orderBy('esa.id', 'desc')
                 .first();
@@ -276,9 +294,41 @@ class AttendanceService {
                 employee.shift_start = activeAssignment.start_time;
                 employee.shift_end = activeAssignment.end_time;
                 employee.shift_grace = activeAssignment.shift_grace;
+                employee.shift_total_punches = activeAssignment.shift_total_punches;
                 employee.shift_in_margin = activeAssignment.shift_in_margin;
                 employee.shift_out_margin = activeAssignment.shift_out_margin;
+                employee.session2_start_time = activeAssignment.session2_start_time;
+                employee.session2_end_time = activeAssignment.session2_end_time;
+                employee.session2_in_margin = activeAssignment.session2_in_margin;
+                employee.session2_out_margin = activeAssignment.session2_out_margin;
+                employee.session1_grace_out = activeAssignment.session1_grace_out;
+                employee.session2_grace_in = activeAssignment.session2_grace_in;
+                employee.session2_grace_out = activeAssignment.session2_grace_out;
             }
+        }
+
+        // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
+        let isSession2 = false;
+        const reqPunches = parseInt(employee?.shift_total_punches || 2);
+        if (reqPunches === 4) {
+            const punchMins = dateToISTMins(now);
+            const s2StartStr = employee?.session2_start_time || '14:00';
+            const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
+            const s2StartMins = s2Hours * 60 + s2Mins;
+            const s2InMargin = parseInt(employee?.session2_in_margin || 30);
+            const session2CutoffMins = s2StartMins - s2InMargin;
+            if (punchMins >= session2CutoffMins) {
+                isSession2 = true;
+            }
+        }
+
+        // Overwrite/map shift parameters for Session 2 if active
+        if (isSession2 && employee) {
+            employee.shift_start = employee.session2_start_time || '14:00';
+            employee.shift_end = employee.session2_end_time || '18:00';
+            employee.shift_in_margin = employee.session2_in_margin !== undefined ? employee.session2_in_margin : 30;
+            employee.shift_out_margin = employee.session2_out_margin !== undefined ? employee.session2_out_margin : 0;
+            employee.shift_grace = employee.session2_grace_in !== undefined ? employee.session2_grace_in : 15;
         }
 
         let isCheckoutAttempt = false;
@@ -364,7 +414,19 @@ class AttendanceService {
         const employee = await db('employees')
             .leftJoin('shifts', 'employees.shift_id', 'shifts.id')
             .where('employees.id', empId)
-            .select('shifts.is_flexi', 'shifts.min_hours', 'shifts.start_time', 'shifts.end_time')
+            .select(
+                'shifts.is_flexi', 
+                'shifts.min_hours', 
+                'shifts.start_time', 
+                'shifts.end_time',
+                'shifts.total_punches_required as shift_total_punches',
+                'shifts.session2_start_time',
+                'shifts.session2_end_time',
+                'shifts.session2_in_margin',
+                'shifts.session2_out_margin',
+                'shifts.session2_grace_in',
+                'shifts.session2_grace_out'
+            )
             .first();
 
         const now = new Date();
@@ -385,7 +447,14 @@ class AttendanceService {
                     's.is_flexi',
                     's.min_hours',
                     's.start_time',
-                    's.end_time'
+                    's.end_time',
+                    's.total_punches_required as shift_total_punches',
+                    's.session2_start_time',
+                    's.session2_end_time',
+                    's.session2_in_margin',
+                    's.session2_out_margin',
+                    's.session2_grace_in',
+                    's.session2_grace_out'
                 )
                 .orderBy('esa.id', 'desc')
                 .first();
@@ -395,7 +464,39 @@ class AttendanceService {
                 employee.min_hours = activeAssignment.min_hours;
                 employee.start_time = activeAssignment.start_time;
                 employee.end_time = activeAssignment.end_time;
+                employee.shift_total_punches = activeAssignment.shift_total_punches;
+                employee.session2_start_time = activeAssignment.session2_start_time;
+                employee.session2_end_time = activeAssignment.session2_end_time;
+                employee.session2_in_margin = activeAssignment.session2_in_margin;
+                employee.session2_out_margin = activeAssignment.session2_out_margin;
+                employee.session2_grace_in = activeAssignment.session2_grace_in;
+                employee.session2_grace_out = activeAssignment.session2_grace_out;
             }
+        }
+
+        // Determine if the check-in belongs to Session 2 (for 4-punch shifts)
+        let isSession2 = false;
+        const reqPunches = parseInt(employee?.shift_total_punches || 2);
+        if (reqPunches === 4) {
+            const checkInTime = new Date(activeEntry.check_in);
+            const checkInMins = dateToISTMins(checkInTime);
+            const s2StartStr = employee?.session2_start_time || '14:00';
+            const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
+            const s2StartMins = s2Hours * 60 + s2Mins;
+            const s2InMargin = parseInt(employee?.session2_in_margin || 30);
+            const session2CutoffMins = s2StartMins - s2InMargin;
+            if (checkInMins >= session2CutoffMins) {
+                isSession2 = true;
+            }
+        }
+
+        // Overwrite/map shift parameters for Session 2 if active
+        if (isSession2 && employee) {
+            employee.start_time = employee.session2_start_time || '14:00';
+            employee.end_time = employee.session2_end_time || '18:00';
+            employee.shift_in_margin = employee.session2_in_margin !== undefined ? employee.session2_in_margin : 30;
+            employee.shift_out_margin = employee.session2_out_margin !== undefined ? employee.session2_out_margin : 0;
+            employee.shift_grace = employee.session2_grace_in !== undefined ? employee.session2_grace_in : 15;
         }
 
         // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
