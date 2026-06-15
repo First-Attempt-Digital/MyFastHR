@@ -713,9 +713,12 @@ const ShiftManagement = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Time Zone</label>
-                                    <select className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-500 transition-all appearance-none">
-                                        <option>Select Time Zone</option>
-                                        <option>(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi</option>
+                                    <select 
+                                        defaultValue="(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi"
+                                        className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-5 text-xs font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-500 transition-all appearance-none"
+                                    >
+                                        <option value="">Select Time Zone</option>
+                                        <option value="(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi">(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi</option>
                                     </select>
                                 </div>
                             </div>
