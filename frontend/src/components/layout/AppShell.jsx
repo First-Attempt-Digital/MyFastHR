@@ -549,19 +549,28 @@ const AppShell = ({ children }) => {
                     <span className="text-sm font-bold">Main</span>
                     <ChevronDown size={14} className="text-slate-400 mt-0.5 group-hover:text-slate-600 transition-colors" />
                 </div>
-                <div className="absolute top-full left-0 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[70] translate-y-2 group-hover:translate-y-0">
+                <div className="absolute top-full left-0 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[70] translate-y-2 group-hover:translate-y-0">
                   <Link to="/employees/onboard" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <Plus size={16} />
-                    <span className="text-xs font-bold">Add Employee</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Add Employee</span>
+                      <span className="text-[10px] text-slate-400">Register new team member</span>
+                    </div>
                   </Link>
                   <Link to="/employees/analytics" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <TrendingUp size={16} />
-                    <span className="text-xs font-bold">Analytics Hub</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Analytics Hub</span>
+                      <span className="text-[10px] text-slate-400">View workforce analytics</span>
+                    </div>
                   </Link>
 
                   <Link to="/employees/org-chart" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <Network size={16} />
-                    <span className="text-xs font-bold">Organization Chart</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Organization Chart</span>
+                      <span className="text-[10px] text-slate-400">Visualize team hierarchy</span>
+                    </div>
                   </Link>
 
                 </div>
@@ -573,22 +582,34 @@ const AppShell = ({ children }) => {
                     <span className="text-sm font-bold">Admin</span>
                     <ChevronDown size={14} className="text-slate-400 mt-0.5 group-hover:text-slate-600 transition-colors" />
                 </div>
-                <div className="absolute top-full left-0 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[70] translate-y-2 group-hover:translate-y-0">
+                <div className="absolute top-full left-0 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[70] translate-y-2 group-hover:translate-y-0">
                   <Link to="/admin/letters/generate" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <FileText size={16} />
-                    <span className="text-xs font-bold">Generate Letter</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Generate Letter</span>
+                      <span className="text-[10px] text-slate-400">Create official letters</span>
+                    </div>
                   </Link>
                   <Link to="/admin/documents/bulk-upload" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <Upload size={16} />
-                    <span className="text-xs font-bold">Bulk Documents upload</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Bulk Documents upload</span>
+                      <span className="text-[10px] text-slate-400">Upload multiple files</span>
+                    </div>
                   </Link>
                   <Link to="/admin/documents/vault" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <Database size={16} />
-                    <span className="text-xs font-bold">Document Vault</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Document Vault</span>
+                      <span className="text-[10px] text-slate-400">Store employee records</span>
+                    </div>
                   </Link>
                   <Link to="/admin/letters/generate?open=new-template" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                     <Sparkles size={16} />
-                    <span className="text-xs font-bold">Letter Templates</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold">Letter Templates</span>
+                      <span className="text-[10px] text-slate-400">Manage document templates</span>
+                    </div>
                   </Link>
                 </div>
               </div>
@@ -688,23 +709,38 @@ const AppShell = ({ children }) => {
                   <div className="absolute top-full left-0 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[70] translate-y-2 group-hover:translate-y-0">
                     <Link to="/leaves/granter" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <UserCheck size={16} />
-                      <span className="text-xs font-bold">Leave Granter</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Leave Granter</span>
+                        <span className="text-[10px] text-slate-400">Manage leave assignments</span>
+                      </div>
                     </Link>
                     <Link to="/leaves/assign-scheme" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <Shield size={16} />
-                      <span className="text-xs font-bold">Assign Attendance Rules</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Assign Attendance Rules</span>
+                        <span className="text-[10px] text-slate-400">Assign policies to employees</span>
+                      </div>
                     </Link>
                     <Link to="/leaves/manual-override" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <History size={16} />
-                      <span className="text-xs font-bold">Manual Override</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Manual Override</span>
+                        <span className="text-[10px] text-slate-400">Update attendance manually</span>
+                      </div>
                     </Link>
                     <Link to="/leaves/attendance-muster?tab=entry_requests" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <CheckCircle2 size={16} />
-                      <span className="text-xs font-bold">Entry/Exit Approvals</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Entry/Exit Approvals</span>
+                        <span className="text-[10px] text-slate-400">Approve regularization requests</span>
+                      </div>
                     </Link>
                     <Link to="/leaves/shift-override" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <Clock size={16} />
-                      <span className="text-xs font-bold">Shift Override</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Shift Override</span>
+                        <span className="text-[10px] text-slate-400">Assign customized shifts</span>
+                      </div>
                     </Link>
                   </div>
                 </div>
@@ -721,15 +757,24 @@ const AppShell = ({ children }) => {
                   <div className="absolute top-full left-0 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[70] translate-y-2 group-hover:translate-y-0">
                     <Link to="/leaves/holidays" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <Calendar size={16} />
-                      <span className="text-xs font-bold">Holiday List</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Holiday List</span>
+                        <span className="text-[10px] text-slate-400">Manage company holidays</span>
+                      </div>
                     </Link>
                     <Link to="/leaves/weekend-override" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <Calendar size={16} />
-                      <span className="text-xs font-bold">Weekend Override</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Weekend Override</span>
+                        <span className="text-[10px] text-slate-400">Update weekend configurations</span>
+                      </div>
                     </Link>
                     <Link to="/leaves/employee-records" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <Users size={16} />
-                      <span className="text-xs font-bold">Employee Leave Records</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">Employee Leave Records</span>
+                        <span className="text-[10px] text-slate-400">Track historical leave records</span>
+                      </div>
                     </Link>
                   </div>
                 </div>
