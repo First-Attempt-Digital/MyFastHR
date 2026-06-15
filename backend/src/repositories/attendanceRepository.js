@@ -14,10 +14,12 @@ class AttendanceRepository {
 
         if (existing) throw new Error('Already punched in today');
 
+        const utcNowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
         return await db('attendance').insert({
             employee_id: employeeId,
             company_id: companyId,
-            check_in: db.fn.now(),
+            check_in: utcNowStr,
             status: status,
             latitude: location.latitude || null,
             longitude: location.longitude || null,
@@ -45,10 +47,12 @@ class AttendanceRepository {
         const diffMs = now - checkIn;
         const workHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
 
+        const utcNowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
         return await db('attendance')
             .where({ id: entry.id })
             .update({
-                check_out: db.fn.now(),
+                check_out: utcNowStr,
                 out_latitude: location.latitude || null,
                 out_longitude: location.longitude || null,
                 out_accuracy: location.accuracy || null,

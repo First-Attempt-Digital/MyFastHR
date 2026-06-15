@@ -7,8 +7,21 @@ const crypto = require('crypto');
  */
 function dbDateToUTC(dateVal) {
     if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
+    let d = new Date(dateVal);
+    if (isNaN(d.getTime())) {
+        const str = String(dateVal).trim();
+        const parts = str.split(/[- : T]/);
+        if (parts.length >= 5) {
+            const yr = parseInt(parts[0]);
+            const mo = parseInt(parts[1]) - 1;
+            const dy = parseInt(parts[2]);
+            const hr = parseInt(parts[3]);
+            const mi = parseInt(parts[4]);
+            const sc = parts[5] ? parseInt(parts[5]) : 0;
+            return new Date(Date.UTC(yr, mo, dy, hr, mi, sc));
+        }
+        return null;
+    }
     
     // Treat the local fields as UTC values
     return new Date(Date.UTC(
@@ -643,7 +656,11 @@ class MachineAttendanceService {
                 const rules = await db('working_rules').where({ company_id: companyId }).first() || {};
 
                 const checkIn = dbDateToUTC(activeLog.check_in);
-                const workedHours = (punchTime - checkIn) / (1000 * 60 * 60);
+                const checkInMins = dateToISTMins(checkIn);
+                const punchMins = dateToISTMins(punchTime);
+                let workedMins = punchMins - checkInMins;
+                if (workedMins < 0) workedMins += 24 * 60;
+                const workedHours = workedMins / 60;
 
                 let isEarly = false;
                 let halfDayLimit = 4; // default

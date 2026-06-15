@@ -11,8 +11,21 @@ function toLocalYMD(dateVal) {
 
 function dbDateToUTC(dateVal) {
     if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
+    let d = new Date(dateVal);
+    if (isNaN(d.getTime())) {
+        const str = String(dateVal).trim();
+        const parts = str.split(/[- : T]/);
+        if (parts.length >= 5) {
+            const yr = parseInt(parts[0]);
+            const mo = parseInt(parts[1]) - 1;
+            const dy = parseInt(parts[2]);
+            const hr = parseInt(parts[3]);
+            const mi = parseInt(parts[4]);
+            const sc = parts[5] ? parseInt(parts[5]) : 0;
+            return new Date(Date.UTC(yr, mo, dy, hr, mi, sc));
+        }
+        return null;
+    }
     
     // Treat the local fields as UTC values
     return new Date(Date.UTC(
@@ -608,8 +621,12 @@ class AttendanceService {
             .first();
 
         let isEarlyCheckoutAttempt = false;
-        const checkIn = new Date(activeEntry.check_in);
-        const workedHours = (now - checkIn) / (1000 * 60 * 60);
+        const checkIn = dbDateToUTC(activeEntry.check_in);
+        const checkInMins = dateToISTMins(checkIn);
+        const punchMins = dateToISTMins(now);
+        let workedMins = punchMins - checkInMins;
+        if (workedMins < 0) workedMins += 24 * 60; // midnight crossing
+        const workedHours = workedMins / 60;
 
         let halfDayLimit = 4; // default
         let outMarginThreshold = null;
