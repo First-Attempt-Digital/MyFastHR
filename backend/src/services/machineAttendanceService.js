@@ -368,19 +368,20 @@ class MachineAttendanceService {
                 if (reqPunches === 4) {
                     const cutoffHour = Math.floor(session2CutoffMins / 60);
                     const cutoffMin = session2CutoffMins % 60;
-                    const cutoffTimeStr = `${dateStr} ${String(cutoffHour).padStart(2, '0')}:${String(cutoffMin).padStart(2, '0')}:00`;
+                    const cutoffDateObj = new Date(`${dateStr} ${String(cutoffHour).padStart(2, '0')}:${String(cutoffMin).padStart(2, '0')}:00 +05:30`);
+                    const cutoffTimeUTCStr = cutoffDateObj.toISOString().slice(0, 19).replace('T', ' ');
                     
                     if (isSession2) {
                         activeLog = await db('attendance')
                             .where({ employee_id: employeeId, company_id: companyId })
                             .whereRaw('DATE(check_in) = ?', [dateStr])
-                            .whereRaw('check_in >= ?', [cutoffTimeStr])
+                            .whereRaw('check_in >= ?', [cutoffTimeUTCStr])
                             .first();
                     } else {
                         activeLog = await db('attendance')
                             .where({ employee_id: employeeId, company_id: companyId })
                             .whereRaw('DATE(check_in) = ?', [dateStr])
-                            .whereRaw('check_in < ?', [cutoffTimeStr])
+                            .whereRaw('check_in < ?', [cutoffTimeUTCStr])
                             .first();
                     }
                 } else {
@@ -571,8 +572,8 @@ class MachineAttendanceService {
                         isEarly = true;
                     }
                 } else {
-                    const shiftStart = employee?.start_time || '09:00';
-                    const shiftEnd = employee?.end_time || '18:00';
+                    const shiftStart = employee?.shift_start || '09:00';
+                    const shiftEnd = employee?.shift_end || '18:00';
                     const outMargin = employee?.shift_out_margin !== undefined ? parseInt(employee.shift_out_margin) : 0;
                     
                     const checkInDateStr = dateToISTDateString(currentCheckIn);
