@@ -930,10 +930,12 @@ class AttendanceService {
                     onTime.push({ ...baseEntry, early: 'Flexi' });
                 } else {
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
+                    const targetDateStr = dateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+                    const shiftStartActual = new Date(`${targetDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+
                     const totalMins = sMins + (parseInt(grace) || 0);
                     const allowedHours = String(sHours + Math.floor(totalMins / 60)).padStart(2, '0');
                     const allowedMins = String(totalMins % 60).padStart(2, '0');
-                    const targetDateStr = dateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
                     const shiftStartLimit = new Date(`${targetDateStr} ${allowedHours}:${allowedMins}:00 +05:30`);
 
                     const isLate = checkIn > shiftStartLimit;
@@ -945,8 +947,11 @@ class AttendanceService {
                         const lateStr = `${String(lateHours).padStart(2, '0')}:${String(lateMins % 60).padStart(2, '0')}`;
                         lateArrivals.push({ ...baseEntry, late: lateStr });
                     } else {
-                        const diffMs = shiftStartLimit - checkIn;
-                        const earlyMins = Math.floor(diffMs / 60000);
+                        let earlyMins = 0;
+                        if (checkIn < shiftStartActual) {
+                            const diffMs = shiftStartActual - checkIn;
+                            earlyMins = Math.floor(diffMs / 60000);
+                        }
                         const earlyHours = Math.floor(earlyMins / 60);
                         const earlyStr = `${String(earlyHours).padStart(2, '0')}:${String(earlyMins % 60).padStart(2, '0')}`;
                         onTime.push({ ...baseEntry, early: earlyStr });
