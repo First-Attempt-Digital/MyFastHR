@@ -1212,6 +1212,31 @@ class AttendanceService {
         return { message: 'Attendance updated successfully' };
     }
 
+    async deleteTestingAttendance(user, employeeId, dateStr) {
+        const companyId = user.company_id;
+        if (Number(companyId) !== 29) {
+            throw new Error('Not allowed: This operation is restricted to company 29 testing.');
+        }
+
+        const employee = await db('employees')
+            .where({ id: employeeId, company_id: companyId })
+            .first();
+        if (!employee) {
+            throw new Error('Employee not found');
+        }
+
+        if (String(employee.employee_id_number) !== '963258') {
+            throw new Error('Not allowed: Deletion is restricted to employee 963258 (Ritesh Patel).');
+        }
+
+        const deletedCount = await db('attendance')
+            .where({ employee_id: employeeId, company_id: companyId })
+            .whereRaw('DATE(check_in) = ?', [dateStr])
+            .del();
+
+        return { message: 'Attendance records deleted successfully', deletedCount };
+    }
+
     async logOverride(trx, user, employeeId, companyId, attendanceDate, prevStatus, newStatus, type) {
         // Ensure history table exists (Lazy check)
         const hasTable = await trx.schema.hasTable('attendance_override_history');
