@@ -250,12 +250,21 @@ class AttendanceService {
         const dateStr = toLocalYMD(now);
 
         let isCheckoutAttempt = false;
-        if (employee && employee.shift_end && !employee.shift_is_flexi) {
-            const shiftEndStr = employee.shift_end;
-            const [eHours, eMins] = shiftEndStr.split(':').map(Number);
-            const thresholdMins = eHours * 60 + eMins - 120; // 2 hours prior to shift end
-            const punchMins = dateToISTMins(now);
-            if (punchMins >= thresholdMins) {
+        if (employee && employee.shift_start && employee.shift_end && !employee.shift_is_flexi) {
+            const shiftStart = employee.shift_start;
+            const shiftEnd = employee.shift_end;
+            const [sHours, sMins] = shiftStart.split(':').map(Number);
+            const [eHours, eMins] = shiftEnd.split(':').map(Number);
+            const shiftStartDate = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+            let shiftEndDate = new Date(`${dateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+            if (shiftEndDate < shiftStartDate) {
+                // Midnight crossing
+                shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+            }
+            const shiftDurationMins = Math.round((shiftEndDate - shiftStartDate) / 60000);
+            const checkoutWindowMins = Math.min(120, shiftDurationMins * 0.25);
+            const thresholdDate = new Date(shiftEndDate.getTime() - checkoutWindowMins * 60 * 1000);
+            if (now >= thresholdDate) {
                 isCheckoutAttempt = true;
                 status = 'no_in';
             }
