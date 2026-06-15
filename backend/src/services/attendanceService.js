@@ -1302,7 +1302,30 @@ class AttendanceService {
             .whereRaw('DATE(check_in) = ?', [dateStr])
             .del();
 
-        return { message: 'Attendance records deleted successfully', deletedCount };
+        // Also delete from attendance_entry_requests for this date
+        await db('attendance_entry_requests')
+            .where({ employee_id: employeeId, company_id: companyId, date: dateStr })
+            .del();
+
+        // Also delete from biometric_raw_logs for this date
+        const mappings = await db('employee_biometric_mapping')
+            .where({ employee_id: employeeId, company_id: companyId })
+            .select('biometric_enroll_id');
+        const enrollIds = mappings.map(m => m.biometric_enroll_id);
+        enrollIds.push(String(employee.employee_id_number));
+        if (employee.employee_id_number.startsWith('0')) {
+            enrollIds.push(employee.employee_id_number.replace(/^0+/, ''));
+        } else {
+            enrollIds.push('0' + employee.employee_id_number);
+        }
+
+        await db('biometric_raw_logs')
+            .where({ company_id: companyId })
+            .whereIn('employee_code', enrollIds)
+            .whereRaw('DATE(punch_time) = ?', [dateStr])
+            .del();
+
+        return { message: 'Attendance records, requests, and logs deleted successfully', deletedCount };
     }
 
     async logOverride(trx, user, employeeId, companyId, attendanceDate, prevStatus, newStatus, type) {
