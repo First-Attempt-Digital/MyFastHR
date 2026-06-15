@@ -437,12 +437,7 @@ class AttendanceService {
         }
 
         if (!approvedRequest) {
-            // Only trigger early out request if employee has completed at least the half day hours.
-            // If they punch out before half day, we ignore the early out request.
             let triggersEarlyOutRequest = isEarlyCheckoutAttempt;
-            if (triggersEarlyOutRequest && workedHours < halfDayLimit) {
-                triggersEarlyOutRequest = false;
-            }
 
             if (triggersEarlyOutRequest) {
                 // AUTO-CREATE PENDING ENTRY/EXIT REQUEST

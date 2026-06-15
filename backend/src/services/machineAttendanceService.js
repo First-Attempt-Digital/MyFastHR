@@ -588,8 +588,8 @@ class MachineAttendanceService {
                     let triggersEarlyOutRequest = false;
 
                     if (isEarly) {
-                        if (workedHours >= halfDayLimit && punchTime < outMarginThreshold) {
-                            // If they completed half day hours, but are punching out BEFORE the out margin window
+                        if (punchTime < outMarginThreshold) {
+                            // If they are punching out BEFORE the out margin window, triggers early out request
                             triggersEarlyOutRequest = true;
                         }
                     }
