@@ -282,6 +282,7 @@ class MachineAttendanceService {
                     'shifts.session2_grace_in',
                     'shifts.session2_grace_out',
                     'attendance_schemes.grace_period as scheme_grace',
+                    'attendance_schemes.max_late_allowed',
                     'attendance_schemes.half_day_hours as scheme_half_day_hours'
                 )
                 .first();
@@ -338,6 +339,13 @@ class MachineAttendanceService {
                 }
             }
 
+            // Backup original shift parameters (Session 1 parameters) before any overwrite/mapping
+            const origShiftStart = employeeWithShift?.shift_start || '09:00';
+            const origShiftEnd = employeeWithShift?.shift_end || '18:00';
+            const origShiftGrace = employeeWithShift?.shift_grace !== undefined ? employeeWithShift.shift_grace : 15;
+            const origShiftInMargin = employeeWithShift?.shift_in_margin !== undefined ? employeeWithShift.shift_in_margin : 30;
+            const origShiftOutMargin = employeeWithShift?.shift_out_margin !== undefined ? employeeWithShift.shift_out_margin : 0;
+
             // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
             let isSession2 = false;
             let session2CutoffMins = 0;
@@ -351,6 +359,23 @@ class MachineAttendanceService {
                 session2CutoffMins = s2StartMins - s2InMargin;
                 if (punchMins >= session2CutoffMins) {
                     isSession2 = true;
+                }
+
+                // Gap Check: between Session 1 end time and Session 2 in-margin start time
+                const s1EndStr = origShiftEnd;
+                const [s1EndHours, s1EndMinsVal] = s1EndStr.split(':').map(Number);
+                const s1EndMins = s1EndHours * 60 + s1EndMinsVal;
+                
+                if (punchMins > s1EndMins && punchMins < session2CutoffMins) {
+                    await db('biometric_raw_logs').insert({
+                        company_id: companyId,
+                        device_serial: deviceSerial,
+                        employee_code,
+                        punch_time: punchTimeStr,
+                        status: 'skipped',
+                        error_details: `Punch ignored: between Session 1 end (${s1EndStr}) and Session 2 in-margin start`
+                    });
+                    return { status: 'skipped', reason: 'Punch ignored: between Session 1 and Session 2' };
                 }
             }
 
@@ -454,13 +479,60 @@ class MachineAttendanceService {
                     const grace = employeeWithShift?.scheme_grace ?? employeeWithShift?.shift_grace ?? rules.grace_period ?? 15;
 
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
-                    const totalMins = sMins + (parseInt(grace) || 0);
-                    const allowedHours = String(sHours + Math.floor(totalMins / 60)).padStart(2, '0');
-                    const allowedMins = String(totalMins % 60).padStart(2, '0');
-                    // Construct allowed shift start time in IST timezone
-                    const shiftAllowed = new Date(`${dateStr} ${allowedHours}:${allowedMins}:00 +05:30`);
+                    const shiftStartMins = sHours * 60 + sMins;
+                    const shiftStartLimitMins = shiftStartMins + (parseInt(grace) || 0);
 
-                    if (punchTime > shiftAllowed) {
+                    const punchMins = dateToISTMins(punchTime);
+                    let isLate = false;
+
+                    if (punchMins > shiftStartLimitMins) {
+                        isLate = true;
+                    } else if (punchMins > shiftStartMins && punchMins <= shiftStartLimitMins) {
+                        // Check if grace limit has been exceeded for the current month
+                        const startOfMonth = `${dateStr.slice(0, 8)}01`;
+                        const currentMonthLogs = await db('attendance')
+                            .where({ employee_id: employeeId, company_id: companyId })
+                            .whereRaw('DATE(check_in) >= ?', [startOfMonth])
+                            .whereRaw('DATE(check_in) < ?', [dateStr])
+                            .select('check_in');
+
+                        let graceCount = 0;
+                        const s1StartStr = origShiftStart;
+                        const [s1H, s1M] = s1StartStr.split(':').map(Number);
+                        const s1StartMinsVal = s1H * 60 + s1M;
+                        const s1Grace = parseInt(employeeWithShift?.scheme_grace ?? origShiftGrace ?? rules.grace_period ?? 15);
+                        const s1AllowedMins = s1StartMinsVal + s1Grace;
+
+                        const s2StartStr = employeeWithShift?.session2_start_time;
+                        let s2StartMinsVal = null;
+                        let s2AllowedMins = null;
+                        if (s2StartStr && reqPunches === 4) {
+                            const [s2H, s2M] = s2StartStr.split(':').map(Number);
+                            s2StartMinsVal = s2H * 60 + s2M;
+                            const s2Grace = parseInt(employeeWithShift?.session2_grace_in ?? employeeWithShift?.scheme_grace ?? rules.grace_period ?? 15);
+                            s2AllowedMins = s2StartMinsVal + s2Grace;
+                        }
+
+                        for (const log of currentMonthLogs) {
+                            const checkInDate = dbDateToUTC(log.check_in);
+                            const checkInMins = dateToISTMins(checkInDate);
+                            const usedS1Grace = checkInMins > s1StartMinsVal && checkInMins <= s1AllowedMins;
+                            const usedS2Grace = s2StartMinsVal !== null && checkInMins > s2StartMinsVal && checkInMins <= s2AllowedMins;
+                            if (usedS1Grace || usedS2Grace) {
+                                graceCount++;
+                            }
+                        }
+
+                        const allowedGraceLimit = employeeWithShift?.max_late_allowed !== undefined && employeeWithShift?.max_late_allowed !== null 
+                            ? parseInt(employeeWithShift.max_late_allowed) 
+                            : 3;
+
+                        if (graceCount >= allowedGraceLimit) {
+                            isLate = true;
+                        }
+                    }
+
+                    if (isLate) {
                         // Biometric machine punch - log attendance as 'late' instead of blocking
                         // Auto-create regularization request for manager review
                         status = 'pending';
@@ -480,7 +552,6 @@ class MachineAttendanceService {
                                 updated_at: db.fn.now()
                             });
                         }
-                        // NOTE: Do NOT return/skip - continue to log the attendance below
                     }
                 }
 
@@ -507,6 +578,20 @@ class MachineAttendanceService {
                 return { status: 'check-in', record_status: status };
             } else {
                 // --- CHECK-OUT ROUTINE / RE-PUNCH DEDUPLICATION ---
+                
+                // If 4-punch and already checked out of Session 1, and not yet in Session 2, ignore punch
+                if (reqPunches === 4 && activeLog.check_out && !isSession2) {
+                    await db('biometric_raw_logs').insert({
+                        company_id: companyId,
+                        device_serial: deviceSerial,
+                        employee_code,
+                        punch_time: punchTimeStr,
+                        status: 'skipped',
+                        error_details: 'Punch ignored: already checked out of Session 1 and before Session 2 margin'
+                    });
+                    return { status: 'skipped', reason: 'Punch ignored: between Session 1 and Session 2' };
+                }
+
                 const currentCheckIn = dbDateToUTC(activeLog.check_in);
                 const diffMinutesFromCheckIn = Math.abs(punchTime.getTime() - currentCheckIn.getTime()) / 60000;
 
@@ -600,11 +685,30 @@ class MachineAttendanceService {
                     }
 
                     // Determine half day hours limit
-                    halfDayLimit = employee?.min_hours !== undefined && employee?.min_hours !== null
-                        ? parseFloat(employee.min_hours) / 2
-                        : (employee?.scheme_half_day_hours !== undefined && employee?.scheme_half_day_hours !== null
-                            ? parseFloat(employee.scheme_half_day_hours)
-                            : parseFloat(rules.half_day_hours || 4));
+                    if (reqPunches === 4) {
+                        let diffMins = (eHours * 60 + eMins) - (sHours * 60 + sMins);
+                        if (diffMins < 0) diffMins += 24 * 60;
+                        halfDayLimit = (diffMins / 60) / 2;
+                    } else {
+                        halfDayLimit = employee?.min_hours !== undefined && employee?.min_hours !== null
+                            ? parseFloat(employee.min_hours) / 2
+                            : (employee?.scheme_half_day_hours !== undefined && employee?.scheme_half_day_hours !== null
+                                ? parseFloat(employee.scheme_half_day_hours)
+                                : parseFloat(rules.half_day_hours || 4));
+                    }
+
+                    // Skip punch checkout if before half day limit
+                    if (workedHours < halfDayLimit) {
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'skipped',
+                            error_details: `Punch ignored: checkout before half day limit (worked: ${workedHours.toFixed(2)}h, limit: ${halfDayLimit.toFixed(2)}h)`
+                        });
+                        return { status: 'skipped', reason: 'Punch ignored: before half day limit' };
+                    }
 
                     outMarginThreshold = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
 

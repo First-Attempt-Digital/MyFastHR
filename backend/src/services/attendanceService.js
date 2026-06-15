@@ -9,6 +9,22 @@ function toLocalYMD(dateVal) {
     return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 }
 
+function dbDateToUTC(dateVal) {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    
+    // Treat the local fields as UTC values
+    return new Date(Date.UTC(
+        d.getFullYear(),
+        d.getMonth(),
+        d.getDate(),
+        d.getHours(),
+        d.getMinutes(),
+        d.getSeconds()
+    ));
+}
+
 function dateToISTMins(dateVal) {
     if (!dateVal) return 0;
     const d = new Date(dateVal);
@@ -244,7 +260,8 @@ class AttendanceService {
                 'shifts.session1_grace_out',
                 'shifts.session2_grace_in',
                 'shifts.session2_grace_out',
-                'attendance_schemes.grace_period as scheme_grace'
+                'attendance_schemes.grace_period as scheme_grace',
+                'attendance_schemes.max_late_allowed'
             )
             .first();
 
@@ -307,8 +324,16 @@ class AttendanceService {
             }
         }
 
+        // Backup original shift parameters (Session 1 parameters) before any overwrite/mapping
+        const origShiftStart = employee?.shift_start || '09:00';
+        const origShiftEnd = employee?.shift_end || '18:00';
+        const origShiftGrace = employee?.shift_grace !== undefined ? employee.shift_grace : 15;
+        const origShiftInMargin = employee?.shift_in_margin !== undefined ? employee.shift_in_margin : 30;
+        const origShiftOutMargin = employee?.shift_out_margin !== undefined ? employee.shift_out_margin : 0;
+
         // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
         let isSession2 = false;
+        let session2CutoffMins = 0;
         const reqPunches = parseInt(employee?.shift_total_punches || 2);
         if (reqPunches === 4) {
             const punchMins = dateToISTMins(now);
@@ -316,9 +341,18 @@ class AttendanceService {
             const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
             const s2StartMins = s2Hours * 60 + s2Mins;
             const s2InMargin = parseInt(employee?.session2_in_margin || 30);
-            const session2CutoffMins = s2StartMins - s2InMargin;
+            session2CutoffMins = s2StartMins - s2InMargin;
             if (punchMins >= session2CutoffMins) {
                 isSession2 = true;
+            }
+
+            // Gap Check: between Session 1 end time and Session 2 in-margin start time
+            const s1EndStr = origShiftEnd;
+            const [s1EndHours, s1EndMinsVal] = s1EndStr.split(':').map(Number);
+            const s1EndMins = s1EndHours * 60 + s1EndMinsVal;
+            
+            if (punchMins > s1EndMins && punchMins < session2CutoffMins) {
+                throw new Error('PUNCH_BLOCKED: Check-in is not allowed in the gap between Session 1 and Session 2.');
             }
         }
 
@@ -329,6 +363,20 @@ class AttendanceService {
             employee.shift_in_margin = employee.session2_in_margin !== undefined ? employee.session2_in_margin : 30;
             employee.shift_out_margin = employee.session2_out_margin !== undefined ? employee.session2_out_margin : 0;
             employee.shift_grace = employee.session2_grace_in !== undefined ? employee.session2_grace_in : 15;
+        }
+
+        // In Margin Check
+        if (employee && !employee.shift_is_flexi) {
+            const shiftStart = employee.shift_start || '09:00';
+            const inMargin = employee.shift_in_margin !== undefined ? parseInt(employee.shift_in_margin) : 0;
+            if (inMargin > 0) {
+                const [sHours, sMins] = shiftStart.split(':').map(Number);
+                const shiftStartDate = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                const earliestCheckIn = new Date(shiftStartDate.getTime() - inMargin * 60 * 1000);
+                if (now < earliestCheckIn) {
+                    throw new Error(`PUNCH_BLOCKED: Check-in blocked. You cannot check in before the allowed margin (earliest allowed: ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })}).`);
+                }
+            }
         }
 
         let isCheckoutAttempt = false;
@@ -362,10 +410,59 @@ class AttendanceService {
             const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
 
             const [sHours, sMins] = shiftStart.split(':').map(Number);
-            const shiftStartLimitMins = sHours * 60 + sMins + (parseInt(grace) || 0);
+            const shiftStartMins = sHours * 60 + sMins;
+            const shiftStartLimitMins = shiftStartMins + (parseInt(grace) || 0);
             const nowMins = dateToISTMins(now);
 
+            let isLate = false;
             if (nowMins > shiftStartLimitMins) {
+                isLate = true;
+            } else if (nowMins > shiftStartMins && nowMins <= shiftStartLimitMins) {
+                // Check if grace limit has been exceeded for the current month
+                const startOfMonth = `${dateStr.slice(0, 8)}01`;
+                const currentMonthLogs = await db('attendance')
+                    .where({ employee_id: empId, company_id: companyId })
+                    .whereRaw('DATE(check_in) >= ?', [startOfMonth])
+                    .whereRaw('DATE(check_in) < ?', [dateStr])
+                    .select('check_in');
+
+                let graceCount = 0;
+                const s1StartStr = origShiftStart;
+                const [s1H, s1M] = s1StartStr.split(':').map(Number);
+                const s1StartMinsVal = s1H * 60 + s1M;
+                const s1Grace = parseInt(employee?.scheme_grace ?? origShiftGrace ?? rules.grace_period ?? 15);
+                const s1AllowedMins = s1StartMinsVal + s1Grace;
+
+                const s2StartStr = employee?.session2_start_time;
+                let s2StartMinsVal = null;
+                let s2AllowedMins = null;
+                if (s2StartStr && reqPunches === 4) {
+                    const [s2H, s2M] = s2StartStr.split(':').map(Number);
+                    s2StartMinsVal = s2H * 60 + s2M;
+                    const s2Grace = parseInt(employee?.session2_grace_in ?? employee?.scheme_grace ?? rules.grace_period ?? 15);
+                    s2AllowedMins = s2StartMinsVal + s2Grace;
+                }
+
+                for (const log of currentMonthLogs) {
+                    const checkInDate = dbDateToUTC(log.check_in);
+                    const checkInMins = dateToISTMins(checkInDate);
+                    const usedS1Grace = checkInMins > s1StartMinsVal && checkInMins <= s1AllowedMins;
+                    const usedS2Grace = s2StartMinsVal !== null && checkInMins > s2StartMinsVal && checkInMins <= s2AllowedMins;
+                    if (usedS1Grace || usedS2Grace) {
+                        graceCount++;
+                    }
+                }
+
+                const allowedGraceLimit = employee?.max_late_allowed !== undefined && employee?.max_late_allowed !== null 
+                    ? parseInt(employee.max_late_allowed) 
+                    : 3;
+
+                if (graceCount >= allowedGraceLimit) {
+                    isLate = true;
+                }
+            }
+
+            if (isLate) {
                 // AUTO-CREATE PENDING ENTRY/EXIT REQUEST
                 const existingRequest = await db('attendance_entry_requests')
                     .where({ employee_id: empId, company_id: companyId, date: dateStr, request_type: 'late_in' })
@@ -420,6 +517,8 @@ class AttendanceService {
                 'shifts.start_time', 
                 'shifts.end_time',
                 'shifts.total_punches_required as shift_total_punches',
+                'shifts.session1_in_margin as shift_in_margin',
+                'shifts.session1_out_margin as shift_out_margin',
                 'shifts.session2_start_time',
                 'shifts.session2_end_time',
                 'shifts.session2_in_margin',
@@ -449,6 +548,8 @@ class AttendanceService {
                     's.start_time',
                     's.end_time',
                     's.total_punches_required as shift_total_punches',
+                    's.session1_in_margin as shift_in_margin',
+                    's.session1_out_margin as shift_out_margin',
                     's.session2_start_time',
                     's.session2_end_time',
                     's.session2_in_margin',
@@ -465,6 +566,8 @@ class AttendanceService {
                 employee.start_time = activeAssignment.start_time;
                 employee.end_time = activeAssignment.end_time;
                 employee.shift_total_punches = activeAssignment.shift_total_punches;
+                employee.shift_in_margin = activeAssignment.shift_in_margin;
+                employee.shift_out_margin = activeAssignment.shift_out_margin;
                 employee.session2_start_time = activeAssignment.session2_start_time;
                 employee.session2_end_time = activeAssignment.session2_end_time;
                 employee.session2_in_margin = activeAssignment.session2_in_margin;
@@ -509,6 +612,9 @@ class AttendanceService {
         const workedHours = (now - checkIn) / (1000 * 60 * 60);
 
         let halfDayLimit = 4; // default
+        let outMarginThreshold = null;
+        let shiftEndDate = null;
+
         if (employee?.is_flexi) {
             const minHours = parseFloat(employee?.min_hours) || 8;
             halfDayLimit = minHours / 2;
@@ -518,6 +624,8 @@ class AttendanceService {
         } else {
             const shiftStart = employee?.start_time || '09:00';
             const shiftEnd = employee?.end_time || '18:00';
+            const outMargin = employee?.shift_out_margin !== undefined ? parseInt(employee.shift_out_margin) : 0;
+
             const [sHours, sMins] = shiftStart.split(':').map(Number);
             const [eHours, eMins] = shiftEnd.split(':').map(Number);
             const shiftStartMins = sHours * 60 + sMins;
@@ -527,18 +635,40 @@ class AttendanceService {
                 shiftDurationMins += 24 * 60; // handle midnight crossing
             }
             const shiftDurationHours = shiftDurationMins / 60;
-            halfDayLimit = employee?.min_hours !== undefined && employee?.min_hours !== null
-                ? parseFloat(employee.min_hours) / 2
-                : shiftDurationHours / 2;
 
-            const nowMins = dateToISTMins(now);
-            if (nowMins < shiftEndMins) {
+            if (reqPunches === 4) {
+                halfDayLimit = shiftDurationHours / 2;
+            } else {
+                halfDayLimit = employee?.min_hours !== undefined && employee?.min_hours !== null
+                    ? parseFloat(employee.min_hours) / 2
+                    : shiftDurationHours / 2;
+            }
+
+            const checkInDateStr = toLocalYMD(new Date(activeEntry.check_in));
+            const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+            shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+            if (shiftEndDate < shiftStartDate) {
+                shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+            }
+            outMarginThreshold = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
+
+            // Skip web checkout if before half day limit
+            if (workedHours < halfDayLimit) {
+                throw new Error(`EARLY_OUT_BLOCKED: Check-out blocked. You cannot check out before the session half-day limit (${(halfDayLimit).toFixed(2)} hours).`);
+            }
+
+            if (now < shiftEndDate) {
                 isEarlyCheckoutAttempt = true;
             }
         }
 
         if (!approvedRequest) {
-            let triggersEarlyOutRequest = isEarlyCheckoutAttempt;
+            let triggersEarlyOutRequest = false;
+            if (isEarlyCheckoutAttempt) {
+                if (outMarginThreshold && now < outMarginThreshold) {
+                    triggersEarlyOutRequest = true;
+                }
+            }
 
             if (triggersEarlyOutRequest) {
                 // AUTO-CREATE PENDING ENTRY/EXIT REQUEST
@@ -583,7 +713,9 @@ class AttendanceService {
                 newStatus = 'present';
             }
         } else {
-            if (workedHours < halfDayLimit) {
+            if (outMarginThreshold && shiftEndDate && now >= outMarginThreshold && now < shiftEndDate) {
+                newStatus = 'early_out';
+            } else if (workedHours < halfDayLimit) {
                 newStatus = 'short';
             } else if (isEarlyCheckoutAttempt) {
                 newStatus = 'early_out';
