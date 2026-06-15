@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     Calendar, Plus, Clock, X, Info, Trash2, 
-    ChevronRight, ChevronDown, RefreshCw, Users, HelpCircle, Download
+    ChevronRight, ChevronDown, RefreshCw, Users, HelpCircle, Download, Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../utils/api';
@@ -58,6 +58,22 @@ const LeaveGranter = () => {
 
     // Expanded Batches state (Set of batch_ids)
     const [expandedBatches, setExpandedBatches] = useState(new Set());
+
+    // Custom Dropdown States for Target Employee(s) Search
+    const [isEmployeeDropdownOpen, setIsEmployeeDropdownOpen] = useState(false);
+    const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
+    const employeeDropdownRef = useRef(null);
+
+    // Click outside dropdown handler
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (employeeDropdownRef.current && !employeeDropdownRef.current.contains(event.target)) {
+                setIsEmployeeDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const fetchData = async () => {
         setLoading(true);
@@ -151,6 +167,8 @@ const LeaveGranter = () => {
                 employee_ids: 'all',
                 reason: ''
             });
+            setEmployeeSearchQuery('');
+            setIsEmployeeDropdownOpen(false);
             fetchData();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to grant leave.');
@@ -674,12 +692,15 @@ const LeaveGranter = () => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Period</label>
-                                        <input 
-                                            type="text" required
-                                            value={modalData.period}
-                                            onChange={(e) => setModalData({ ...modalData, period: e.target.value })}
-                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 focus:bg-white transition-all"
-                                        />
+                                        <div className="relative">
+                                            <Calendar size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                            <input 
+                                                type="text" required
+                                                value={modalData.period}
+                                                onChange={(e) => setModalData({ ...modalData, period: e.target.value })}
+                                                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Frequency</label>
@@ -718,20 +739,103 @@ const LeaveGranter = () => {
                                     </div>
                                 </div>
 
-                                {/* Employee Selector */}
-                                <div className="space-y-1.5">
+                                {/* Employee Selector with Search Dropdown */}
+                                <div className="space-y-1.5 relative font-outfit" ref={employeeDropdownRef}>
                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target Employee(s)</label>
-                                    <select 
-                                        required
-                                        value={modalData.employee_ids}
-                                        onChange={(e) => setModalData({ ...modalData, employee_ids: e.target.value })}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                                    <div 
+                                        onClick={() => setIsEmployeeDropdownOpen(!isEmployeeDropdownOpen)}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none hover:border-slate-350 cursor-pointer flex justify-between items-center transition-all select-none"
                                     >
-                                        <option value="all">All Active Employees</option>
-                                        {employees.map(emp => (
-                                            <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_id_number})</option>
-                                        ))}
-                                    </select>
+                                        <span>
+                                            {modalData.employee_ids === 'all' 
+                                                ? 'All Active Employees' 
+                                                : (() => {
+                                                    const emp = employees.find(e => e.id.toString() === modalData.employee_ids.toString());
+                                                    return emp ? `${emp.first_name} ${emp.last_name} (${emp.employee_id_number})` : 'Select Employee';
+                                                  })()
+                                            }
+                                        </span>
+                                        <ChevronDown size={14} className={`text-slate-400 transition-transform ${isEmployeeDropdownOpen ? 'rotate-180' : ''}`} />
+                                    </div>
+
+                                    {isEmployeeDropdownOpen && (
+                                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[110] max-h-60 overflow-hidden flex flex-col">
+                                            <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50 shrink-0">
+                                                <Search size={14} className="text-slate-400 shrink-0" />
+                                                <input 
+                                                    type="text"
+                                                    value={employeeSearchQuery}
+                                                    onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                                                    placeholder="Search employee by name or ID..."
+                                                    className="w-full bg-transparent border-none text-xs font-semibold text-slate-700 outline-none"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                                {employeeSearchQuery && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); setEmployeeSearchQuery(''); }}
+                                                        className="text-slate-400 hover:text-slate-600 text-xs font-bold px-1"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="overflow-y-auto flex-1 custom-scrollbar">
+                                                <div 
+                                                    onClick={() => {
+                                                        setModalData({ ...modalData, employee_ids: 'all' });
+                                                        setIsEmployeeDropdownOpen(false);
+                                                        setEmployeeSearchQuery('');
+                                                    }}
+                                                    className={`px-4 py-2.5 text-xs font-bold cursor-pointer transition-colors ${
+                                                        modalData.employee_ids === 'all' 
+                                                            ? 'bg-indigo-50 text-indigo-600' 
+                                                            : 'text-slate-700 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    All Active Employees
+                                                </div>
+                                                {employees
+                                                    .filter(emp => {
+                                                        const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+                                                        const idNum = (emp.employee_id_number || '').toLowerCase();
+                                                        const query = employeeSearchQuery.toLowerCase();
+                                                        return fullName.includes(query) || idNum.includes(query);
+                                                    })
+                                                    .map(emp => {
+                                                        const isSelected = modalData.employee_ids.toString() === emp.id.toString();
+                                                        return (
+                                                            <div 
+                                                                key={emp.id}
+                                                                onClick={() => {
+                                                                    setModalData({ ...modalData, employee_ids: emp.id.toString() });
+                                                                    setIsEmployeeDropdownOpen(false);
+                                                                    setEmployeeSearchQuery('');
+                                                                }}
+                                                                className={`px-4 py-2.5 text-xs font-bold cursor-pointer transition-colors ${
+                                                                    isSelected 
+                                                                        ? 'bg-indigo-50 text-indigo-600' 
+                                                                        : 'text-slate-700 hover:bg-slate-50'
+                                                                }`}
+                                                            >
+                                                                {emp.first_name} {emp.last_name} ({emp.employee_id_number})
+                                                            </div>
+                                                        );
+                                                    })
+                                                }
+                                                {employees.filter(emp => {
+                                                    const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+                                                    const idNum = (emp.employee_id_number || '').toLowerCase();
+                                                    const query = employeeSearchQuery.toLowerCase();
+                                                    return fullName.includes(query) || idNum.includes(query);
+                                                }).length === 0 && (
+                                                    <div className="px-4 py-3 text-xs text-slate-400 font-medium italic text-center">
+                                                        No matching employees
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Reason */}

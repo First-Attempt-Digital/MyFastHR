@@ -370,8 +370,8 @@ const EmployeeRecords = () => {
 
             {/* --- CONTROLS BAR (SEARCH) --- */}
             <div className="bg-white border border-slate-200/40 p-3.5 rounded-2xl shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-                <div className="flex flex-col sm:flex-row gap-3 items-center w-full sm:max-w-xl">
-                    <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 w-full shadow-inner">
+                <div className="flex flex-col sm:flex-row gap-3 items-center w-full flex-1">
+                    <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5 w-full sm:w-auto flex-1 shadow-inner">
                         <Search size={14} className="text-slate-400 shrink-0" />
                         <input 
                             type="text" 
@@ -380,6 +380,15 @@ const EmployeeRecords = () => {
                             placeholder={activeTab === 'balances' ? 'Search employee name or role...' : 'Search employee name or leave type...'}
                             className="bg-transparent border-none text-xs font-bold text-slate-700 outline-none w-full"
                         />
+                        {searchQuery && (
+                            <button 
+                                onClick={() => setSearchQuery('')}
+                                className="text-slate-400 hover:text-slate-650 transition-colors"
+                                type="button"
+                            >
+                                <XCircle size={14} />
+                            </button>
+                        )}
                     </div>
                     {/* Outlet/Location Filter */}
                     <div className="relative w-full sm:w-48 shrink-0">
