@@ -286,6 +286,38 @@ class MachineAttendanceService {
                     )
                     .first();
 
+                // Resolve overridden shift for check-in date
+                if (employeeWithShift) {
+                    const activeAssignment = await db('employee_shift_assignments as esa')
+                        .join('shifts as s', 'esa.shift_id', 's.id')
+                        .where('esa.employee_id', employeeId)
+                        .where('esa.from_date', '<=', dateStr)
+                        .andWhere(function () {
+                            this.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
+                        })
+                        .select(
+                            's.is_flexi',
+                            's.min_hours',
+                            's.start_time',
+                            's.end_time',
+                            's.grace_period as shift_grace',
+                            's.session1_in_margin as shift_in_margin',
+                            's.session1_out_margin as shift_out_margin'
+                        )
+                        .orderBy('esa.id', 'desc')
+                        .first();
+
+                    if (activeAssignment) {
+                        employeeWithShift.shift_is_flexi = activeAssignment.is_flexi;
+                        employeeWithShift.min_hours = activeAssignment.min_hours;
+                        employeeWithShift.shift_start = activeAssignment.start_time;
+                        employeeWithShift.shift_end = activeAssignment.end_time;
+                        employeeWithShift.shift_grace = activeAssignment.shift_grace;
+                        employeeWithShift.shift_in_margin = activeAssignment.shift_in_margin;
+                        employeeWithShift.shift_out_margin = activeAssignment.shift_out_margin;
+                    }
+                }
+
                 // IN MARGIN CHECK
                 if (employeeWithShift && !employeeWithShift.shift_is_flexi) {
                     const shiftStart = employeeWithShift.shift_start || '09:00';
@@ -461,6 +493,39 @@ class MachineAttendanceService {
                         'attendance_schemes.grace_period as scheme_grace'
                     )
                     .first();
+
+                // Resolve overridden shift for this check-in date
+                if (employee) {
+                    const checkInDateStr = dateToISTDateString(currentCheckIn);
+                    const activeAssignment = await db('employee_shift_assignments as esa')
+                        .join('shifts as s', 'esa.shift_id', 's.id')
+                        .where('esa.employee_id', employeeId)
+                        .where('esa.from_date', '<=', checkInDateStr)
+                        .andWhere(function () {
+                            this.where('esa.to_date', '>=', checkInDateStr).orWhereNull('esa.to_date');
+                        })
+                        .select(
+                            's.is_flexi',
+                            's.min_hours',
+                            's.start_time',
+                            's.end_time',
+                            's.grace_period as shift_grace',
+                            's.session1_in_margin as shift_in_margin',
+                            's.session1_out_margin as shift_out_margin'
+                        )
+                        .orderBy('esa.id', 'desc')
+                        .first();
+
+                    if (activeAssignment) {
+                        employee.is_flexi = activeAssignment.is_flexi;
+                        employee.min_hours = activeAssignment.min_hours;
+                        employee.start_time = activeAssignment.start_time;
+                        employee.end_time = activeAssignment.end_time;
+                        employee.shift_grace = activeAssignment.shift_grace;
+                        employee.shift_in_margin = activeAssignment.shift_in_margin;
+                        employee.shift_out_margin = activeAssignment.shift_out_margin;
+                    }
+                }
 
                 const rules = await db('working_rules').where({ company_id: companyId }).first() || {};
 

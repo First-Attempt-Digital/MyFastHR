@@ -249,6 +249,38 @@ class AttendanceService {
         const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
         const dateStr = toLocalYMD(now);
 
+        // Resolve overridden shift for check-in date
+        if (employee) {
+            const activeAssignment = await db('employee_shift_assignments as esa')
+                .join('shifts as s', 'esa.shift_id', 's.id')
+                .where('esa.employee_id', empId)
+                .where('esa.from_date', '<=', dateStr)
+                .andWhere(function () {
+                    this.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
+                })
+                .select(
+                    's.is_flexi',
+                    's.min_hours',
+                    's.start_time',
+                    's.end_time',
+                    's.grace_period as shift_grace',
+                    's.session1_in_margin as shift_in_margin',
+                    's.session1_out_margin as shift_out_margin'
+                )
+                .orderBy('esa.id', 'desc')
+                .first();
+
+            if (activeAssignment) {
+                employee.shift_is_flexi = activeAssignment.is_flexi;
+                employee.min_hours = activeAssignment.min_hours;
+                employee.shift_start = activeAssignment.start_time;
+                employee.shift_end = activeAssignment.end_time;
+                employee.shift_grace = activeAssignment.shift_grace;
+                employee.shift_in_margin = activeAssignment.shift_in_margin;
+                employee.shift_out_margin = activeAssignment.shift_out_margin;
+            }
+        }
+
         let isCheckoutAttempt = false;
         if (employee && employee.shift_start && employee.shift_end && !employee.shift_is_flexi) {
             const shiftStart = employee.shift_start;
@@ -338,6 +370,33 @@ class AttendanceService {
         const now = new Date();
         const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
         const dateStr = toLocalYMD(now);
+
+        // Resolve overridden shift for this check-in date
+        if (employee) {
+            const checkInDateStr = toLocalYMD(new Date(activeEntry.check_in));
+            const activeAssignment = await db('employee_shift_assignments as esa')
+                .join('shifts as s', 'esa.shift_id', 's.id')
+                .where('esa.employee_id', empId)
+                .where('esa.from_date', '<=', checkInDateStr)
+                .andWhere(function () {
+                    this.where('esa.to_date', '>=', checkInDateStr).orWhereNull('esa.to_date');
+                })
+                .select(
+                    's.is_flexi',
+                    's.min_hours',
+                    's.start_time',
+                    's.end_time'
+                )
+                .orderBy('esa.id', 'desc')
+                .first();
+
+            if (activeAssignment) {
+                employee.is_flexi = activeAssignment.is_flexi;
+                employee.min_hours = activeAssignment.min_hours;
+                employee.start_time = activeAssignment.start_time;
+                employee.end_time = activeAssignment.end_time;
+            }
+        }
 
         // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
         const approvedRequest = await db('attendance_entry_requests')
