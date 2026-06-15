@@ -41,7 +41,8 @@ function mapDbStatusToFrontend(status) {
     if (s === 'pending') return '-';
     if (s === '') return 'P';
     if (s === 'present' || s === 'p') return 'P';
-    if (s === 'absent' || s === 'a' || s === 'short') return 'A';
+    if (s === 'absent' || s === 'a') return 'A';
+    if (s === 'short') return 'HD';
     if (s === 'late' || s === 'l' || s === 'late_in' || s === 'late-in') return 'L';
     if (s === 'early_out' || s === 'early-out' || s === 'eo' || s === 'earlyout') return 'E';
     if (s === 'off') return 'OFF';
@@ -620,15 +621,12 @@ class AttendanceService {
                     } else if (dbStatus === 'off') {
                         status = 'OFF';
                         stats.OFF++;
-                    } else if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd') {
+                    } else if (dbStatus === 'half-day' || dbStatus === 'half_day' || dbStatus === 'hd' || dbStatus === 'short') {
                         status = 'HD';
                         stats.P += 0.5;
                     } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
                         status = 'E';
                         stats.P++;
-                    } else if (dbStatus === 'short') {
-                        status = 'A';
-                        stats.A++;
                     } else if (emp.shift_is_flexi) {
                         status = 'P';
                         stats.P++;
