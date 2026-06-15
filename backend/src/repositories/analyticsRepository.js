@@ -669,7 +669,7 @@ class AnalyticsRepository {
             const initials = (firstName.slice(0, 1) + lastName.slice(0, 1)).toUpperCase();
 
             const checkInDate = new Date(w.check_in);
-            const timeStr = checkInDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const timeStr = checkInDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 
             const rawSource = w.punch_source || 'web';
             const source = rawSource.charAt(0).toUpperCase() + rawSource.slice(1).toLowerCase();

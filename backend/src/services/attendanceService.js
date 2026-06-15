@@ -32,7 +32,7 @@ function safeFormatTime(dateTimeVal) {
         d = new Date(str);
     }
     if (isNaN(d.getTime())) return null;
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
 function mapDbStatusToFrontend(status) {
@@ -901,8 +901,8 @@ class AttendanceService {
                 });
             } else {
                 const checkIn = new Date(record.check_in);
-                const timeStr = checkIn.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-                const checkOutTimeStr = record.check_out ? new Date(record.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
+                const timeStr = checkIn.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+                const checkOutTimeStr = record.check_out ? new Date(record.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : null;
 
                 const baseEntry = {
                     name: `${emp.first_name} ${emp.last_name}`,
