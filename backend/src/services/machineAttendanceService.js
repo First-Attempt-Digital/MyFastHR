@@ -359,36 +359,79 @@ class MachineAttendanceService {
             const origShiftInMargin = employeeWithShift?.shift_in_margin !== undefined ? employeeWithShift.shift_in_margin : 30;
             const origShiftOutMargin = employeeWithShift?.shift_out_margin !== undefined ? employeeWithShift.shift_out_margin : 0;
 
+            const reqPunches = parseInt(employeeWithShift?.shift_total_punches || 2);
+
+            // Fetch the latest attendance record today (to see if one exists, open or closed)
+            const latestLog = await db('attendance')
+                .where({ employee_id: employeeId, company_id: companyId })
+                .whereRaw('DATE(check_in) = ?', [dateStr])
+                .orderBy('check_in', 'desc')
+                .first();
+
+            if (!activeLog && latestLog && latestLog.check_out === null) {
+                activeLog = latestLog;
+            }
+
+            // Fallback for 2-punch shifts (preserve original logic where activeLog can be a closed log)
+            if (!activeLog && reqPunches !== 4) {
+                activeLog = latestLog;
+            }
+
             // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
             let isSession2 = false;
             let session2CutoffMins = 0;
-            const reqPunches = parseInt(employeeWithShift?.shift_total_punches || 2);
             if (reqPunches === 4) {
-                const punchMins = dateToISTMins(punchTime);
                 const s2StartStr = employeeWithShift?.session2_start_time || '14:00';
                 const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
                 const s2StartMins = s2Hours * 60 + s2Mins;
                 const s2InMargin = parseInt(employeeWithShift?.session2_in_margin || 30);
                 session2CutoffMins = s2StartMins - s2InMargin;
-                if (punchMins >= session2CutoffMins) {
-                    isSession2 = true;
-                }
 
-                // Gap Check: between Session 1 end time and Session 2 in-margin start time
                 const s1EndStr = origShiftEnd;
                 const [s1EndHours, s1EndMinsVal] = s1EndStr.split(':').map(Number);
                 const s1EndMins = s1EndHours * 60 + s1EndMinsVal;
-                
-                if (punchMins > s1EndMins && punchMins < session2CutoffMins) {
-                    await db('biometric_raw_logs').insert({
-                        company_id: companyId,
-                        device_serial: deviceSerial,
-                        employee_code,
-                        punch_time: punchTimeStr,
-                        status: 'skipped',
-                        error_details: `Punch ignored: between Session 1 end (${s1EndStr}) and Session 2 in-margin start`
-                    });
-                    return { status: 'skipped', reason: 'Punch ignored: between Session 1 and Session 2' };
+
+                if (activeLog) {
+                    // Checkout attempt: evaluate based on check-in time of the open log
+                    const checkInDate = dbDateToUTC(activeLog.check_in);
+                    const checkInMins = dateToISTMins(checkInDate);
+                    if (checkInMins >= s1EndMins) {
+                        isSession2 = true;
+                    }
+                } else {
+                    // Check-in attempt: evaluate based on current punch time
+                    const punchMins = dateToISTMins(punchTime);
+                    if (latestLog && latestLog.check_out !== null) {
+                        isSession2 = true;
+                    } else if (punchMins >= s1EndMins) {
+                        isSession2 = true;
+                    }
+
+                    // If they already completed Session 1, prevent checking in again for Session 1
+                    if (latestLog && latestLog.check_out !== null && !isSession2) {
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'skipped',
+                            error_details: 'Punch ignored: already checked out of Session 1 and before Session 2 cutoff'
+                        });
+                        return { status: 'skipped', reason: 'Punch ignored: Session 1 completed' };
+                    }
+
+                    // Gap Check: between Session 1 end time and Session 2 in-margin start time
+                    if (punchMins > s1EndMins && punchMins < session2CutoffMins) {
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'skipped',
+                            error_details: `Punch ignored: between Session 1 end (${s1EndStr}) and Session 2 in-margin start`
+                        });
+                        return { status: 'skipped', reason: 'Punch ignored: between Session 1 and Session 2' };
+                    }
                 }
             }
 
@@ -399,35 +442,6 @@ class MachineAttendanceService {
                 employeeWithShift.shift_in_margin = employeeWithShift.session2_in_margin !== undefined ? employeeWithShift.session2_in_margin : 30;
                 employeeWithShift.shift_out_margin = employeeWithShift.session2_out_margin !== undefined ? employeeWithShift.session2_out_margin : 0;
                 employeeWithShift.shift_grace = employeeWithShift.session2_grace_in !== undefined ? employeeWithShift.session2_grace_in : 15;
-            }
-
-            // If no night shift open log, search on the same day
-            if (!activeLog) {
-                if (reqPunches === 4) {
-                    const cutoffHour = Math.floor(session2CutoffMins / 60);
-                    const cutoffMin = session2CutoffMins % 60;
-                    const cutoffDateObj = new Date(`${dateStr} ${String(cutoffHour).padStart(2, '0')}:${String(cutoffMin).padStart(2, '0')}:00 +05:30`);
-                    const cutoffTimeUTCStr = cutoffDateObj.toISOString().slice(0, 19).replace('T', ' ');
-                    
-                    if (isSession2) {
-                        activeLog = await db('attendance')
-                            .where({ employee_id: employeeId, company_id: companyId })
-                            .whereRaw('DATE(check_in) = ?', [dateStr])
-                            .whereRaw('check_in >= ?', [cutoffTimeUTCStr])
-                            .first();
-                    } else {
-                        activeLog = await db('attendance')
-                            .where({ employee_id: employeeId, company_id: companyId })
-                            .whereRaw('DATE(check_in) = ?', [dateStr])
-                            .whereRaw('check_in < ?', [cutoffTimeUTCStr])
-                            .first();
-                    }
-                } else {
-                    activeLog = await db('attendance')
-                        .where({ employee_id: employeeId, company_id: companyId })
-                        .whereRaw('DATE(check_in) = ?', [dateStr])
-                        .first();
-                }
             }
 
             if (!activeLog) {

@@ -344,6 +344,13 @@ class AttendanceService {
         const origShiftInMargin = employee?.shift_in_margin !== undefined ? employee.shift_in_margin : 30;
         const origShiftOutMargin = employee?.shift_out_margin !== undefined ? employee.shift_out_margin : 0;
 
+        // Fetch the latest attendance record today (to see if one exists, open or closed)
+        const latestLog = await db('attendance')
+            .where({ employee_id: empId, company_id: companyId })
+            .whereRaw('DATE(check_in) = ?', [dateStr])
+            .orderBy('check_in', 'desc')
+            .first();
+
         // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
         let isSession2 = false;
         let session2CutoffMins = 0;
@@ -355,15 +362,23 @@ class AttendanceService {
             const s2StartMins = s2Hours * 60 + s2Mins;
             const s2InMargin = parseInt(employee?.session2_in_margin || 30);
             session2CutoffMins = s2StartMins - s2InMargin;
-            if (punchMins >= session2CutoffMins) {
-                isSession2 = true;
-            }
 
-            // Gap Check: between Session 1 end time and Session 2 in-margin start time
             const s1EndStr = origShiftEnd;
             const [s1EndHours, s1EndMinsVal] = s1EndStr.split(':').map(Number);
             const s1EndMins = s1EndHours * 60 + s1EndMinsVal;
-            
+
+            if (latestLog && latestLog.check_out !== null) {
+                isSession2 = true;
+            } else if (punchMins >= s1EndMins) {
+                isSession2 = true;
+            }
+
+            // If they already completed Session 1, prevent checking in again for Session 1
+            if (latestLog && latestLog.check_out !== null && !isSession2) {
+                throw new Error('PUNCH_BLOCKED: You have already checked out of Session 1 and cannot check in again until Session 2 starts.');
+            }
+
+            // Gap Check: between Session 1 end time and Session 2 in-margin start time
             if (punchMins > s1EndMins && punchMins < session2CutoffMins) {
                 throw new Error('PUNCH_BLOCKED: Check-in is not allowed in the gap between Session 1 and Session 2.');
             }
@@ -547,7 +562,7 @@ class AttendanceService {
 
         // Resolve overridden shift for this check-in date
         if (employee) {
-            const checkInDateStr = toLocalYMD(new Date(activeEntry.check_in));
+            const checkInDateStr = toLocalYMD(dbDateToUTC(activeEntry.check_in));
             const activeAssignment = await db('employee_shift_assignments as esa')
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', empId)
@@ -594,14 +609,14 @@ class AttendanceService {
         let isSession2 = false;
         const reqPunches = parseInt(employee?.shift_total_punches || 2);
         if (reqPunches === 4) {
-            const checkInTime = new Date(activeEntry.check_in);
+            const checkInTime = dbDateToUTC(activeEntry.check_in);
             const checkInMins = dateToISTMins(checkInTime);
-            const s2StartStr = employee?.session2_start_time || '14:00';
-            const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
-            const s2StartMins = s2Hours * 60 + s2Mins;
-            const s2InMargin = parseInt(employee?.session2_in_margin || 30);
-            const session2CutoffMins = s2StartMins - s2InMargin;
-            if (checkInMins >= session2CutoffMins) {
+            
+            const s1EndStr = employee?.end_time || '18:00';
+            const [s1EndH, s1EndM] = s1EndStr.split(':').map(Number);
+            const s1EndMins = s1EndH * 60 + s1EndM;
+
+            if (checkInMins >= s1EndMins) {
                 isSession2 = true;
             }
         }
@@ -661,7 +676,7 @@ class AttendanceService {
                     : shiftDurationHours / 2;
             }
 
-            const checkInDateStr = toLocalYMD(new Date(activeEntry.check_in));
+            const checkInDateStr = toLocalYMD(dbDateToUTC(activeEntry.check_in));
             const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
             shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
             if (shiftEndDate < shiftStartDate) {
