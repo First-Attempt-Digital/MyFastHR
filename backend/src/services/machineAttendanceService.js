@@ -460,6 +460,8 @@ class MachineAttendanceService {
 
                 let isEarly = false;
                 let halfDayLimit = 4; // default
+                let shiftEndDate = null;
+                let outMarginThreshold = null;
 
                 if (employee?.is_flexi) {
                     const minHours = parseFloat(employee?.min_hours) || 8;
@@ -476,7 +478,7 @@ class MachineAttendanceService {
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
                     const [eHours, eMins] = shiftEnd.split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
-                    let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                    shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
                     if (shiftEndDate < shiftStartDate) {
                         // Midnight crossing
                         shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
@@ -500,7 +502,7 @@ class MachineAttendanceService {
                         ? parseFloat(employee.scheme_half_day_hours)
                         : parseFloat(rules.half_day_hours || 4);
 
-                    const outMarginThreshold = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
+                    outMarginThreshold = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
 
                     if (punchTime < shiftEndDate) {
                         isEarly = true;
@@ -585,7 +587,9 @@ class MachineAttendanceService {
                         newStatus = 'present';
                     }
                 } else {
-                    if (workedHours < halfDayLimit) {
+                    if (outMarginThreshold && shiftEndDate && punchTime >= outMarginThreshold && punchTime < shiftEndDate) {
+                        newStatus = 'early_out';
+                    } else if (workedHours < halfDayLimit) {
                         newStatus = 'short';
                     } else if (isEarly) {
                         newStatus = 'early_out';
