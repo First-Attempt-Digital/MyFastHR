@@ -498,9 +498,11 @@ class MachineAttendanceService {
                     }
 
                     // Determine half day hours limit
-                    halfDayLimit = employee?.scheme_half_day_hours !== undefined && employee?.scheme_half_day_hours !== null
-                        ? parseFloat(employee.scheme_half_day_hours)
-                        : parseFloat(rules.half_day_hours || 4);
+                    halfDayLimit = employee?.min_hours !== undefined && employee?.min_hours !== null
+                        ? parseFloat(employee.min_hours) / 2
+                        : (employee?.scheme_half_day_hours !== undefined && employee?.scheme_half_day_hours !== null
+                            ? parseFloat(employee.scheme_half_day_hours)
+                            : parseFloat(rules.half_day_hours || 4));
 
                     outMarginThreshold = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
 

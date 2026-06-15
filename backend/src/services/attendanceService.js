@@ -358,7 +358,9 @@ class AttendanceService {
                 shiftDurationMins += 24 * 60; // handle midnight crossing
             }
             const shiftDurationHours = shiftDurationMins / 60;
-            halfDayLimit = shiftDurationHours / 2;
+            halfDayLimit = employee?.min_hours !== undefined && employee?.min_hours !== null
+                ? parseFloat(employee.min_hours) / 2
+                : shiftDurationHours / 2;
 
             const nowMins = dateToISTMins(now);
             if (nowMins < shiftEndMins) {
