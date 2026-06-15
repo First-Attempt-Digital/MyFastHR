@@ -286,6 +286,11 @@ const Payroll = () => {
     const [selectedDept, setSelectedDept] = useState('All');
     const [selectedDesignation, setSelectedDesignation] = useState('All');
 
+    // Issue Salary Advance modal filter state
+    const [modalOutlet, setModalOutlet] = useState('All');
+    const [modalDept, setModalDept] = useState('All');
+    const [modalDesignation, setModalDesignation] = useState('All');
+
     // Payroll Controls State
     const [controls, setControls] = useState({
         inputs_locked: false,
@@ -1673,6 +1678,9 @@ const Payroll = () => {
         try {
             await api.post('/payroll/loans', newLoanData);
             setShowAddLoan(false);
+            setModalOutlet('All');
+            setModalDept('All');
+            setModalDesignation('All');
             setNewLoanData({
                 employee_id: '',
                 title: 'Salary Advance',
@@ -1855,6 +1863,17 @@ const Payroll = () => {
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [employees, selectedOutlet, selectedDept, selectedDesignation]);
+
+    // Filter employees in the Issue Salary Advance modal
+    const modalFilteredEmployees = useMemo(() => {
+        if (!Array.isArray(employees)) return [];
+        return employees.filter(emp => {
+            const matchesOutlet = modalOutlet === 'All' || emp.office_location === modalOutlet || emp.location === modalOutlet;
+            const matchesDept = modalDept === 'All' || emp.department_name === modalDept || emp.department === modalDept;
+            const matchesDesignation = modalDesignation === 'All' || emp.designation === modalDesignation || emp.role === modalDesignation;
+            return matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [employees, modalOutlet, modalDept, modalDesignation]);
 
     // Filter repayments
     const filteredRepayments = useMemo(() => {
@@ -4148,7 +4167,12 @@ const Payroll = () => {
                                     </div>
                                     <button
                                         disabled={controls.inputs_locked}
-                                        onClick={() => setShowAddLoan(true)}
+                                        onClick={() => {
+                                            setModalOutlet('All');
+                                            setModalDept('All');
+                                            setModalDesignation('All');
+                                            setShowAddLoan(true);
+                                        }}
                                         className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-1.5 ${controls.inputs_locked
                                             ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
                                             : 'bg-[#4361ee] hover:bg-indigo-700 text-white shadow-indigo-500/10'
@@ -4191,7 +4215,7 @@ const Payroll = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
-                                                    {loans.map((loan) => {
+                                                    {filteredLoans.map((loan) => {
                                                         const principal = parseFloat(loan.amount) || 1;
                                                         const remaining = parseFloat(loan.remaining_balance) || 0;
                                                         const pctPaid = Math.min(100, Math.max(0, ((principal - remaining) / principal) * 100));
@@ -4321,7 +4345,7 @@ const Payroll = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
-                                                {repayments.map((repay) => (
+                                                {filteredRepayments.map((repay) => (
                                                     <tr key={repay.id} className="hover:bg-slate-50/50 transition-all">
                                                         <td className="px-5 py-4">
                                                             <div className="flex flex-col">
@@ -4376,7 +4400,12 @@ const Payroll = () => {
                                     <div className="absolute top-0 left-0 w-full h-1 bg-[#4361ee]" />
 
                                     <button
-                                        onClick={() => setShowAddLoan(false)}
+                                        onClick={() => {
+                                            setShowAddLoan(false);
+                                            setModalOutlet('All');
+                                            setModalDept('All');
+                                            setModalDesignation('All');
+                                        }}
                                         className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-50 transition-all font-black text-xs w-7 h-7 flex items-center justify-center border border-slate-200/50"
                                     >
                                         ✕
@@ -4388,6 +4417,46 @@ const Payroll = () => {
                                     </div>
 
                                     <div className="space-y-4">
+                                        {/* Modal Filters for Employee List */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Outlet</label>
+                                                <select
+                                                    value={modalOutlet}
+                                                    onChange={(e) => setModalOutlet(e.target.value)}
+                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                >
+                                                    {uniqueOutlets.map(o => (
+                                                        <option key={o} value={o}>{o === 'All' ? 'All Outlets' : o}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Department</label>
+                                                <select
+                                                    value={modalDept}
+                                                    onChange={(e) => setModalDept(e.target.value)}
+                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                >
+                                                    {uniqueDepartments.map(d => (
+                                                        <option key={d} value={d}>{d === 'All' ? 'All Depts' : d}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Designation</label>
+                                                <select
+                                                    value={modalDesignation}
+                                                    onChange={(e) => setModalDesignation(e.target.value)}
+                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                >
+                                                    {uniqueDesignations.map(d => (
+                                                        <option key={d} value={d}>{d === 'All' ? 'All Desgs' : d}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-1.5">
                                             <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Select Employee *</label>
                                             <select
@@ -4396,7 +4465,7 @@ const Payroll = () => {
                                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
                                             >
                                                 <option value="">-- Choose Employee --</option>
-                                                {employees.map(emp => (
+                                                {modalFilteredEmployees.map(emp => (
                                                     <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_id_number})</option>
                                                 ))}
                                             </select>
@@ -4445,7 +4514,12 @@ const Payroll = () => {
 
                                     <div className="flex gap-2 justify-end border-t border-slate-50 pt-4 mt-2">
                                         <button
-                                            onClick={() => setShowAddLoan(false)}
+                                            onClick={() => {
+                                                setShowAddLoan(false);
+                                                setModalOutlet('All');
+                                                setModalDept('All');
+                                                setModalDesignation('All');
+                                            }}
                                             className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 text-slate-500 transition-colors"
                                         >
                                             Cancel
