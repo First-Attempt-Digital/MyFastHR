@@ -78,6 +78,19 @@ const StatCard = ({ title, count, period, icon: Icon, colorClass, sparkColor, tr
     </div>
 );
 
+const PieTooltip = ({ active, payload, labelPrefix = '' }) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-white/95 backdrop-blur-[2px] px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-md text-[9px] font-bold text-slate-700 flex items-center gap-1.5 whitespace-nowrap z-50">
+                <span className="w-1.5 h-1.5 rounded-full inline-block shrink-0" style={{ backgroundColor: payload[0].color }} />
+                <span>{payload[0].name}:</span>
+                <span className="text-slate-900">{payload[0].value}{labelPrefix}</span>
+            </div>
+        );
+    }
+    return null;
+};
+
 const EmployeeOverview = () => {
     const [pendingOnboarding, setPendingOnboarding] = useState([]);
     const [employees, setEmployees] = useState([]);
@@ -467,7 +480,7 @@ const EmployeeOverview = () => {
                                                 <Cell fill="#e2e8f0" />
                                             )}
                                         </Pie>
-                                        <Tooltip formatter={(value) => [`${value} staff`]} />
+                                        <Tooltip content={<PieTooltip labelPrefix=" staff" />} position={{ x: 22, y: -25 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -500,7 +513,7 @@ const EmployeeOverview = () => {
                                                 <Cell fill="#e2e8f0" />
                                             )}
                                         </Pie>
-                                        <Tooltip formatter={(value) => [value, 'Count']} />
+                                        <Tooltip content={<PieTooltip />} position={{ x: 22, y: -25 }} />
                                     </PieChart>
                                 </ResponsiveContainer>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
