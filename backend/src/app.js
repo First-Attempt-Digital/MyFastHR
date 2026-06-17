@@ -46,7 +46,8 @@ const syncDatabaseSchema = async () => {
             'nationality', 'residential_status', 'birth_place', 'origin_country', 'religion', 'is_disabled',
             'personal_email', 'height', 'weight', 'id_mark', 'hobby', 'caste',
             'present_address', 'city', 'district', 'state', 'country', 'pincode',
-            'permanent_address', 'permanent_city', 'permanent_country', 'permanent_pincode'
+            'permanent_address', 'permanent_city', 'permanent_country', 'permanent_pincode',
+            'department_id', 'gender', 'date_of_birth', 'resignation_date', 'office_location'
         ];
 
         const missingColumns = [];
@@ -130,6 +131,11 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('permanent_city')) table.string('permanent_city').nullable();
                 if (missingColumns.includes('permanent_country')) table.string('permanent_country').nullable();
                 if (missingColumns.includes('permanent_pincode')) table.string('permanent_pincode').nullable();
+                if (missingColumns.includes('department_id')) table.integer('department_id').unsigned().nullable();
+                if (missingColumns.includes('gender')) table.enu('gender', ['Male', 'Female', 'Other']).nullable();
+                if (missingColumns.includes('date_of_birth')) table.date('date_of_birth').nullable();
+                if (missingColumns.includes('resignation_date')) table.date('resignation_date').nullable();
+                if (missingColumns.includes('office_location')) table.string('office_location', 100).nullable();
             });
 
             // Force drop unique constraint on employee_id_number to allow duplicates as requested
@@ -333,6 +339,116 @@ const syncDatabaseSchema = async () => {
                 });
                 console.log('>>> [DB-SYNC]: shifts table columns updated.');
             }
+        }
+
+        // 1. Ensure departments table exists
+        const hasDepartments = await db.schema.hasTable('departments');
+        if (!hasDepartments) {
+            console.log('>>> [DB-SYNC]: Creating departments table...');
+            await db.schema.createTable('departments', (table) => {
+                table.increments('id').primary();
+                table.integer('company_id').unsigned().notNullable();
+                table.string('name', 100).notNullable();
+                table.integer('manager_id').unsigned().nullable();
+                table.timestamp('created_at').defaultTo(db.fn.now());
+                table.foreign('company_id').references('companies.id').onDelete('CASCADE');
+                table.foreign('manager_id').references('users.id').onDelete('SET NULL');
+            });
+            console.log('>>> [DB-SYNC]: departments table created.');
+        }
+
+        // 2. Ensure permissions table exists
+        const hasPermissions = await db.schema.hasTable('permissions');
+        if (!hasPermissions) {
+            console.log('>>> [DB-SYNC]: Creating permissions table...');
+            await db.schema.createTable('permissions', (table) => {
+                table.increments('id').primary();
+                table.string('name', 100).unique().notNullable();
+                table.text('description').nullable();
+            });
+            console.log('>>> [DB-SYNC]: permissions table created.');
+        }
+
+        // 3. Ensure role_permissions table exists
+        const hasRolePermissions = await db.schema.hasTable('role_permissions');
+        if (!hasRolePermissions) {
+            console.log('>>> [DB-SYNC]: Creating role_permissions table...');
+            await db.schema.createTable('role_permissions', (table) => {
+                table.integer('role_id').unsigned().notNullable();
+                table.integer('permission_id').unsigned().notNullable();
+                table.primary(['role_id', 'permission_id']);
+                table.foreign('role_id').references('roles.id').onDelete('CASCADE');
+                table.foreign('permission_id').references('permissions.id').onDelete('CASCADE');
+            });
+            console.log('>>> [DB-SYNC]: role_permissions table created.');
+        }
+
+        // Seed default permissions and role mappings
+        try {
+            const existingPermsCount = await db('permissions').count('id as cnt').first();
+            if (existingPermsCount && (existingPermsCount.cnt === 0 || existingPermsCount['cnt'] === 0)) {
+                console.log('>>> [DB-SYNC]: Seeding permissions and mapping to roles...');
+                const defaultPerms = [
+                    { name: 'view_global_analytics', description: 'Access to global Saas metrics (Super Admin)' },
+                    { name: 'manage_tenants', description: 'Create and manage global companies' },
+                    { name: 'configure_organization', description: 'Manage departments and org-wide settings' },
+                    { name: 'manage_staff', description: 'Hire, edit, and terminate employees' },
+                    { name: 'process_payroll', description: 'Run payroll and generate salary slips' },
+                    { name: 'approve_attendance', description: 'Approve or reject team attendance logs' },
+                    { name: 'approve_leaves', description: 'Approve or reject team leave requests' },
+                    { name: 'view_self', description: 'Access personal dashboard and self-service portal' }
+                ];
+                await db('permissions').insert(defaultPerms);
+
+                const roles = await db('roles').select('id', 'name');
+                const superRole = roles.find(r => r.name === 'super_admin');
+                const adminRole = roles.find(r => r.name === 'company_admin');
+                const managerRole = roles.find(r => r.name === 'manager');
+                const empRole = roles.find(r => r.name === 'employee');
+
+                const allPerms = await db('permissions').select('id', 'name');
+
+                const mappings = [];
+                for (const perm of allPerms) {
+                    if (superRole) {
+                        mappings.push({ role_id: superRole.id, permission_id: perm.id });
+                    }
+                    if (adminRole && ['configure_organization', 'manage_staff', 'process_payroll', 'approve_attendance', 'approve_leaves', 'view_self'].includes(perm.name)) {
+                        mappings.push({ role_id: adminRole.id, permission_id: perm.id });
+                    }
+                    if (managerRole && ['manage_staff', 'approve_attendance', 'approve_leaves', 'view_self'].includes(perm.name)) {
+                        mappings.push({ role_id: managerRole.id, permission_id: perm.id });
+                    }
+                    if (empRole && ['view_self'].includes(perm.name)) {
+                        mappings.push({ role_id: empRole.id, permission_id: perm.id });
+                    }
+                }
+                if (mappings.length > 0) {
+                    await db('role_permissions').insert(mappings).catch(() => {});
+                }
+                console.log('>>> [DB-SYNC]: Seeding permissions and role mappings completed.');
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: Seeding permissions failed:', e.message);
+        }
+
+        // 4. Ensure salary_history table exists
+        const hasSalaryHistory = await db.schema.hasTable('salary_history');
+        if (!hasSalaryHistory) {
+            console.log('>>> [DB-SYNC]: Creating salary_history table...');
+            await db.schema.createTable('salary_history', (table) => {
+                table.increments('id').primary();
+                table.integer('employee_id').unsigned().notNullable();
+                table.integer('company_id').unsigned().notNullable();
+                table.decimal('old_salary', 15, 2).nullable();
+                table.decimal('new_salary', 15, 2).notNullable();
+                table.date('change_date').notNullable();
+                table.string('reason', 255).nullable();
+                table.timestamp('created_at').defaultTo(db.fn.now());
+                table.foreign('employee_id').references('employees.id').onDelete('CASCADE');
+                table.foreign('company_id').references('companies.id').onDelete('CASCADE');
+            });
+            console.log('>>> [DB-SYNC]: salary_history table created.');
         }
 
     } catch (err) {
