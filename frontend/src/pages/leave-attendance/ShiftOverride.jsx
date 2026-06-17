@@ -868,8 +868,8 @@ const ShiftManagement = () => {
                                                     In Time
                                                     <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
                                                         <Info size={11} />
-                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
-                                                            Session start time. Check-ins after this will be verified against Grace In.
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[9px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Official start time of the session (e.g. 09:00 AM). Check-ins after this time will be compared against the Grace In limit.
                                                         </span>
                                                     </span>
                                                 </div>
@@ -879,8 +879,8 @@ const ShiftManagement = () => {
                                                     Out Time
                                                     <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
                                                         <Info size={11} />
-                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
-                                                            Session end time. Check-outs before this will be verified against Grace Out.
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[9px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Official end time of the session (e.g. 06:00 PM). Check-outs before this time will be verified against Grace Out/Out Margin to trigger early checkout request.
                                                         </span>
                                                     </span>
                                                 </div>
@@ -890,8 +890,8 @@ const ShiftManagement = () => {
                                                     Grace In (Mins)
                                                     <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
                                                         <Info size={11} />
-                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
-                                                            Allowed delay after Session Start without penalty. Punching in during this period marks "Present" but flags a Grace marker. Punching in later triggers a Late In request.
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[9px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Allowed delay after In Time (e.g. 30 mins for 09:00 AM start means up to 09:30 AM is marked Present). Exceeding this or monthly Grace Cap triggers Late In request.
                                                         </span>
                                                     </span>
                                                 </div>
@@ -901,8 +901,8 @@ const ShiftManagement = () => {
                                                     Grace Out (Mins)
                                                     <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
                                                         <Info size={11} />
-                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
-                                                            Allowed early check-out before Session End without penalty. Check-out before this threshold triggers an Early Out request.
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[9px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Allowed early check-out buffer before Out Time without request (e.g. if 15 mins for 06:00 PM shift, checking out after 05:45 PM is allowed without request).
                                                         </span>
                                                     </span>
                                                 </div>
@@ -912,8 +912,8 @@ const ShiftManagement = () => {
                                                     In Margin (Mins)
                                                     <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
                                                         <Info size={11} />
-                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
-                                                            Accepted early punch window before Session Start. Punches in this window are direct punches (Present/On-Time), and do NOT generate any requests.
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[9px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Allowed early check-in window before In Time (e.g. if 30 mins for 09:00 AM start, earliest check-in is 08:30 AM). Punches before this window are blocked.
                                                         </span>
                                                     </span>
                                                 </div>
@@ -923,8 +923,8 @@ const ShiftManagement = () => {
                                                     Out Margin (Mins)
                                                     <span className="cursor-help text-slate-400 hover:text-indigo-600 relative group normal-case">
                                                         <Info size={11} />
-                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
-                                                            Accepted checkout window after Session End. Punches in this window are direct, mapping to this session, and do NOT generate any requests.
+                                                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[9px] rounded-lg shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50">
+                                                            Allowed checkout window before Out Time (e.g. if 60 mins for 06:00 PM shift, checks out after 05:00 PM are allowed, but checks out before 05:00 PM are blocked).
                                                         </span>
                                                     </span>
                                                 </div>
