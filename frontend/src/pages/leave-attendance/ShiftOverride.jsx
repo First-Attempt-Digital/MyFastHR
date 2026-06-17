@@ -152,26 +152,26 @@ const ShiftManagement = () => {
     }, [employees]);
     const [shiftConfig, setShiftConfig] = useState({
         name: '',
-        start_time: '09:00',
-        end_time: '18:00',
-        grace_period: 15,
-        grace_count_limit: 3,
-        from_date: new Date().toISOString().split('T')[0],
+        start_time: '',
+        end_time: '',
+        grace_period: '',
+        grace_count_limit: '',
+        from_date: '',
         to_date: '',
         is_night_shift: false,
         is_flexi: false,
-        min_hours: '8.0',
-        min_hours_half: '4.0',
+        min_hours: '',
+        min_hours_half: '',
         total_punches_required: 2,
-        session2_start_time: '14:00',
-        session2_end_time: '18:00',
-        session1_grace_out: 0,
-        session2_grace_in: 15,
-        session2_grace_out: 0,
-        session1_in_margin: 0,
-        session1_out_margin: 0,
-        session2_in_margin: 0,
-        session2_out_margin: 0,
+        session2_start_time: '',
+        session2_end_time: '',
+        session1_grace_out: '',
+        session2_grace_in: '',
+        session2_grace_out: '',
+        session1_in_margin: '',
+        session1_out_margin: '',
+        session2_in_margin: '',
+        session2_out_margin: '',
         terminate_hour: ''
     });
 
@@ -330,21 +330,27 @@ const ShiftManagement = () => {
             setSelectedEmployees([]);
             setEditingShiftId(null);
             setShiftConfig({
-                name: '', start_time: '09:00', end_time: '18:00',
-                grace_period: 15, grace_count_limit: 3,
-                from_date: new Date().toISOString().split('T')[0],
-                to_date: '', is_night_shift: false,
-                is_flexi: false, min_hours: '8.0', min_hours_half: '4.0',
+                name: '',
+                start_time: '',
+                end_time: '',
+                grace_period: '',
+                grace_count_limit: '',
+                from_date: '',
+                to_date: '',
+                is_night_shift: false,
+                is_flexi: false,
+                min_hours: '',
+                min_hours_half: '',
                 total_punches_required: 2,
-                session2_start_time: '14:00',
-                session2_end_time: '18:00',
-                session1_grace_out: 0,
-                session2_grace_in: 15,
-                session2_grace_out: 0,
-                session1_in_margin: 0,
-                session1_out_margin: 0,
-                session2_in_margin: 0,
-                session2_out_margin: 0,
+                session2_start_time: '',
+                session2_end_time: '',
+                session1_grace_out: '',
+                session2_grace_in: '',
+                session2_grace_out: '',
+                session1_in_margin: '',
+                session1_out_margin: '',
+                session2_in_margin: '',
+                session2_out_margin: '',
                 terminate_hour: ''
             });
             setViewMode('list');
@@ -453,7 +459,34 @@ const ShiftManagement = () => {
                                 Override Shift
                             </button>
                             <button
-                                onClick={() => setViewMode('assign')}
+                                onClick={() => {
+                                    setEditingShiftId(null);
+                                    setShiftConfig({
+                                        name: '',
+                                        start_time: '',
+                                        end_time: '',
+                                        grace_period: '',
+                                        grace_count_limit: '',
+                                        from_date: '',
+                                        to_date: '',
+                                        is_night_shift: false,
+                                        is_flexi: false,
+                                        min_hours: '',
+                                        min_hours_half: '',
+                                        total_punches_required: 2,
+                                        session2_start_time: '',
+                                        session2_end_time: '',
+                                        session1_grace_out: '',
+                                        session2_grace_in: '',
+                                        session2_grace_out: '',
+                                        session1_in_margin: '',
+                                        session1_out_margin: '',
+                                        session2_in_margin: '',
+                                        session2_out_margin: '',
+                                        terminate_hour: ''
+                                    });
+                                    setViewMode('assign');
+                                }}
                                 className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
                             >
                                 <Plus size={14} />
