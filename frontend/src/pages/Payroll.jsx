@@ -6,7 +6,7 @@ import {
     ArrowRight, Plus, Minus, RotateCcw, FileText, Eye,
     Settings as SettingsIcon, Landmark, Sliders, Calculator,
     ShieldAlert, Check, RefreshCw, Trash2, Edit3, Clock,
-    TrendingUp, Coins, ChevronDown, CheckCircle, Mail, UserMinus, Printer
+    TrendingUp, Coins, ChevronDown, CheckCircle, Mail, UserMinus, Printer, X
 } from 'lucide-react';
 import { PieChart as RePie, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -425,6 +425,7 @@ const Payroll = () => {
     const [repaymentsLoading, setRepaymentsLoading] = useState(false);
     const [showRepayModal, setShowRepayModal] = useState(false);
     const [selectedLoanForRepay, setSelectedLoanForRepay] = useState(null);
+    const [selectedOtherDeductions, setSelectedOtherDeductions] = useState(null);
     const [repayData, setRepayData] = useState({
         amount_paid: '',
         payment_date: new Date().toISOString().split('T')[0],
@@ -503,6 +504,7 @@ const Payroll = () => {
     const [isAddingNewRevision, setIsAddingNewRevision] = useState(false);
     const [revisionLoading, setRevisionLoading] = useState(false);
     const [inputsSearchQuery, setInputsSearchQuery] = useState('');
+    const [loansSearchQuery, setLoansSearchQuery] = useState('');
 
     // Form inputs state
     const [grossInput, setGrossInput] = useState('');
@@ -536,9 +538,15 @@ const Payroll = () => {
 
     const monthMap = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
 
+    const hasPfRule = globalRules.some(r => !!r.is_active && (r.rule_name.toLowerCase().includes('pf') || r.rule_name.toLowerCase().includes('provident')));
+    const hasEsiRule = globalRules.some(r => !!r.is_active && (r.rule_name.toLowerCase().includes('esic') || r.rule_name.toLowerCase().includes('esi') || r.rule_name.toLowerCase().includes('insurance')));
+    const hasLwfRule = globalRules.some(r => !!r.is_active && r.rule_name.toLowerCase().includes('lwf'));
+    const hasGratuityRule = globalRules.some(r => !!r.is_active && r.rule_name.toLowerCase().includes('gratuity'));
+
     useEffect(() => {
         fetchControls();
         fetchEmployees();
+        fetchGlobalRules();
         if (selectedTab === 'overview') {
             fetchSummary();
         } else if (selectedTab === 'register') {
@@ -546,7 +554,7 @@ const Payroll = () => {
         } else if (selectedTab === 'inputs') {
             // Handled by fetchEmployees() above
         } else if (selectedTab === 'global-rules') {
-            fetchGlobalRules();
+            // Handled by fetchGlobalRules() above
         } else if (selectedTab === 'shift-rules') {
             fetchBusinessRules();
         } else if (selectedTab === 'loans') {
@@ -962,24 +970,33 @@ const Payroll = () => {
             alert("No data available to export.");
             return;
         }
-        const dataToExport = filteredRegisterData.map(reg => ({
-            employee_id_number: reg.employee_id_number,
-            name: `${reg.first_name || ''} ${reg.last_name || ''}`.trim(),
-            designation: reg.designation,
-            presents: reg.stats?.P || 0,
-            leaves: reg.stats?.L || 0,
-            absents: reg.stats?.A || 0,
-            weekoffs_holidays: (reg.stats?.OFF || 0) + (reg.stats?.H || 0),
-            base_salary: reg.base_salary || 0,
-            total_allowances: reg.total_allowances || 0,
-            unpaid_leave_deduction: reg.unpaid_leave_deduction || 0,
-            late_mark_deduction: reg.late_mark_deduction || 0,
-            overtime_bonus: reg.overtime_bonus || 0,
-            manual_deduction_override: reg.manual_deduction_override || 0,
-            employee_pf: reg.employee_pf || 0,
-            employee_esic: reg.employee_esic || 0,
-            net_salary: reg.net_salary || 0
-        }));
+        const dataToExport = filteredRegisterData.map(reg => {
+            const row = {
+                employee_id_number: reg.employee_id_number,
+                name: `${reg.first_name || ''} ${reg.last_name || ''}`.trim(),
+                designation: reg.designation,
+                presents: reg.stats?.P || 0,
+                leaves: reg.stats?.L || 0,
+                absents: reg.stats?.A || 0,
+                weekoffs_holidays: (reg.stats?.OFF || 0) + (reg.stats?.H || 0),
+                base_salary: reg.base_salary || 0,
+                total_allowances: reg.total_allowances || 0,
+                unpaid_leave_deduction: reg.unpaid_leave_deduction || 0,
+                late_mark_deduction: reg.late_mark_deduction || 0,
+                overtime_bonus: reg.overtime_bonus || 0,
+                manual_deduction_override: reg.manual_deduction_override || 0,
+            };
+
+            if (hasPfRule) row.employee_pf = reg.employee_pf || 0;
+            if (hasEsiRule) row.employee_esic = reg.employee_esic || 0;
+            if (hasGratuityRule) row.gratuity_share = reg.gratuity_share || 0;
+
+            row.total_deductions = reg.total_deductions || 0;
+            row.loan_emi_deduction = reg.loan_emi_deduction || 0;
+            row.net_salary = reg.net_salary || 0;
+
+            return row;
+        });
 
         const headers = {
             employee_id_number: 'Employee ID',
@@ -995,10 +1012,15 @@ const Payroll = () => {
             late_mark_deduction: 'Late Penalty',
             overtime_bonus: 'Bonus / Incentives',
             manual_deduction_override: 'Manual Deductions',
-            employee_pf: 'EPF Share',
-            employee_esic: 'ESIC Share',
-            net_salary: 'Projected Net Salary'
         };
+
+        if (hasPfRule) headers.employee_pf = 'EPF Share';
+        if (hasEsiRule) headers.employee_esic = 'ESIC Share';
+        if (hasGratuityRule) headers.gratuity_share = 'Gratuity Share';
+
+        headers.total_deductions = 'Other Deductions';
+        headers.loan_emi_deduction = 'Loan EMI';
+        headers.net_salary = 'Projected Net Salary';
 
         exportToCSV(dataToExport, `Pay_Register_${selectedMonth.replace(' ', '_')}.csv`, headers);
     };
@@ -1225,8 +1247,8 @@ const Payroll = () => {
         setGrossInput(String(newGross));
 
         if (['basic', 'hra', 'special', 'medical'].includes(field)) {
-            const computedEeEsicVal = isEsiEnabled ? (newGross * 0.0325) : 0;
-            const computedErEsicVal = isEsiEnabled ? (newGross * 0.0075) : 0;
+            const computedEeEsicVal = isEsiEnabled ? (newGross * 0.0075) : 0;
+            const computedErEsicVal = isEsiEnabled ? (newGross * 0.0325) : 0;
             const formattedEeEsic = parseFloat(computedEeEsicVal.toFixed(2));
             const formattedErEsic = parseFloat(computedErEsicVal.toFixed(2));
             setEmployeeEsicInput(String(formattedEeEsic));
@@ -1763,59 +1785,83 @@ const Payroll = () => {
     ];
 
     // Unique outlets list
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (filterVal === 'All') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Unique outlets list
     const uniqueOutlets = useMemo(() => {
-        const outlets = new Set();
-        if (Array.isArray(employees)) {
-            employees.forEach(e => e.office_location && outlets.add(e.office_location));
-        }
+        const outlets = new Map(); // cleanName -> originalName
+        const check = (o) => {
+            if (o) {
+                const clean = o.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const normalizedDisplay = o.replace(/\s+/g, ' ').trim();
+                if (!outlets.has(clean)) {
+                    outlets.set(clean, normalizedDisplay);
+                }
+            }
+        };
+        if (Array.isArray(employees)) employees.forEach(e => check(e.office_location));
         if (Array.isArray(registerData)) {
             registerData.forEach(e => {
-                if (e.location) outlets.add(e.location);
-                if (e.office_location) outlets.add(e.office_location);
+                check(e.location);
+                check(e.office_location);
             });
         }
-        if (Array.isArray(loans)) {
-            loans.forEach(e => e.office_location && outlets.add(e.office_location));
-        }
-        if (Array.isArray(separations)) {
-            separations.forEach(e => e.office_location && outlets.add(e.office_location));
-        }
-        return ['All', ...Array.from(outlets).sort()];
+        if (Array.isArray(loans)) loans.forEach(e => check(e.office_location));
+        if (Array.isArray(separations)) separations.forEach(e => check(e.office_location));
+        return ['All', ...Array.from(outlets.values()).sort()];
     }, [employees, registerData, loans, separations]);
 
     const uniqueDepartments = useMemo(() => {
-        const depts = new Set();
+        const depts = new Map(); // cleanName -> originalName
         const check = (e) => {
             const d = e.department_name || e.department;
-            if (d) depts.add(d);
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const normalizedDisplay = d.replace(/\s+/g, ' ').trim();
+                if (!depts.has(clean)) {
+                    depts.set(clean, normalizedDisplay);
+                }
+            }
         };
         if (Array.isArray(employees)) employees.forEach(check);
         if (Array.isArray(registerData)) registerData.forEach(check);
         if (Array.isArray(loans)) loans.forEach(check);
         if (Array.isArray(separations)) separations.forEach(check);
-        return ['All', ...Array.from(depts).sort()];
+        return ['All', ...Array.from(depts.values()).sort()];
     }, [employees, registerData, loans, separations]);
 
     const uniqueDesignations = useMemo(() => {
-        const desgs = new Set();
+        const desgs = new Map(); // cleanName -> originalName
         const check = (e) => {
             const d = e.designation || e.role;
-            if (d) desgs.add(d);
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const normalizedDisplay = d.replace(/\s+/g, ' ').trim();
+                if (!desgs.has(clean)) {
+                    desgs.set(clean, normalizedDisplay);
+                }
+            }
         };
         if (Array.isArray(employees)) employees.forEach(check);
         if (Array.isArray(registerData)) registerData.forEach(check);
         if (Array.isArray(loans)) loans.forEach(check);
         if (Array.isArray(separations)) separations.forEach(check);
-        return ['All', ...Array.from(desgs).sort()];
+        return ['All', ...Array.from(desgs.values()).sort()];
     }, [employees, registerData, loans, separations]);
 
     // Filter register data
     const filteredRegisterData = useMemo(() => {
         if (!Array.isArray(registerData)) return [];
         return registerData.filter(reg => {
-            const matchesOutlet = selectedOutlet === 'All' || reg.location === selectedOutlet || reg.office_location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || reg.department_name === selectedDept || reg.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || reg.designation === selectedDesignation || reg.role === selectedDesignation;
+            const matchesOutlet = matchText(reg.location || reg.office_location, selectedOutlet);
+            const matchesDept = matchText(reg.department_name || reg.department, selectedDept);
+            const matchesDesignation = matchText(reg.designation || reg.role, selectedDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [registerData, selectedOutlet, selectedDept, selectedDesignation]);
@@ -1824,9 +1870,9 @@ const Payroll = () => {
     const filteredLoans = useMemo(() => {
         if (!Array.isArray(loans)) return [];
         return loans.filter(loan => {
-            const matchesOutlet = selectedOutlet === 'All' || loan.office_location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || loan.department_name === selectedDept || loan.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || loan.designation === selectedDesignation || loan.role === selectedDesignation;
+            const matchesOutlet = matchText(loan.office_location, selectedOutlet);
+            const matchesDept = matchText(loan.department_name || loan.department, selectedDept);
+            const matchesDesignation = matchText(loan.designation || loan.role, selectedDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [loans, selectedOutlet, selectedDept, selectedDesignation]);
@@ -1835,9 +1881,9 @@ const Payroll = () => {
     const filteredSeparations = useMemo(() => {
         if (!Array.isArray(separations)) return [];
         return separations.filter(s => {
-            const matchesOutlet = selectedOutlet === 'All' || s.office_location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || s.department_name === selectedDept || s.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || s.designation === selectedDesignation || s.role === selectedDesignation;
+            const matchesOutlet = matchText(s.office_location, selectedOutlet);
+            const matchesDept = matchText(s.department_name || s.department, selectedDept);
+            const matchesDesignation = matchText(s.designation || s.role, selectedDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [separations, selectedOutlet, selectedDept, selectedDesignation]);
@@ -1846,9 +1892,9 @@ const Payroll = () => {
     const filteredStatements = useMemo(() => {
         if (!Array.isArray(statements)) return [];
         return statements.filter(stmt => {
-            const matchesOutlet = selectedOutlet === 'All' || stmt.office_location === selectedOutlet || stmt.location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || stmt.department_name === selectedDept || stmt.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || stmt.designation === selectedDesignation || stmt.role === selectedDesignation;
+            const matchesOutlet = matchText(stmt.office_location || stmt.location, selectedOutlet);
+            const matchesDept = matchText(stmt.department_name || stmt.department, selectedDept);
+            const matchesDesignation = matchText(stmt.designation || stmt.role, selectedDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [statements, selectedOutlet, selectedDept, selectedDesignation]);
@@ -1857,9 +1903,9 @@ const Payroll = () => {
     const filteredEmployees = useMemo(() => {
         if (!Array.isArray(employees)) return [];
         return employees.filter(emp => {
-            const matchesOutlet = selectedOutlet === 'All' || emp.office_location === selectedOutlet || emp.location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || emp.department_name === selectedDept || emp.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || emp.designation === selectedDesignation || emp.role === selectedDesignation;
+            const matchesOutlet = matchText(emp.office_location || emp.location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation || emp.role, selectedDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [employees, selectedOutlet, selectedDept, selectedDesignation]);
@@ -1868,9 +1914,9 @@ const Payroll = () => {
     const modalFilteredEmployees = useMemo(() => {
         if (!Array.isArray(employees)) return [];
         return employees.filter(emp => {
-            const matchesOutlet = modalOutlet === 'All' || emp.office_location === modalOutlet || emp.location === modalOutlet;
-            const matchesDept = modalDept === 'All' || emp.department_name === modalDept || emp.department === modalDept;
-            const matchesDesignation = modalDesignation === 'All' || emp.designation === modalDesignation || emp.role === modalDesignation;
+            const matchesOutlet = matchText(emp.office_location || emp.location, modalOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, modalDept);
+            const matchesDesignation = matchText(emp.designation || emp.role, modalDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [employees, modalOutlet, modalDept, modalDesignation]);
@@ -1879,19 +1925,104 @@ const Payroll = () => {
     const filteredRepayments = useMemo(() => {
         if (!Array.isArray(repayments)) return [];
         return repayments.filter(r => {
-            const matchesOutlet = selectedOutlet === 'All' || r.office_location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || r.department_name === selectedDept || r.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || r.designation === selectedDesignation || r.role === selectedDesignation;
+            const matchesOutlet = matchText(r.office_location, selectedOutlet);
+            const matchesDept = matchText(r.department_name || r.department, selectedDept);
+            const matchesDesignation = matchText(r.designation || r.role, selectedDesignation);
             return matchesOutlet && matchesDept && matchesDesignation;
         });
     }, [repayments, selectedOutlet, selectedDept, selectedDesignation]);
 
+    // Search loans
+    const searchedLoans = useMemo(() => {
+        if (!loansSearchQuery) return filteredLoans;
+        const query = loansSearchQuery.toLowerCase();
+        return filteredLoans.filter(l => {
+            const fullName = `${l.first_name || ''} ${l.last_name || ''}`.toLowerCase();
+            const empId = (l.employee_id_number || '').toLowerCase();
+            const title = (l.title || '').toLowerCase();
+            return fullName.includes(query) || empId.includes(query) || title.includes(query);
+        });
+    }, [filteredLoans, loansSearchQuery]);
+
+    // Search repayments
+    const searchedRepayments = useMemo(() => {
+        if (!loansSearchQuery) return filteredRepayments;
+        const query = loansSearchQuery.toLowerCase();
+        return filteredRepayments.filter(r => {
+            const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
+            const empId = (r.employee_id_number || '').toLowerCase();
+            const title = (r.loan_title || '').toLowerCase();
+            const note = (r.notes || '').toLowerCase();
+            return fullName.includes(query) || empId.includes(query) || title.includes(query) || note.includes(query);
+        });
+    }, [filteredRepayments, loansSearchQuery]);
+
+    const filteredSummary = useMemo(() => {
+        const initial = {
+            netPay: 0,
+            grossPay: 0,
+            deductions: 0,
+            totalEmployees: 0,
+            additions: 0,
+            separations: 0,
+            payoutPending: 0
+        };
+
+        if (Array.isArray(filteredStatements)) {
+            filteredStatements.forEach(stmt => {
+                const net = parseFloat(stmt.net_salary) || 0;
+                const base = parseFloat(stmt.base_salary) || 0;
+                const allow = parseFloat(stmt.total_allowances) || 0;
+                const ded = parseFloat(stmt.total_deductions) || 0;
+                const unpaid = parseFloat(stmt.unpaid_leave_deduction) || 0;
+                const late = parseFloat(stmt.late_mark_deduction) || 0;
+
+                initial.netPay += net;
+                initial.grossPay += (base + allow);
+                initial.deductions += (ded + unpaid + late);
+
+                if (stmt.status === 'generated' || stmt.status === 'pending') {
+                    initial.payoutPending++;
+                }
+            });
+        }
+
+        initial.totalEmployees = filteredEmployees.length;
+
+        if (selectedMonth && typeof selectedMonth === 'string') {
+            const [mName, yearStr] = selectedMonth.split(' ');
+            const mVal = monthMap[mName];
+            const yVal = parseInt(yearStr);
+
+            filteredEmployees.forEach(emp => {
+                if (emp.joining_date) {
+                    const joinDate = new Date(emp.joining_date);
+                    if (joinDate.getMonth() + 1 === mVal && joinDate.getFullYear() === yVal) {
+                        initial.additions++;
+                    }
+                }
+            });
+        }
+
+        initial.separations = filteredSeparations.length;
+
+        return {
+            netPay: initial.netPay,
+            grossPay: initial.grossPay,
+            deductions: initial.deductions,
+            totalEmployees: initial.totalEmployees,
+            additions: initial.additions,
+            separations: initial.separations,
+            payoutPending: initial.payoutPending
+        };
+    }, [filteredStatements, filteredEmployees, filteredSeparations, selectedMonth, monthMap]);
+
     const chartData = useMemo(() => {
         return [
-            { name: 'Gross Salary', value: parseFloat(summary.grossPay) || 0, color: '#10b981' },
-            { name: 'Deductions', value: parseFloat(summary.deductions) || 0, color: '#ef4444' }
+            { name: 'Gross Salary', value: parseFloat(filteredSummary.grossPay) || 0, color: '#10b981' },
+            { name: 'Deductions', value: parseFloat(filteredSummary.deductions) || 0, color: '#ef4444' }
         ];
-    }, [summary]);
+    }, [filteredSummary]);
 
     return (
         <div className="p-4 md:p-6 bg-[#F4F6FC] min-h-screen font-outfit text-slate-800 antialiased selection:bg-indigo-500/20">
@@ -1907,8 +2038,8 @@ const Payroll = () => {
                 </div>
 
                 {/* Outlet, Department, Designation filters */}
-                <div className="flex gap-2.5 flex-wrap w-full md:w-auto">
-                    <div className="relative min-w-[150px] shrink-0">
+                <div className="flex gap-2.5 flex-nowrap w-full md:w-auto items-center overflow-x-auto no-scrollbar py-1.5 shrink-0">
+                    <div className="relative min-w-[130px] md:min-w-[150px] shrink-0">
                         <select
                             value={selectedOutlet}
                             onChange={(e) => setSelectedOutlet(e.target.value)}
@@ -1921,7 +2052,7 @@ const Payroll = () => {
                         </select>
                         <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
-                    <div className="relative min-w-[150px] shrink-0">
+                    <div className="relative min-w-[130px] md:min-w-[150px] shrink-0">
                         <select
                             value={selectedDept}
                             onChange={(e) => setSelectedDept(e.target.value)}
@@ -1934,7 +2065,7 @@ const Payroll = () => {
                         </select>
                         <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
-                    <div className="relative min-w-[150px] shrink-0">
+                    <div className="relative min-w-[130px] md:min-w-[150px] shrink-0">
                         <select
                             value={selectedDesignation}
                             onChange={(e) => setSelectedDesignation(e.target.value)}
@@ -1947,6 +2078,17 @@ const Payroll = () => {
                         </select>
                         <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
+                    {selectedTab === 'loans' && (
+                        <div className="relative w-48 md:w-56 shrink-0">
+                            <input
+                                type="text"
+                                placeholder="Search by name, ID, or title..."
+                                value={loansSearchQuery}
+                                onChange={(e) => setLoansSearchQuery(e.target.value)}
+                                className="w-full pl-3 pr-8 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#4361ee] transition-all shadow-sm"
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -2052,7 +2194,7 @@ const Payroll = () => {
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Net</span>
                                     </div>
                                     <div className="mt-1">
-                                        <span className="text-xl font-black text-slate-900">₹{Number(summary.netPay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-xl font-black text-slate-900">₹{Number(filteredSummary.netPay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
 
                                     <div className="h-24 relative my-1.5">
@@ -2085,14 +2227,14 @@ const Payroll = () => {
                                                 <div className="w-1.5 h-1.5 bg-[#10b981] rounded-full"></div>
                                                 <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">Gross</span>
                                             </div>
-                                            <p className="text-[11px] font-black text-slate-700">₹{Number(summary.grossPay || 0).toLocaleString()}</p>
+                                            <p className="text-[11px] font-black text-slate-700">₹{Number(filteredSummary.grossPay || 0).toLocaleString()}</p>
                                         </div>
                                         <div>
                                             <div className="flex items-center gap-1 mb-0.5">
                                                 <div className="w-1.5 h-1.5 bg-[#ef4444] rounded-full"></div>
                                                 <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">Cuts</span>
                                             </div>
-                                            <p className="text-[11px] font-black text-slate-700">₹{Number(summary.deductions || 0).toLocaleString()}</p>
+                                            <p className="text-[11px] font-black text-slate-700">₹{Number(filteredSummary.deductions || 0).toLocaleString()}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -2106,7 +2248,7 @@ const Payroll = () => {
                                                 <div className="p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-[#4361ee] shrink-0"><Users size={14} /></div>
                                                 <div>
                                                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Enrolled Staff</span>
-                                                    <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{summary.totalEmployees}</p>
+                                                    <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{filteredSummary.totalEmployees}</p>
                                                     <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Registered members</p>
                                                 </div>
                                             </div>
@@ -2117,7 +2259,7 @@ const Payroll = () => {
                                                 <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 shrink-0"><Plus size={14} /></div>
                                                 <div>
                                                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Onboarded</span>
-                                                    <p className="text-[18px] font-black text-[#10b981] mt-1 leading-none">{summary.additions}</p>
+                                                    <p className="text-[18px] font-black text-[#10b981] mt-1 leading-none">{filteredSummary.additions}</p>
                                                     <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Joined this cycle</p>
                                                 </div>
                                             </div>
@@ -2131,7 +2273,7 @@ const Payroll = () => {
                                                 <div className="p-2.5 bg-amber-50 border border-amber-100 rounded-xl text-amber-600 shrink-0"><Clock size={14} /></div>
                                                 <div>
                                                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Payout Queue</span>
-                                                    <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{summary.payoutPending}</p>
+                                                    <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{filteredSummary.payoutPending}</p>
                                                     <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Awaiting verification</p>
                                                 </div>
                                             </div>
@@ -2142,7 +2284,7 @@ const Payroll = () => {
                                                 <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 shrink-0"><Minus size={14} /></div>
                                                 <div>
                                                     <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Separated</span>
-                                                    <p className="text-[18px] font-black text-[#ef4444] mt-1 leading-none">{summary.separations}</p>
+                                                    <p className="text-[18px] font-black text-[#ef4444] mt-1 leading-none">{filteredSummary.separations}</p>
                                                     <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Released this cycle</p>
                                                 </div>
                                             </div>
@@ -2482,8 +2624,11 @@ const Payroll = () => {
                                             <th className="px-3 py-3 text-orange-600 text-[9px] font-black uppercase tracking-widest">Late Penalty</th>
                                             <th className="px-3 py-3 text-emerald-600 text-[9px] font-black uppercase tracking-widest min-w-[130px]">Bonus / Incentives</th>
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest min-w-[130px]">Manual Deductions</th>
-                                            <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">EPF Share</th>
-                                            <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">ESIC Share</th>
+                                            {hasPfRule && <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">EPF Share</th>}
+                                            {hasEsiRule && <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">ESIC Share</th>}
+                                            {hasGratuityRule && <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">Gratuity Share</th>}
+                                            <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Other Deductions</th>
+                                            <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Loan EMI</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-[#4361ee] uppercase tracking-widest bg-indigo-50/10">Projected Net</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Status</th>
                                         </tr>
@@ -2540,11 +2685,12 @@ const Payroll = () => {
                                                                         const allowances = parseFloat(item.total_allowances) || 0;
                                                                         const deductions = parseFloat(item.total_deductions) || 0;
                                                                         const late = parseFloat(item.late_mark_deduction) || 0;
-                                                                        const pf = parseFloat(item.employee_pf) || 0;
-                                                                        const esic = parseFloat(item.employee_esic) || 0;
+                                                                        const pf = hasPfRule ? (parseFloat(item.employee_pf) || 0) : 0;
+                                                                        const esic = hasEsiRule ? (parseFloat(item.employee_esic) || 0) : 0;
+                                                                        const gratuity = hasGratuityRule ? (parseFloat(item.gratuity_share) || 0) : 0;
                                                                         const loan = parseFloat(item.loan_emi_deduction) || 0;
 
-                                                                        const net = base + allowances - deductions - late - pf - esic - loan - manualDeduct + numBonus;
+                                                                        const net = base + allowances - deductions - late - pf - esic - gratuity - loan - manualDeduct + numBonus;
                                                                         const newNet = Math.max(0, net).toFixed(2);
                                                                         return { ...item, overtime_bonus: val, net_salary: newNet };
                                                                     }
@@ -2603,11 +2749,12 @@ const Payroll = () => {
                                                                         const allowances = parseFloat(item.total_allowances) || 0;
                                                                         const deductions = parseFloat(item.total_deductions) || 0;
                                                                         const late = parseFloat(item.late_mark_deduction) || 0;
-                                                                        const pf = parseFloat(item.employee_pf) || 0;
-                                                                        const esic = parseFloat(item.employee_esic) || 0;
+                                                                        const pf = hasPfRule ? (parseFloat(item.employee_pf) || 0) : 0;
+                                                                        const esic = hasEsiRule ? (parseFloat(item.employee_esic) || 0) : 0;
+                                                                        const gratuity = hasGratuityRule ? (parseFloat(item.gratuity_share) || 0) : 0;
                                                                         const loan = parseFloat(item.loan_emi_deduction) || 0;
 
-                                                                        const net = base + allowances - deductions - late - pf - esic - loan - numDeduct + bonus;
+                                                                        const net = base + allowances - deductions - late - pf - esic - gratuity - loan - numDeduct + bonus;
                                                                         const newNet = Math.max(0, net).toFixed(2);
                                                                         return { ...item, manual_deduction_override: val, net_salary: newNet };
                                                                     }
@@ -2640,11 +2787,36 @@ const Payroll = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
-                                                    {reg.employee_pf > 0 ? `-₹${Number(reg.employee_pf).toFixed(2)}` : '0.00'}
+                                                {hasPfRule && (
+                                                    <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
+                                                        {reg.employee_pf > 0 ? `-₹${Number(reg.employee_pf).toFixed(2)}` : '0.00'}
+                                                    </td>
+                                                )}
+                                                {hasEsiRule && (
+                                                    <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
+                                                        {reg.employee_esic > 0 ? `-₹${Number(reg.employee_esic).toFixed(2)}` : '0.00'}
+                                                    </td>
+                                                )}
+                                                {hasGratuityRule && (
+                                                    <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
+                                                        {reg.gratuity_share > 0 ? `-₹${Number(reg.gratuity_share).toFixed(2)}` : '0.00'}
+                                                    </td>
+                                                )}
+                                                <td 
+                                                    onClick={() => {
+                                                        if (reg.other_deductions_breakdown && reg.other_deductions_breakdown.length > 0) {
+                                                            setSelectedOtherDeductions({
+                                                                employeeName: `${reg.first_name} ${reg.last_name}`,
+                                                                breakdown: reg.other_deductions_breakdown
+                                                            });
+                                                        }
+                                                    }}
+                                                    className={`px-3 py-3.5 text-xs font-bold text-rose-500/90 ${reg.other_deductions_breakdown && reg.other_deductions_breakdown.length > 0 ? 'cursor-pointer hover:underline hover:text-rose-700' : ''}`}
+                                                >
+                                                    {reg.total_deductions > 0 ? `-₹${Number(reg.total_deductions).toFixed(2)}` : '0.00'}
                                                 </td>
-                                                <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
-                                                    {reg.employee_esic > 0 ? `-₹${Number(reg.employee_esic).toFixed(2)}` : '0.00'}
+                                                <td className="px-3 py-3.5 text-xs font-bold text-rose-500/90">
+                                                    {reg.loan_emi_deduction > 0 ? `-₹${Number(reg.loan_emi_deduction).toFixed(2)}` : '0.00'}
                                                 </td>
                                                 <td className="px-3 py-3.5 text-xs font-black text-[#4361ee] bg-indigo-50/15">₹{Number(reg.net_salary).toLocaleString()}</td>
                                                 <td className="px-3 py-3.5 text-right">
@@ -2709,12 +2881,17 @@ const Payroll = () => {
                                         </div>
                                     ) : (
                                         <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto custom-scrollbar pr-1">
-                                            {filteredEmployees
+                                            {(inputsSearchQuery ? employees : filteredEmployees)
                                                 .filter(emp => {
                                                     const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
                                                     const empIdNum = (emp.employee_id_number || '').toLowerCase();
+                                                    const dept = (emp.department_name || emp.department || '').toLowerCase();
+                                                    const designation = (emp.designation || emp.role || '').toLowerCase();
                                                     const query = inputsSearchQuery.toLowerCase();
-                                                    return fullName.includes(query) || empIdNum.includes(query);
+                                                    return fullName.includes(query) || 
+                                                           empIdNum.includes(query) || 
+                                                           dept.includes(query) || 
+                                                           designation.includes(query);
                                                 })
                                                 .map((emp) => {
                                                     const isSelected = selectedInputsEmployee?.id === emp.id;
@@ -2741,11 +2918,16 @@ const Payroll = () => {
                                                     );
                                                 })
                                             }
-                                            {filteredEmployees.filter(emp => {
+                                            {(inputsSearchQuery ? employees : filteredEmployees).filter(emp => {
                                                 const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
                                                 const empIdNum = (emp.employee_id_number || '').toLowerCase();
+                                                const dept = (emp.department_name || emp.department || '').toLowerCase();
+                                                const designation = (emp.designation || emp.role || '').toLowerCase();
                                                 const query = inputsSearchQuery.toLowerCase();
-                                                return fullName.includes(query) || empIdNum.includes(query);
+                                                return fullName.includes(query) || 
+                                                       empIdNum.includes(query) || 
+                                                       dept.includes(query) || 
+                                                       designation.includes(query);
                                             }).length === 0 && (
                                                     <div className="text-center py-8 text-slate-400 text-xs font-semibold">No employees found.</div>
                                                 )}
@@ -2820,15 +3002,23 @@ const Payroll = () => {
                                                                     const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
 
                                                                     if (selectedRevision) {
+                                                                        const prevGross = parseFloat(selectedRevision.gross_salary) || 0;
+                                                                        const prevBasic = parseFloat(selectedRevision.basic) || 0;
                                                                         setGrossInput(String(selectedRevision.gross_salary || ''));
                                                                         setBasicInput(String(selectedRevision.basic || ''));
                                                                         setHraInput(String(selectedRevision.hra || ''));
                                                                         setSpecialAllowanceInput(String(selectedRevision.special_allowance || '0'));
                                                                         setMedicalAllowanceInput(String(selectedRevision.medical_allowance || '0'));
-                                                                        setEmployerPfInput(isPfEnabled ? String(selectedRevision.employer_pf || '') : '0');
-                                                                        setEmployerEsicInput(isEsiEnabled ? String(selectedRevision.employer_esic || '') : '0');
-                                                                        setEmployeePfInput(isPfEnabled ? String(selectedRevision.employee_pf || '') : '0');
-                                                                        setEmployeeEsicInput(isEsiEnabled ? String(selectedRevision.employee_esic || '') : '0');
+                                                                        
+                                                                        const epfVal = parseFloat(selectedRevision.employer_pf) || 0;
+                                                                        const eePfVal = parseFloat(selectedRevision.employee_pf) || 0;
+                                                                        setEmployerPfInput(isPfEnabled ? (epfVal > 0 ? String(epfVal) : String(parseFloat((prevBasic * 0.12).toFixed(2)))) : '0');
+                                                                        setEmployeePfInput(isPfEnabled ? (eePfVal > 0 ? String(eePfVal) : String(parseFloat((prevBasic * 0.12).toFixed(2)))) : '0');
+
+                                                                        const erEsiVal = parseFloat(selectedRevision.employer_esic) || 0;
+                                                                        const eeEsiVal = parseFloat(selectedRevision.employee_esic) || 0;
+                                                                        setEmployerEsicInput(isEsiEnabled ? (erEsiVal > 0 ? String(erEsiVal) : String(parseFloat((prevGross * 0.0325).toFixed(2)))) : '0');
+                                                                        setEmployeeEsicInput(isEsiEnabled ? (eeEsiVal > 0 ? String(eeEsiVal) : String(parseFloat((prevGross * 0.0075).toFixed(2)))) : '0');
                                                                     } else {
                                                                         setGrossInput('');
                                                                         setBasicInput('');
@@ -2858,6 +3048,35 @@ const Payroll = () => {
                                                                     onClick={() => {
                                                                         setIsRevisionEditing(true);
                                                                         setPercentInputs({});
+                                                                        const isPfEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_pf : true;
+                                                                        const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
+
+                                                                        const basicVal = parseFloat(basicInput) || 0;
+                                                                        const grossVal = parseFloat(grossInput) || 0;
+
+                                                                        if (isPfEnabled) {
+                                                                            if (!employerPfInput || parseFloat(employerPfInput) === 0) {
+                                                                                setEmployerPfInput(String(parseFloat((basicVal * 0.12).toFixed(2))));
+                                                                            }
+                                                                            if (!employeePfInput || parseFloat(employeePfInput) === 0) {
+                                                                                setEmployeePfInput(String(parseFloat((basicVal * 0.12).toFixed(2))));
+                                                                            }
+                                                                        } else {
+                                                                            setEmployerPfInput('0');
+                                                                            setEmployeePfInput('0');
+                                                                        }
+
+                                                                        if (isEsiEnabled) {
+                                                                            if (!employerEsicInput || parseFloat(employerEsicInput) === 0) {
+                                                                                setEmployerEsicInput(String(parseFloat((grossVal * 0.0325).toFixed(2))));
+                                                                            }
+                                                                            if (!employeeEsicInput || parseFloat(employeeEsicInput) === 0) {
+                                                                                setEmployeeEsicInput(String(parseFloat((grossVal * 0.0075).toFixed(2))));
+                                                                            }
+                                                                        } else {
+                                                                            setEmployerEsicInput('0');
+                                                                            setEmployeeEsicInput('0');
+                                                                        }
                                                                     }}
                                                                     className={`px-3.5 py-1.5 border rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all ${controls.inputs_locked
                                                                         ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
@@ -2898,6 +3117,85 @@ const Payroll = () => {
                                                     )}
                                                 </>
                                             )}
+                                        </div>
+                                    </div>
+
+                                    {/* Statutory Applicability Settings Card */}
+                                    <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                                        <div className="space-y-1 max-w-2xl">
+                                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Statutory Applicability</span>
+                                            <span className="text-[9.5px] text-slate-400 font-semibold block leading-snug">Toggle whether EPF, ESIC, LWF, and Gratuity auto-calculation and deductions are active for this employee's payroll.</span>
+                                        </div>
+                                        <div className="flex flex-wrap md:flex-nowrap gap-3 items-center flex-shrink-0">
+                                            {[
+                                                { label: 'EPF (Provident Fund)', name: 'include_pf', value: !!selectedInputsEmployee.include_pf, show: hasPfRule },
+                                                { label: 'ESIC (Health Ins.)', name: 'include_esi', value: !!selectedInputsEmployee.include_esi, show: hasEsiRule },
+                                                { label: 'LWF (Labour Welfare)', name: 'include_lwf', value: !!selectedInputsEmployee.include_lwf, show: hasLwfRule },
+                                                { label: 'Gratuity', name: 'include_gratuity', value: !!selectedInputsEmployee.include_gratuity, show: hasGratuityRule }
+                                            ].filter(opt => opt.show).map(opt => (
+                                                <label key={opt.name} className="flex items-center gap-2.5 cursor-pointer bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm hover:border-[#4361ee]/40 transition-all select-none whitespace-nowrap">
+                                                    <input 
+                                                        type="checkbox"
+                                                        disabled={controls.inputs_locked}
+                                                        checked={opt.value}
+                                                        onChange={async (e) => {
+                                                            if (controls.inputs_locked) return;
+                                                            const newValue = e.target.checked;
+                                                            try {
+                                                                // Call PATCH endpoint to update database setting
+                                                                await api.patch(`/employees/${selectedInputsEmployee.id}/statutory-settings`, {
+                                                                    [opt.name]: newValue
+                                                                });
+                                                                
+                                                                // Update local employee states in selectedInputsEmployee and employees array
+                                                                const updatedEmployee = { ...selectedInputsEmployee, [opt.name]: newValue ? 1 : 0 };
+                                                                setSelectedInputsEmployee(updatedEmployee);
+                                                                setEmployees(prev => prev.map(emp => emp.id === selectedInputsEmployee.id ? updatedEmployee : emp));
+                                                                
+                                                                // If in edit / add revision mode, trigger auto-recalculation dynamically!
+                                                                if (isAddingNewRevision || isRevisionEditing) {
+                                                                    // Let's re-run the calculation with the new statutory settings using current values
+                                                                    const gross = parseFloat(grossInput) || 0;
+                                                                    const basic = parseFloat(basicInput) || 0;
+                                                                    const isPf = opt.name === 'include_pf' ? newValue : !!selectedInputsEmployee.include_pf;
+                                                                    const isEsi = opt.name === 'include_esi' ? newValue : !!selectedInputsEmployee.include_esi;
+                                                                    
+                                                                    const eePf = isPf ? (basic * 0.12) : 0;
+                                                                    const eeEsic = isEsi ? (gross * 0.0075) : 0;
+                                                                    const erPf = isPf ? (basic * 0.12) : 0;
+                                                                    const erEsic = isEsi ? (gross * 0.0325) : 0;
+                                                                    
+                                                                    setEmployeePfInput(String(parseFloat(eePf.toFixed(2))));
+                                                                    setEmployeeEsicInput(String(parseFloat(eeEsic.toFixed(2))));
+                                                                    setEmployerPfInput(String(parseFloat(erPf.toFixed(2))));
+                                                                    setEmployerEsicInput(String(parseFloat(erEsic.toFixed(2))));
+                                                                } else if (selectedRevision) {
+                                                                    // If viewing a locked revision, we should update the inputs on-screen display values
+                                                                    const isPf = opt.name === 'include_pf' ? newValue : !!selectedInputsEmployee.include_pf;
+                                                                    const isEsi = opt.name === 'include_esi' ? newValue : !!selectedInputsEmployee.include_esi;
+                                                                    
+                                                                    const basicVal = parseFloat(selectedRevision.basic) || 0;
+                                                                    const grossVal = parseFloat(selectedRevision.gross_salary) || 0;
+                                                                    
+                                                                    const epfVal = parseFloat(selectedRevision.employer_pf) || 0;
+                                                                    const eePfVal = parseFloat(selectedRevision.employee_pf) || 0;
+                                                                    setEmployerPfInput(isPf ? (epfVal > 0 ? String(epfVal) : String(parseFloat((basicVal * 0.12).toFixed(2)))) : '0');
+                                                                    setEmployeePfInput(isPf ? (eePfVal > 0 ? String(eePfVal) : String(parseFloat((basicVal * 0.12).toFixed(2)))) : '0');
+
+                                                                    const erEsiVal = parseFloat(selectedRevision.employer_esic) || 0;
+                                                                    const eeEsiVal = parseFloat(selectedRevision.employee_esic) || 0;
+                                                                    setEmployerEsicInput(isEsi ? (erEsiVal > 0 ? String(erEsiVal) : String(parseFloat((grossVal * 0.0325).toFixed(2)))) : '0');
+                                                                    setEmployeeEsicInput(isEsi ? (eeEsiVal > 0 ? String(eeEsiVal) : String(parseFloat((grossVal * 0.0075).toFixed(2)))) : '0');
+                                                                }
+                                                            } catch (err) {
+                                                                alert(err.response?.data?.message || 'Failed to update statutory settings');
+                                                            }
+                                                        }}
+                                                        className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 rounded border-slate-300 disabled:opacity-50"
+                                                    />
+                                                    <span className="text-[9px] font-black uppercase text-slate-600">{opt.label}</span>
+                                                </label>
+                                            ))}
                                         </div>
                                     </div>
 
@@ -2977,7 +3275,7 @@ const Payroll = () => {
                                                                     Eff: {rev.effective_from ? new Date(rev.effective_from).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : 'N/A'}
                                                                 </div>
                                                                 <div className="text-[10px] font-black mt-1 text-[#4361ee]">
-                                                                    ₹{(rev.gross_salary || 0).toLocaleString()}
+                                                                    ₹{Number(rev.gross_salary || 0).toLocaleString()}
                                                                 </div>
                                                             </div>
                                                         );
@@ -3015,9 +3313,9 @@ const Payroll = () => {
                                                                     const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
 
                                                                     const eePf = isPfEnabled ? (basic * 0.12) : 0;
-                                                                    const eeEsic = isEsiEnabled ? (gross * 0.0325) : 0;
+                                                                    const eeEsic = isEsiEnabled ? (gross * 0.0075) : 0;
                                                                     const erPf = isPfEnabled ? (basic * 0.12) : 0;
-                                                                    const erEsic = isEsiEnabled ? (gross * 0.0075) : 0;
+                                                                    const erEsic = isEsiEnabled ? (gross * 0.0325) : 0;
 
                                                                     const formattedBasic = parseFloat(basic.toFixed(2));
                                                                     const formattedHra = parseFloat(hra.toFixed(2));
@@ -3056,25 +3354,25 @@ const Payroll = () => {
                                                         <tbody className="divide-y divide-slate-100 text-[10px] font-bold text-slate-700">
                                                             {(() => {
                                                                 let prevRev = isAddingNewRevision ? (inputsHistory[0] || null) : getPriorRevision(selectedRevision);
-                                                                const grossPrev = prevRev?.gross_salary || 0;
-                                                                const basicPrev = prevRev?.basic || 0;
-                                                                const hraPrev = prevRev?.hra || 0;
-                                                                const specialPrev = prevRev?.special_allowance || 0;
-                                                                const medicalPrev = prevRev?.medical_allowance || 0;
-                                                                const empPfPrev = prevRev?.employer_pf || 0;
-                                                                const empEsicPrev = prevRev?.employer_esic || 0;
-                                                                const eePfPrev = prevRev?.employee_pf || 0;
-                                                                const eeEsicPrev = prevRev?.employee_esic || 0;
+                                                                const grossPrev = parseFloat(prevRev?.gross_salary) || 0;
+                                                                const basicPrev = parseFloat(prevRev?.basic) || 0;
+                                                                const hraPrev = parseFloat(prevRev?.hra) || 0;
+                                                                const specialPrev = parseFloat(prevRev?.special_allowance) || 0;
+                                                                const medicalPrev = parseFloat(prevRev?.medical_allowance) || 0;
+                                                                const empPfPrev = parseFloat(prevRev?.employer_pf) || 0;
+                                                                const empEsicPrev = parseFloat(prevRev?.employer_esic) || 0;
+                                                                const eePfPrev = parseFloat(prevRev?.employee_pf) || 0;
+                                                                const eeEsicPrev = parseFloat(prevRev?.employee_esic) || 0;
 
-                                                                const grossRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(grossInput) || 0) : (selectedRevision?.gross_salary || 0);
-                                                                const basicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(basicInput) || 0) : (selectedRevision?.basic || 0);
-                                                                const hraRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(hraInput) || 0) : (selectedRevision?.hra || 0);
-                                                                const specialRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(specialAllowanceInput) || 0) : (selectedRevision?.special_allowance || 0);
-                                                                const medicalRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(medicalAllowanceInput) || 0) : (selectedRevision?.medical_allowance || 0);
-                                                                const empPfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerPfInput) || 0) : (selectedRevision?.employer_pf || 0);
-                                                                const empEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerEsicInput) || 0) : (selectedRevision?.employer_esic || 0);
-                                                                const eePfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeePfInput) || 0) : (selectedRevision?.employee_pf || 0);
-                                                                const eeEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeeEsicInput) || 0) : (selectedRevision?.employee_esic || 0);
+                                                                const grossRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(grossInput) || 0) : (parseFloat(selectedRevision?.gross_salary) || 0);
+                                                                const basicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(basicInput) || 0) : (parseFloat(selectedRevision?.basic) || 0);
+                                                                const hraRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(hraInput) || 0) : (parseFloat(selectedRevision?.hra) || 0);
+                                                                const specialRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(specialAllowanceInput) || 0) : (parseFloat(selectedRevision?.special_allowance) || 0);
+                                                                const medicalRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(medicalAllowanceInput) || 0) : (parseFloat(selectedRevision?.medical_allowance) || 0);
+                                                                const empPfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerPfInput) || 0) : (parseFloat(selectedRevision?.employer_pf) || 0);
+                                                                const empEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerEsicInput) || 0) : (parseFloat(selectedRevision?.employer_esic) || 0);
+                                                                const eePfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeePfInput) || 0) : (parseFloat(selectedRevision?.employee_pf) || 0);
+                                                                const eeEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeeEsicInput) || 0) : (parseFloat(selectedRevision?.employee_esic) || 0);
 
                                                                 const items = [
                                                                     { name: 'FULL BASIC (60%)', prev: basicPrev, rev: basicRev, field: 'basic', valInput: basicInput },
@@ -3082,9 +3380,9 @@ const Payroll = () => {
                                                                     { name: 'FULL SPECIAL ALLOWANCE', prev: specialPrev, rev: specialRev, field: 'special', valInput: specialAllowanceInput },
                                                                     { name: 'FULL MEDICAL ALLOWANCE', prev: medicalPrev, rev: medicalRev, field: 'medical', valInput: medicalAllowanceInput },
                                                                     { name: 'FULL EMPLOYER PF (12%)', prev: empPfPrev, rev: empPfRev, field: 'employer_pf', valInput: employerPfInput },
-                                                                    { name: 'FULL EMPLOYER ESIC (0.75%)', prev: empEsicPrev, rev: empEsicRev, field: 'employer_esic', valInput: employerEsicInput },
+                                                                    { name: 'FULL EMPLOYER ESIC (3.25%)', prev: empEsicPrev, rev: empEsicRev, field: 'employer_esic', valInput: employerEsicInput },
                                                                     { name: 'EMPLOYEE PF (12%)', prev: eePfPrev, rev: eePfRev, field: 'employee_pf', valInput: employeePfInput },
-                                                                    { name: 'EMPLOYEE ESIC (3.25%)', prev: eeEsicPrev, rev: eeEsicRev, field: 'employee_esic', valInput: employeeEsicInput }
+                                                                    { name: 'EMPLOYEE ESIC (0.75%)', prev: eeEsicPrev, rev: eeEsicRev, field: 'employee_esic', valInput: employeeEsicInput }
                                                                 ];
                                                                 return items.map((row, idx) => {
                                                                     const diffPct = calculateRevisionPercent(row.prev, row.rev);
@@ -3147,12 +3445,12 @@ const Payroll = () => {
 
                                                 {/* Summary Cards */}
                                                 {(() => {
-                                                    const grossRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(grossInput) || 0) : (selectedRevision?.gross_salary || 0);
-                                                    const basicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(basicInput) || 0) : (selectedRevision?.basic || 0);
-                                                    const eePfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeePfInput) || 0) : (selectedRevision?.employee_pf || 0);
-                                                    const eeEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeeEsicInput) || 0) : (selectedRevision?.employee_esic || 0);
-                                                    const empPfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerPfInput) || 0) : (selectedRevision?.employer_pf || 0);
-                                                    const empEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerEsicInput) || 0) : (selectedRevision?.employer_esic || 0);
+                                                    const grossRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(grossInput) || 0) : (parseFloat(selectedRevision?.gross_salary) || 0);
+                                                    const basicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(basicInput) || 0) : (parseFloat(selectedRevision?.basic) || 0);
+                                                    const eePfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeePfInput) || 0) : (parseFloat(selectedRevision?.employee_pf) || 0);
+                                                    const eeEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employeeEsicInput) || 0) : (parseFloat(selectedRevision?.employee_esic) || 0);
+                                                    const empPfRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerPfInput) || 0) : (parseFloat(selectedRevision?.employer_pf) || 0);
+                                                    const empEsicRev = (isAddingNewRevision || isRevisionEditing) ? (parseFloat(employerEsicInput) || 0) : (parseFloat(selectedRevision?.employer_esic) || 0);
 
                                                     const netTakeHome = grossRev - eePfRev - eeEsicRev;
                                                     const monthlyCTC = grossRev + empPfRev + empEsicRev;
@@ -4090,7 +4388,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Total Disbursed</span>
                                     <span className="text-xl font-black text-[#4361ee] mt-1 block">
-                                        ₹{loans.reduce((acc, l) => acc + (l.status !== 'rejected' ? parseFloat(l.amount) : 0), 0).toLocaleString()}
+                                        ₹{filteredLoans.reduce((acc, l) => acc + (l.status !== 'rejected' ? parseFloat(l.amount) : 0), 0).toLocaleString()}
                                     </span>
                                 </div>
                                 <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
@@ -4102,7 +4400,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Outstanding Balance</span>
                                     <span className="text-xl font-black text-amber-600 mt-1 block">
-                                        ₹{loans.reduce((acc, l) => acc + (l.status === 'active' ? parseFloat(l.remaining_balance) : 0), 0).toLocaleString()}
+                                        ₹{filteredLoans.reduce((acc, l) => acc + (l.status === 'active' ? parseFloat(l.remaining_balance) : 0), 0).toLocaleString()}
                                     </span>
                                 </div>
                                 <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
@@ -4114,7 +4412,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Active Advances</span>
                                     <span className="text-xl font-black text-emerald-600 mt-1 block">
-                                        {loans.filter(l => l.status === 'active').length} Active
+                                        {filteredLoans.filter(l => l.status === 'active').length} Active
                                     </span>
                                 </div>
                                 <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
@@ -4126,7 +4424,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Pending Approvals</span>
                                     <span className="text-xl font-black text-rose-500 mt-1 block">
-                                        {loans.filter(l => l.status === 'pending').length} Requests
+                                        {filteredLoans.filter(l => l.status === 'pending').length} Requests
                                     </span>
                                 </div>
                                 <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl">
@@ -4168,9 +4466,9 @@ const Payroll = () => {
                                     <button
                                         disabled={controls.inputs_locked}
                                         onClick={() => {
-                                            setModalOutlet('All');
-                                            setModalDept('All');
-                                            setModalDesignation('All');
+                                            setModalOutlet(selectedOutlet);
+                                            setModalDept(selectedDept);
+                                            setModalDesignation(selectedDesignation);
                                             setShowAddLoan(true);
                                         }}
                                         className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-1.5 ${controls.inputs_locked
@@ -4199,6 +4497,16 @@ const Payroll = () => {
                                                 <p className="text-slate-400 text-[10px] font-bold mt-1">Disburse advances or interest-free loans to see automated monthly EMI reductions.</p>
                                             </div>
                                         </div>
+                                    ) : searchedLoans.length === 0 ? (
+                                        <div className="p-12 flex flex-col items-center justify-center text-center gap-3">
+                                            <div className="p-4 bg-slate-50 border border-slate-100 rounded-full text-slate-400">
+                                                <Landmark size={28} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">No matching loans or advances found</h4>
+                                                <p className="text-slate-400 text-[10px] font-bold mt-1">Try adjusting your search terms or filters.</p>
+                                            </div>
+                                        </div>
                                     ) : (
                                         <div className="overflow-x-auto">
                                             <table className="w-full text-left border-collapse">
@@ -4215,7 +4523,7 @@ const Payroll = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
-                                                    {filteredLoans.map((loan) => {
+                                                    {searchedLoans.map((loan) => {
                                                         const principal = parseFloat(loan.amount) || 1;
                                                         const remaining = parseFloat(loan.remaining_balance) || 0;
                                                         const pctPaid = Math.min(100, Math.max(0, ((principal - remaining) / principal) * 100));
@@ -4301,6 +4609,15 @@ const Payroll = () => {
                                                                                 <CheckCircle size={10} /> Repay
                                                                             </button>
                                                                         )}
+                                                                        <a
+                                                                            href={`${api.defaults.baseURL}/payroll/loans/download-slip/${loan.id}?token=${localStorage.getItem('auth_token') || 'test.admin.token'}`}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="p-1.5 text-slate-400 hover:text-[#4361ee] hover:bg-slate-100 rounded-lg transition-all flex items-center justify-center active:scale-95"
+                                                                            title="Download Advance Slip PDF"
+                                                                        >
+                                                                            <Download size={14} />
+                                                                        </a>
                                                                     </div>
                                                                 </td>
                                                             </tr>
@@ -4331,6 +4648,16 @@ const Payroll = () => {
                                             <p className="text-slate-400 text-[10px] font-bold mt-1">Repayments will appear here automatically when payroll is paid or settled manually.</p>
                                         </div>
                                     </div>
+                                ) : searchedRepayments.length === 0 ? (
+                                    <div className="p-12 flex flex-col items-center justify-center text-center gap-3">
+                                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-full text-slate-400">
+                                            <TrendingUp size={28} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">No matching repayment logs found</h4>
+                                            <p className="text-slate-400 text-[10px] font-bold mt-1">Try adjusting your search terms or filters.</p>
+                                        </div>
+                                    </div>
                                 ) : (
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left border-collapse">
@@ -4345,7 +4672,7 @@ const Payroll = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
-                                                {filteredRepayments.map((repay) => (
+                                                {searchedRepayments.map((repay) => (
                                                     <tr key={repay.id} className="hover:bg-slate-50/50 transition-all">
                                                         <td className="px-5 py-4">
                                                             <div className="flex flex-col">
@@ -4646,7 +4973,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Active Notice Period</span>
                                     <span className="text-xl font-black text-rose-500 mt-1 block">
-                                        {separations.filter(s => s.settlement_status !== 'settled').length} Employees
+                                        {filteredSeparations.filter(s => s.settlement_status !== 'settled').length} Employees
                                     </span>
                                 </div>
                                 <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl">
@@ -4658,7 +4985,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Settled Exits (FNF)</span>
                                     <span className="text-xl font-black text-emerald-600 mt-1 block">
-                                        {separations.filter(s => s.settlement_status === 'settled').length} Settled
+                                        {filteredSeparations.filter(s => s.settlement_status === 'settled').length} Settled
                                     </span>
                                 </div>
                                 <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
@@ -4670,7 +4997,7 @@ const Payroll = () => {
                                 <div>
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Net Settlements Outflow</span>
                                     <span className="text-xl font-black text-[#4361ee] mt-1 block">
-                                        ₹{separations.filter(s => s.settlement_status === 'settled').reduce((sum, s) => sum + parseFloat(s.fnf_net_payable || 0), 0).toLocaleString()}
+                                        ₹{filteredSeparations.filter(s => s.settlement_status === 'settled').reduce((sum, s) => sum + parseFloat(s.fnf_net_payable || 0), 0).toLocaleString()}
                                     </span>
                                 </div>
                                 <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
@@ -4769,7 +5096,7 @@ const Payroll = () => {
                                 <>
                                     {activeSeparationTab === 'active' ? (
                                         <div className="overflow-x-auto">
-                                            {separations.filter(s => s.settlement_status !== 'settled').length === 0 ? (
+                                            {filteredSeparations.filter(s => s.settlement_status !== 'settled').length === 0 ? (
                                                 <div className="p-16 text-center text-xs text-slate-400 font-bold">
                                                     No active notice period or pending separations.
                                                 </div>
@@ -4787,7 +5114,7 @@ const Payroll = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100">
-                                                        {separations.filter(s => s.settlement_status !== 'settled').map((s) => (
+                                                        {filteredSeparations.filter(s => s.settlement_status !== 'settled').map((s) => (
                                                             <tr key={s.id} className="hover:bg-slate-50/50 transition-all">
                                                                 <td className="px-5 py-4">
                                                                     <div>
@@ -4849,7 +5176,7 @@ const Payroll = () => {
                                         </div>
                                     ) : (
                                         <div className="overflow-x-auto">
-                                            {separations.filter(s => s.settlement_status === 'settled').length === 0 ? (
+                                            {filteredSeparations.filter(s => s.settlement_status === 'settled').length === 0 ? (
                                                 <div className="p-16 text-center text-xs text-slate-400 font-bold">
                                                     No historic exit settlements found.
                                                 </div>
@@ -4867,7 +5194,7 @@ const Payroll = () => {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100">
-                                                        {separations.filter(s => s.settlement_status === 'settled').map((s) => (
+                                                        {filteredSeparations.filter(s => s.settlement_status === 'settled').map((s) => (
                                                             <tr key={s.id} className="hover:bg-slate-50/50 transition-all">
                                                                 <td className="px-5 py-4">
                                                                     <div>
@@ -5900,6 +6227,42 @@ const Payroll = () => {
                                 <Printer size={13} />
                                 Print Statement
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Other Deductions Detail Modal */}
+            {selectedOtherDeductions && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-xl max-w-sm w-full mx-4 p-5 animate-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Other Deductions Detail</h3>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{selectedOtherDeductions.employeeName}</p>
+                            </div>
+                            <button 
+                                onClick={() => setSelectedOtherDeductions(null)} 
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                            {selectedOtherDeductions.breakdown.map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center bg-slate-50 border border-slate-200/50 rounded-xl p-2.5 shadow-sm">
+                                    <span className="text-[10px] font-bold uppercase text-slate-600">{item.name}</span>
+                                    <span className="text-xs font-black text-rose-600">-₹{Number(item.amount).toFixed(2)}</span>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="mt-5 pt-3.5 border-t border-slate-100 flex justify-between items-center">
+                            <span className="text-[10px] font-black uppercase text-slate-400">Total</span>
+                            <span className="text-sm font-black text-rose-600">
+                                -₹{selectedOtherDeductions.breakdown.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0).toFixed(2)}
+                            </span>
                         </div>
                     </div>
                 </div>

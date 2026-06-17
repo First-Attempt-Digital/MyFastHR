@@ -283,6 +283,28 @@ const AssignScheme = () => {
         exportToCSV(dataToExport, "Employee_Attendance_Schemes_Roster.csv");
     };
 
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Helper to format string to Title Case/capitalize
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
     // Filter employees
     const filteredEmployees = useMemo(() => {
         return assignments.filter(emp => {
@@ -291,9 +313,9 @@ const AssignScheme = () => {
             const search = searchQuery.toLowerCase();
             const matchesSearch = fullName.includes(search) || empId.includes(search);
 
-            const matchesDept = deptFilter === 'All' || emp.department_name === deptFilter;
-            const matchesDesignation = desgFilter === 'All' || emp.designation === desgFilter;
-            const matchesOutlet = outletFilter === 'All' || emp.office_location === outletFilter;
+            const matchesDept = matchText(emp.department_name || emp.department, deptFilter);
+            const matchesDesignation = matchText(emp.designation, desgFilter);
+            const matchesOutlet = matchText(emp.office_location, outletFilter);
             
             let matchesScheme = true;
             if (schemeFilter !== 'All') {
@@ -310,19 +332,47 @@ const AssignScheme = () => {
 
     // Outlets list
     const uniqueOutlets = useMemo(() => {
-        return ['All', ...[...new Set(assignments.map(emp => emp.office_location).filter(Boolean))].sort()];
+        const map = new Map();
+        assignments.forEach(emp => {
+            const val = emp.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['All', ...Array.from(map.values()).sort()];
     }, [assignments]);
 
     // Departments list
     const departments = useMemo(() => {
-        const depts = new Set(assignments.map(a => a.department_name).filter(Boolean));
-        return Array.from(depts);
+        const map = new Map();
+        assignments.forEach(emp => {
+            const val = emp.department_name || emp.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return Array.from(map.values()).sort();
     }, [assignments]);
 
     // Designations list
     const designations = useMemo(() => {
-        const desgs = new Set(assignments.map(a => a.designation).filter(Boolean));
-        return Array.from(desgs);
+        const map = new Map();
+        assignments.forEach(emp => {
+            const val = emp.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return Array.from(map.values()).sort();
     }, [assignments]);
 
     if (forbidden) return (

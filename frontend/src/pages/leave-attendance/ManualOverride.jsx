@@ -9,6 +9,28 @@ import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../utils/api';
 import { exportToCSV } from '../../utils/exportUtils';
 
+// Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+const matchText = (val, filterVal) => {
+    if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+    if (!val) return false;
+    const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    return clean(val) === clean(filterVal);
+};
+
+// Helper to format string to Title Case/capitalize
+const formatLabel = (str) => {
+    if (!str) return '';
+    const trimmed = str.trim();
+    if (!trimmed) return '';
+    return trimmed.split(' ').map(word => {
+        if (!word) return '';
+        if (word.includes('/')) {
+            return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+};
+
 const ManualOverride = () => {
     const [activeTab, setActiveTab] = useState('shift_override');
     const [loading, setLoading] = useState(false);
@@ -154,9 +176,47 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading, setSuccess, setError })
     const [selectedDesignation, setSelectedDesignation] = useState('all');
     const [fetchingEmployees, setFetchingEmployees] = useState(false);
 
-    const uniqueLocations = ['all', ...[...new Set(employees.map(e => e.office_location).filter(Boolean))].sort()];
-    const uniqueDepartments = ['all', ...[...new Set(employees.map(e => e.department_name).filter(Boolean))].sort()];
-    const uniqueDesignations = ['all', ...[...new Set(employees.map(e => e.designation).filter(Boolean))].sort()];
+    const uniqueLocations = React.useMemo(() => {
+        const map = new Map();
+        employees.forEach(e => {
+            const val = e.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employees]);
+
+    const uniqueDepartments = React.useMemo(() => {
+        const map = new Map();
+        employees.forEach(e => {
+            const val = e.department_name || e.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employees]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        employees.forEach(e => {
+            const val = e.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employees]);
 
     useEffect(() => {
         if ((config.shiftId || config.assignMode === 'multiple') && config.fromDate) {
@@ -205,14 +265,16 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading, setSuccess, setError })
         }
     };
 
-    const filteredList = employees.filter(emp => {
-        const matchesQuery = `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                             emp.employee_id_number?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesOutlet = selectedOutlet === 'all' || emp.office_location === selectedOutlet;
-        const matchesDept = selectedDept === 'all' || emp.department_name === selectedDept;
-        const matchesDesignation = selectedDesignation === 'all' || emp.designation === selectedDesignation;
-        return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
-    });
+    const filteredList = React.useMemo(() => {
+        return employees.filter(emp => {
+            const matchesQuery = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 (emp.employee_id_number || '').toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesOutlet = matchText(emp.office_location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation, selectedDesignation);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [employees, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
 
     const toggleEmployee = (id) => {
         setSelectedEmployees(prev => 
@@ -693,9 +755,47 @@ const DateWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
     const [selectedDept, setSelectedDept] = useState('all');
     const [selectedDesignation, setSelectedDesignation] = useState('all');
 
-    const uniqueLocations = ['all', ...[...new Set(data.map(e => e.office_location).filter(Boolean))].sort()];
-    const uniqueDepartments = ['all', ...[...new Set(data.map(e => e.department_name).filter(Boolean))].sort()];
-    const uniqueDesignations = ['all', ...[...new Set(data.map(e => e.designation).filter(Boolean))].sort()];
+    const uniqueLocations = React.useMemo(() => {
+        const map = new Map();
+        data.forEach(e => {
+            const val = e.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [data]);
+
+    const uniqueDepartments = React.useMemo(() => {
+        const map = new Map();
+        data.forEach(e => {
+            const val = e.department_name || e.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [data]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        data.forEach(e => {
+            const val = e.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [data]);
 
     useEffect(() => {
         fetchDateAttendance();
@@ -748,14 +848,16 @@ const DateWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
         exportToCSV(dataToExport, `Attendance_Date_${date}.csv`);
     };
 
-    const filtered = data.filter(e => {
-        const matchesSearch = `${e.first_name} ${e.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-                              e.employee_id_number?.toLowerCase().includes(search.toLowerCase());
-        const matchesOutlet = selectedOutlet === 'all' || e.office_location === selectedOutlet;
-        const matchesDept = selectedDept === 'all' || e.department_name === selectedDept;
-        const matchesDesignation = selectedDesignation === 'all' || e.designation === selectedDesignation;
-        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
-    });
+    const filtered = React.useMemo(() => {
+        return data.filter(e => {
+            const matchesSearch = `${e.first_name || ''} ${e.last_name || ''}`.toLowerCase().includes(search.toLowerCase()) ||
+                                  (e.employee_id_number || '').toLowerCase().includes(search.toLowerCase());
+            const matchesOutlet = matchText(e.office_location, selectedOutlet);
+            const matchesDept = matchText(e.department_name || e.department, selectedDept);
+            const matchesDesignation = matchText(e.designation, selectedDesignation);
+            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [data, search, selectedOutlet, selectedDept, selectedDesignation]);
 
     return (
         <motion.div 

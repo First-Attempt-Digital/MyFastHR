@@ -103,27 +103,76 @@ const WhoIsIn = () => {
 
     const { summary, notYetIn, lateArrivals, onTime, onLeaveCount } = data;
 
+    const matchText = (val, filterVal) => {
+        if (filterVal === 'All' || filterVal === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
     const selectedShiftName = selectedShiftId === 'all' 
         ? 'all' 
         : (shifts.find(s => String(s.id) === String(selectedShiftId))?.name || 'all');
 
-    const uniqueOutlets = ['all', ...[...new Set([
-        ...(data.notYetIn || []).map(e => e.office_location),
-        ...(data.lateArrivals || []).map(e => e.office_location),
-        ...(data.onTime || []).map(e => e.office_location)
-    ].filter(Boolean))].sort()];
+    const uniqueOutlets = React.useMemo(() => {
+        const outlets = new Map();
+        const check = (o) => {
+            if (o) {
+                const clean = o.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const display = formatLabel(o);
+                if (!outlets.has(clean)) {
+                    outlets.set(clean, display);
+                }
+            }
+        };
+        [...(data.notYetIn || []), ...(data.lateArrivals || []), ...(data.onTime || [])].forEach(e => check(e.office_location));
+        return ['all', ...Array.from(outlets.values()).sort()];
+    }, [data.notYetIn, data.lateArrivals, data.onTime]);
 
-    const uniqueDepts = ['all', ...[...new Set([
-        ...(data.notYetIn || []).map(e => e.department),
-        ...(data.lateArrivals || []).map(e => e.department),
-        ...(data.onTime || []).map(e => e.department)
-    ].filter(Boolean))].sort()];
+    const uniqueDepts = React.useMemo(() => {
+        const depts = new Map();
+        const check = (e) => {
+            const d = e.department_name || e.department;
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const display = formatLabel(d);
+                if (!depts.has(clean)) {
+                    depts.set(clean, display);
+                }
+            }
+        };
+        [...(data.notYetIn || []), ...(data.lateArrivals || []), ...(data.onTime || [])].forEach(check);
+        return ['all', ...Array.from(depts.values()).sort()];
+    }, [data.notYetIn, data.lateArrivals, data.onTime]);
 
-    const uniqueDesignations = ['all', ...[...new Set([
-        ...(data.notYetIn || []).map(e => e.designation),
-        ...(data.lateArrivals || []).map(e => e.designation),
-        ...(data.onTime || []).map(e => e.designation)
-    ].filter(Boolean))].sort()];
+    const uniqueDesignations = React.useMemo(() => {
+        const desgs = new Map();
+        const check = (e) => {
+            const d = e.designation || e.role;
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const display = formatLabel(d);
+                if (!desgs.has(clean)) {
+                    desgs.set(clean, display);
+                }
+            }
+        };
+        [...(data.notYetIn || []), ...(data.lateArrivals || []), ...(data.onTime || [])].forEach(check);
+        return ['all', ...Array.from(desgs.values()).sort()];
+    }, [data.notYetIn, data.lateArrivals, data.onTime]);
 
     const filterList = (list) => {
         if (!list) return [];
@@ -134,9 +183,9 @@ const WhoIsIn = () => {
             const searchMatch = query === '' || nameMatch || idMatch;
 
             const shiftMatch = selectedShiftName === 'all' || e.shift_name === selectedShiftName;
-            const outletMatch = selectedOutlet === 'all' || e.office_location === selectedOutlet;
-            const deptMatch = selectedDept === 'all' || e.department === selectedDept;
-            const designationMatch = selectedDesignation === 'all' || e.designation === selectedDesignation;
+            const outletMatch = matchText(e.office_location, selectedOutlet);
+            const deptMatch = matchText(e.department_name || e.department, selectedDept);
+            const designationMatch = matchText(e.designation || e.role, selectedDesignation);
 
             return searchMatch && shiftMatch && outletMatch && deptMatch && designationMatch;
         });

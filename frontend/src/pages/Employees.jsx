@@ -163,6 +163,14 @@ const Employees = () => {
     const [selectedDesignation, setSelectedDesignation] = useState('All');
     const [selectedLocation, setSelectedLocation] = useState('All');
 
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (filterVal === 'All') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
     // Helper to format string to Title Case/capitalize
     const formatLabel = (str) => {
         if (!str) return '';
@@ -177,16 +185,59 @@ const Employees = () => {
         }).join(' ');
     };
 
-    const uniqueDepartments = ['All', ...[...new Set(employees.map(e => formatLabel(e.department_name || e.department || 'General')).filter(Boolean))].sort()];
-    const uniqueLocations = ['All', ...[...new Set(employees.map(e => formatLabel(e.office_location || 'Unassigned')).filter(Boolean))].sort()];
-    const uniqueDesignations = ['All', ...[...new Set(employees.map(e => formatLabel(e.designation || 'Specialist')).filter(Boolean))].sort()];
+    const uniqueDepartments = React.useMemo(() => {
+        const depts = new Map(); // cleanName -> originalName
+        const check = (e) => {
+            const d = e.department_name || e.department || 'General';
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const titleCased = formatLabel(d);
+                if (!depts.has(clean)) {
+                    depts.set(clean, titleCased);
+                }
+            }
+        };
+        if (Array.isArray(employees)) employees.forEach(check);
+        return ['All', ...Array.from(depts.values()).sort()];
+    }, [employees]);
+
+    const uniqueLocations = React.useMemo(() => {
+        const locs = new Map(); // cleanName -> originalName
+        const check = (e) => {
+            const l = e.office_location || 'Unassigned';
+            if (l) {
+                const clean = l.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const titleCased = formatLabel(l);
+                if (!locs.has(clean)) {
+                    locs.set(clean, titleCased);
+                }
+            }
+        };
+        if (Array.isArray(employees)) employees.forEach(check);
+        return ['All', ...Array.from(locs.values()).sort()];
+    }, [employees]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const desgs = new Map(); // cleanName -> originalName
+        const check = (e) => {
+            const d = e.designation || 'Specialist';
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const titleCased = formatLabel(d);
+                if (!desgs.has(clean)) {
+                    desgs.set(clean, titleCased);
+                }
+            }
+        };
+        if (Array.isArray(employees)) employees.forEach(check);
+        return ['All', ...Array.from(desgs.values()).sort()];
+    }, [employees]);
 
     // Filter Logic
     const filteredEmployees = employees.filter(emp => {
         // 1. Department Filter
-        if (selectedDept !== 'All') {
-            const empDept = emp.department_name || emp.department || 'General';
-            if (formatLabel(empDept) !== selectedDept) return false;
+        if (!matchText(emp.department_name || emp.department || 'General', selectedDept)) {
+            return false;
         }
 
         // 2. Status Filter
@@ -200,9 +251,8 @@ const Employees = () => {
         }
 
         // 3. Location Filter
-        if (selectedLocation !== 'All') {
-            const empLoc = emp.office_location || 'Unassigned';
-            if (formatLabel(empLoc) !== selectedLocation) return false;
+        if (!matchText(emp.office_location || 'Unassigned', selectedLocation)) {
+            return false;
         }
 
         // 4. Gender Filter
@@ -216,13 +266,13 @@ const Employees = () => {
         }
 
         // 5. Designation Filter
-        if (selectedDesignation !== 'All') {
-            const empDesg = emp.designation || 'Specialist';
-            if (formatLabel(empDesg) !== selectedDesignation) return false;
+        if (!matchText(emp.designation || 'Specialist', selectedDesignation)) {
+            return false;
         }
 
         return true;
     });
+
 
     const handleDownloadTemplate = () => {
         const csvContent =

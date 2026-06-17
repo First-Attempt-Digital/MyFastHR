@@ -14,26 +14,78 @@ const AttendanceAdmin = () => {
     const [selectedDesignation, setSelectedDesignation] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
 
+    const matchText = (val, filterVal) => {
+        if (filterVal === 'All' || filterVal === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
     const uniqueOutlets = React.useMemo(() => {
-        const locations = matrix.map(emp => emp.location).filter(Boolean);
-        return ['All', ...new Set(locations)].sort();
+        const outlets = new Map();
+        const check = (o) => {
+            if (o) {
+                const clean = o.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const display = formatLabel(o);
+                if (!outlets.has(clean)) {
+                    outlets.set(clean, display);
+                }
+            }
+        };
+        matrix.forEach(emp => check(emp.location));
+        return ['All', ...Array.from(outlets.values()).sort()];
     }, [matrix]);
 
     const uniqueDepartments = React.useMemo(() => {
-        const depts = matrix.map(emp => emp.department).filter(Boolean);
-        return ['All', ...new Set(depts)].sort();
+        const depts = new Map();
+        const check = (e) => {
+            const d = e.department_name || e.department;
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const display = formatLabel(d);
+                if (!depts.has(clean)) {
+                    depts.set(clean, display);
+                }
+            }
+        };
+        matrix.forEach(check);
+        return ['All', ...Array.from(depts.values()).sort()];
     }, [matrix]);
 
     const uniqueDesignations = React.useMemo(() => {
-        const roles = matrix.map(emp => emp.role).filter(Boolean);
-        return ['All', ...new Set(roles)].sort();
+        const desgs = new Map();
+        const check = (e) => {
+            const d = e.designation || e.role;
+            if (d) {
+                const clean = d.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                const display = formatLabel(d);
+                if (!desgs.has(clean)) {
+                    desgs.set(clean, display);
+                }
+            }
+        };
+        matrix.forEach(check);
+        return ['All', ...Array.from(desgs.values()).sort()];
     }, [matrix]);
 
     const filteredMatrix = React.useMemo(() => {
         return matrix.filter(emp => {
-            const matchesOutlet = selectedOutlet === 'All' || emp.location === selectedOutlet;
-            const matchesDept = selectedDept === 'All' || emp.department === selectedDept;
-            const matchesDesignation = selectedDesignation === 'All' || emp.role === selectedDesignation;
+            const matchesOutlet = matchText(emp.location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation || emp.role, selectedDesignation);
             
             const query = searchQuery.toLowerCase().trim();
             const matchesSearch = query === '' || 

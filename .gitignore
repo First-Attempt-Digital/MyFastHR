@@ -75,3 +75,5 @@ coverage/
 *.swo
 purge_files.js
 purge_screenshots.js
+backend/check_columns.js
+scratch/

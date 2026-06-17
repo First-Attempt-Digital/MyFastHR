@@ -126,10 +126,10 @@ class PayrollService {
         return fallback ? { ...fallback, isRevision: false } : null;
     }
 
-    calculateProratedSalaryComponents(activeRevision, paidDays, daysInMonth, stats, rules, manDeduction, loanEmi, otBonus, unpaidLeaveDays = null, emp = null) {
+    calculateProratedSalaryComponents(activeRevision, paidDays, daysInMonth, stats, rules, manDeduction, loanEmi, otBonus, unpaidLeaveDays = null, emp = null, globalRules = []) {
         const baseSalary = parseFloat(activeRevision.basic);
         const totalAllowances = parseFloat(activeRevision.hra) + parseFloat(activeRevision.special_allowance || 0) + parseFloat(activeRevision.medical_allowance || 0);
-        const totalDeductions = 0;
+        let totalDeductions = 0;
 
         const prorationFactor = paidDays / daysInMonth;
         const earnedBasic = baseSalary * prorationFactor;
@@ -145,11 +145,92 @@ class PayrollService {
 
         const includePf = emp ? !!emp.include_pf : true;
         const includeEsi = emp ? !!emp.include_esi : true;
+        const includeLwf = emp ? !!emp.include_lwf : true;
+        const includeGratuity = emp ? !!emp.include_gratuity : true;
 
-        const employeePf = includePf ? (parseFloat(activeRevision.employee_pf) * prorationFactor) : 0;
-        const employeeEsic = includeEsi ? (parseFloat(activeRevision.employee_esic) * prorationFactor) : 0;
-        const employerPf = includePf ? (parseFloat(activeRevision.employer_pf) * prorationFactor) : 0;
-        const employerEsic = includeEsi ? (parseFloat(activeRevision.employer_esic) * prorationFactor) : 0;
+        let employeePf = 0;
+        let employerPf = 0;
+        let employeeEsic = 0;
+        let employerEsic = 0;
+        let totalOtherStatutoryDeductions = 0;
+        const breakdown = [];
+
+        const otherDeductionsBreakdown = [];
+        if (globalRules && globalRules.length > 0) {
+            for (const rule of globalRules) {
+                const ruleNameLower = rule.rule_name.toLowerCase();
+
+                // Respect employee's onboarding statutory choices
+                if ((ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) && !includePf) {
+                    continue;
+                }
+                if ((ruleNameLower.includes('esic') || ruleNameLower.includes('insurance')) && !includeEsi) {
+                    continue;
+                }
+                if (ruleNameLower.includes('lwf') && !includeLwf) {
+                    continue;
+                }
+                if (ruleNameLower.includes('gratuity') && !includeGratuity) {
+                    continue;
+                }
+
+                const isFlat = rule.base_on === 'flat_amount';
+                const calcBaseEarned = rule.base_on === 'gross_salary' ? earnedGross : earnedBasic;
+                const eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
+                const erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
+
+                breakdown.push({
+                    rule_name: rule.rule_name,
+                    employee_percentage: rule.employee_percentage,
+                    employer_percentage: rule.employer_percentage,
+                    employee_share: eeShare.toFixed(2),
+                    employer_share: erShare.toFixed(2),
+                    base_on: rule.base_on
+                });
+
+                if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
+                    employeePf = eeShare;
+                    employerPf = erShare;
+                } else if (ruleNameLower.includes('esic') || ruleNameLower.includes('insurance')) {
+                    employeeEsic = eeShare;
+                    employerEsic = erShare;
+                } else {
+                    totalOtherStatutoryDeductions += eeShare;
+                    if (!ruleNameLower.includes('gratuity')) {
+                        otherDeductionsBreakdown.push({
+                            name: rule.rule_name,
+                            amount: parseFloat(eeShare.toFixed(2))
+                        });
+                    }
+                }
+            }
+        } else {
+            employeePf = includePf ? (parseFloat(activeRevision.employee_pf) * prorationFactor) : 0;
+            employeeEsic = includeEsi ? (parseFloat(activeRevision.employee_esic) * prorationFactor) : 0;
+            employerPf = includePf ? (parseFloat(activeRevision.employer_pf) * prorationFactor) : 0;
+            employerEsic = includeEsi ? (parseFloat(activeRevision.employer_esic) * prorationFactor) : 0;
+
+            if (includePf) {
+                breakdown.push({
+                    rule_name: "PF",
+                    employee_percentage: "12",
+                    employer_percentage: "12",
+                    employee_share: employeePf.toFixed(2),
+                    employer_share: employerPf.toFixed(2),
+                    base_on: "basic"
+                });
+            }
+            if (includeEsi) {
+                breakdown.push({
+                    rule_name: "ESIC",
+                    employee_percentage: "0.75",
+                    employer_percentage: "3.25",
+                    employee_share: employeeEsic.toFixed(2),
+                    employer_share: employerEsic.toFixed(2),
+                    base_on: "gross_salary"
+                });
+            }
+        }
 
         const dailyRate = baseSalary / daysInMonth;
         let lateDeduction = 0;
@@ -162,29 +243,7 @@ class PayrollService {
             }
         }
 
-        const breakdown = [];
-        if (includePf) {
-            breakdown.push({
-                rule_name: "PF",
-                employee_percentage: "12",
-                employer_percentage: "12",
-                employee_share: employeePf.toFixed(2),
-                employer_share: employerPf.toFixed(2),
-                base_on: "basic"
-            });
-        }
-        if (includeEsi) {
-            breakdown.push({
-                rule_name: "ESIC",
-                employee_percentage: "3.25",
-                employer_percentage: "0.75",
-                employee_share: employeeEsic.toFixed(2),
-                employer_share: employerEsic.toFixed(2),
-                base_on: "gross_salary"
-            });
-        }
-
-        const netSalary = (earnedGross - lateDeduction - employeePf - employeeEsic - parseFloat(manDeduction || 0) - parseFloat(loanEmi || 0) + parseFloat(otBonus || 0)).toFixed(2);
+        const netSalary = (earnedGross - lateDeduction - employeePf - employeeEsic - totalOtherStatutoryDeductions - parseFloat(manDeduction || 0) - parseFloat(loanEmi || 0) + parseFloat(otBonus || 0)).toFixed(2);
 
         return {
             baseSalary: earnedBasic,
@@ -196,7 +255,9 @@ class PayrollService {
             employerPf,
             employeeEsic,
             employerEsic,
+            totalOtherStatutoryDeductions,
             breakdown,
+            otherDeductionsBreakdown,
             netSalary
         };
     }
@@ -269,9 +330,30 @@ class PayrollService {
 
         // Calculate components
         let baseSalary, totalAllowances, totalDeductions, unpaidLeaveDeduction, lateDeduction, employeePf, employerPf, employeeEsic, employerEsic, breakdown, netSalary;
+        let totalOtherStatutoryDeductions = 0;
         let fullBaseSalary = 0, fullTotalAllowances = 0;
+        let otherDeductionsBreakdown = [];
+        const unpaidLeaveDaysForDeduction = daysInMonth - paidDays;
+        let actualLoanEmi = parseFloat(loanEmi || 0);
 
         if (activeRevision.isRevision) {
+            // First calculate net salary before loan EMI to cap the EMI deduction
+            const tempComp = this.calculateProratedSalaryComponents(
+                activeRevision,
+                paidDays,
+                daysInMonth,
+                empRecord.stats,
+                activeRules,
+                manualDeduction,
+                0, // 0 loan EMI
+                overtimeBonus,
+                unpaidLeaveDaysForDeduction,
+                emp,
+                globalRules
+            );
+            const netBeforeLoan = parseFloat(tempComp.netSalary) || 0;
+            actualLoanEmi = Math.min(actualLoanEmi, Math.max(0, netBeforeLoan));
+
             const comp = this.calculateProratedSalaryComponents(
                 activeRevision,
                 paidDays,
@@ -279,14 +361,17 @@ class PayrollService {
                 empRecord.stats,
                 activeRules,
                 manualDeduction,
-                loanEmi,
+                actualLoanEmi,
                 overtimeBonus,
-                unpaidLeaveDays,
-                emp
+                unpaidLeaveDaysForDeduction,
+                emp,
+                globalRules
             );
+            otherDeductionsBreakdown = comp.otherDeductionsBreakdown || [];
             baseSalary = comp.baseSalary;
             totalAllowances = comp.totalAllowances;
-            totalDeductions = comp.totalDeductions;
+            totalOtherStatutoryDeductions = comp.totalOtherStatutoryDeductions || 0;
+            totalDeductions = comp.totalDeductions + totalOtherStatutoryDeductions;
             unpaidLeaveDeduction = comp.unpaidLeaveDeduction;
             lateDeduction = comp.lateDeduction;
             employeePf = comp.employeePf;
@@ -294,7 +379,7 @@ class PayrollService {
             employeeEsic = comp.employeeEsic;
             employerEsic = comp.employerEsic;
             breakdown = comp.breakdown;
-            netSalary = comp.netSalary;
+            netSalary = Math.max(0, parseFloat(comp.netSalary)).toFixed(2);
             
             fullBaseSalary = parseFloat(activeRevision.basic) || 0;
             fullTotalAllowances = (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0);
@@ -328,7 +413,7 @@ class PayrollService {
             const earnedDeductions = totalDeductions * prorationFactor;
 
             const dailyGross = (baseSalary + totalAllowances) / daysInMonth;
-            unpaidLeaveDeduction = unpaidLeaveDays * dailyGross;
+            unpaidLeaveDeduction = unpaidLeaveDaysForDeduction * dailyGross;
 
             employeePf = 0;
             employerPf = 0;
@@ -348,6 +433,9 @@ class PayrollService {
                     continue;
                 }
                 if (ruleNameLower.includes('lwf') && !emp.include_lwf) {
+                    continue;
+                }
+                if (ruleNameLower.includes('gratuity') && !emp.include_gratuity) {
                     continue;
                 }
 
@@ -373,16 +461,32 @@ class PayrollService {
                     employerEsic = erShare;
                 } else {
                     totalOtherStatutoryDeductions += eeShare;
+                    if (!ruleNameLower.includes('gratuity')) {
+                        otherDeductionsBreakdown.push({
+                            name: rule.rule_name,
+                            amount: parseFloat(eeShare.toFixed(2))
+                        });
+                    }
                 }
             }
+
+            filteredDeductions.forEach(d => {
+                otherDeductionsBreakdown.push({
+                    name: d.name,
+                    amount: parseFloat((parseFloat(d.amount) * prorationFactor).toFixed(2))
+                });
+            });
 
             fullBaseSalary = baseSalary;
             fullTotalAllowances = totalAllowances;
 
             baseSalary = earnedBase;
             totalAllowances = earnedAllowances;
-            totalDeductions = earnedDeductions;
-            netSalary = (earnedBase + earnedAllowances - earnedDeductions - lateDeduction - employeePf - employeeEsic - totalOtherStatutoryDeductions - manualDeduction - loanEmi + overtimeBonus).toFixed(2);
+            totalDeductions = earnedDeductions + totalOtherStatutoryDeductions;
+            
+            const netBeforeLoan = earnedBase + earnedAllowances - earnedDeductions - lateDeduction - employeePf - employeeEsic - totalOtherStatutoryDeductions - manualDeduction + overtimeBonus;
+            actualLoanEmi = Math.min(actualLoanEmi, Math.max(0, netBeforeLoan));
+            netSalary = Math.max(0, netBeforeLoan - actualLoanEmi).toFixed(2);
         }
 
         return {
@@ -398,7 +502,9 @@ class PayrollService {
             employee_esic: employeeEsic,
             employer_esic: employerEsic,
             statutory_rules_breakdown: breakdown,
+            other_deductions_breakdown: otherDeductionsBreakdown,
             net_salary: netSalary,
+            loan_emi_deduction: actualLoanEmi,
             paidDays,
             unpaidLeaveDays,
             stats: empRecord.stats
@@ -430,30 +536,29 @@ class PayrollService {
             const manDeduction = existingPayroll ? parseFloat(existingPayroll.manual_deduction_override || 0) : 0;
             
             // --- DETECT ACTIVE LOANS & EMIs ---
-            const activeLoan = await db('loans')
-                .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' })
-                .first();
+            const activeLoans = await db('loans')
+                .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
             
             let loanEmi = 0;
-            if (activeLoan) {
-                if (!approvedLoanIds) {
-                    loanEmi = Math.min(parseFloat(activeLoan.monthly_emi), parseFloat(activeLoan.remaining_balance));
-                } else {
+            for (const loan of activeLoans) {
+                let thisEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+                if (approvedLoanIds) {
                     const match = approvedLoanIds.find(item => {
                         if (item && typeof item === 'object') {
-                            return item.id === activeLoan.id || item.loanId === activeLoan.id;
+                            return item.id === loan.id || item.loanId === loan.id;
                         }
-                        return item === activeLoan.id;
+                        return item === loan.id;
                     });
                     
                     if (match !== undefined) {
                         if (match && typeof match === 'object' && match.amount !== undefined) {
-                            loanEmi = Math.min(parseFloat(match.amount), parseFloat(activeLoan.remaining_balance));
-                        } else {
-                            loanEmi = Math.min(parseFloat(activeLoan.monthly_emi), parseFloat(activeLoan.remaining_balance));
+                            thisEmi = Math.min(parseFloat(match.amount), parseFloat(loan.remaining_balance));
                         }
+                    } else {
+                        thisEmi = 0; // Skip if not in approved list when list is provided
                     }
                 }
+                loanEmi += thisEmi;
             }
 
             const comp = await this.calculateSingleEmployeePayrollComponents(
@@ -483,7 +588,7 @@ class PayrollService {
                 late_marks_count: comp.stats.L,
                 overtime_bonus: otBonus.toFixed(2),
                 manual_deduction_override: manDeduction.toFixed(2),
-                loan_emi_deduction: loanEmi.toFixed(2),
+                loan_emi_deduction: parseFloat(comp.loan_emi_deduction).toFixed(2),
                 employee_pf: parseFloat(comp.employee_pf).toFixed(2),
                 employer_pf: parseFloat(comp.employer_pf).toFixed(2),
                 employee_esic: parseFloat(comp.employee_esic).toFixed(2),
@@ -532,10 +637,12 @@ class PayrollService {
 
         for (const empRecord of matrix) {
             // --- DETECT ACTIVE LOANS & EMIs ---
-            const activeLoan = await db('loans')
-                .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' })
-                .first();
-            const loanEmi = activeLoan ? Math.min(parseFloat(activeLoan.monthly_emi), parseFloat(activeLoan.remaining_balance)) : 0;
+            const activeLoans = await db('loans')
+                .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
+            let loanEmi = 0;
+            for (const loan of activeLoans) {
+                loanEmi += Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+            }
 
             const saved = savedMap.get(empRecord.id);
             const otBonus = saved ? parseFloat(saved.overtime_bonus || 0) : 0;
@@ -554,19 +661,31 @@ class PayrollService {
 
             if (!comp) continue;
 
+            let gratuityShare = 0;
+            if (comp.statutory_rules_breakdown) {
+                const gratRule = comp.statutory_rules_breakdown.find(r => r.rule_name.toLowerCase().includes('gratuity'));
+                if (gratRule) {
+                    gratuityShare = parseFloat(gratRule.employee_share) || 0;
+                }
+            }
+
             register.push({
                 employee_id: empRecord.id,
                 first_name: empRecord.name.split(' ')[0] || '',
                 last_name: empRecord.name.split(' ').slice(1).join(' ') || '',
                 employee_id_number: empRecord.code,
                 designation: empRecord.role,
+                department: empRecord.department,
+                department_name: empRecord.department,
                 location: empRecord.location,
                 office_location: empRecord.location,
                 base_salary: comp.base_salary,
                 total_allowances: comp.total_allowances,
                 full_base_salary: comp.full_base_salary,
                 full_total_allowances: comp.full_total_allowances,
-                total_deductions: comp.total_deductions,
+                total_deductions: Math.max(0, comp.total_deductions - gratuityShare),
+                other_deductions_breakdown: comp.other_deductions_breakdown || [],
+                gratuity_share: gratuityShare,
                 unpaid_leave_deduction: comp.unpaid_leave_deduction,
                 late_mark_deduction: comp.late_mark_deduction,
                 late_marks_count: comp.stats.L,
@@ -577,7 +696,7 @@ class PayrollService {
                 employer_esic: comp.employer_esic,
                 overtime_bonus: otBonus,
                 manual_deduction_override: manDeduction,
-                loan_emi_deduction: loanEmi,
+                loan_emi_deduction: comp.loan_emi_deduction,
                 net_salary: saved ? saved.net_salary : parseFloat(comp.net_salary).toFixed(2),
                 status: saved ? saved.status : 'draft'
             });
@@ -621,15 +740,20 @@ class PayrollService {
 
         // Deduct EMI from outstanding loan balance if transitioning to 'paid'
         if (updateData.status === 'paid' && existing.status !== 'paid') {
-            const activeLoan = await db('loans')
+            const activeLoans = await db('loans')
                 .where({ employee_id: existing.employee_id, company_id: companyId, status: 'active' })
-                .first();
-            if (activeLoan) {
-                const emiDeduction = parseFloat(existing.loan_emi_deduction || 0);
-                if (emiDeduction > 0) {
-                    const newBalance = Math.max(0, parseFloat(activeLoan.remaining_balance) - emiDeduction);
+                .orderBy('id', 'asc');
+            
+            let remainingCuts = parseFloat(existing.loan_emi_deduction || 0);
+            for (const loan of activeLoans) {
+                if (remainingCuts <= 0) break;
+                
+                const expectedEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+                const deductedAmount = Math.min(expectedEmi, remainingCuts);
+                if (deductedAmount > 0) {
+                    const newBalance = Math.max(0, parseFloat(loan.remaining_balance) - deductedAmount);
                     const newStatus = newBalance === 0 ? 'completed' : 'active';
-                    await db('loans').where({ id: activeLoan.id }).update({
+                    await db('loans').where({ id: loan.id }).update({
                         remaining_balance: newBalance,
                         status: newStatus
                     });
@@ -637,13 +761,15 @@ class PayrollService {
                     // Log the payroll repayment transaction
                     await db('loan_repayments').insert({
                         company_id: companyId,
-                        loan_id: activeLoan.id,
-                        amount_paid: emiDeduction,
+                        loan_id: loan.id,
+                        amount_paid: deductedAmount,
                         payment_method: 'payroll',
                         payment_date: db.fn.now(),
                         payroll_id: existing.id,
                         notes: `Auto-EMI deducted via payroll for ${existing.month}/${existing.year}`
                     });
+
+                    remainingCuts -= deductedAmount;
                 }
             }
         }
@@ -740,19 +866,19 @@ class PayrollService {
             .join('employees as e', 'p.employee_id', 'e.id')
             .join('companies as c', 'p.company_id', 'c.id')
             .where({ 'p.id': payrollId, 'p.company_id': companyId })
-            .select('p.*', 'e.*', 'c.name as company_name', 'c.email as company_email')
+            .select('p.*', 'e.*', 'c.name as company_name', 'c.email as company_email', 'c.logo_url as company_logo', 'c.brand_color as company_color')
             .first();
 
         if (!payroll) throw new Error('Payroll record not found');
 
-        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const doc = new PDFDocument({ size: 'A4', margins: { top: 50, bottom: 0, left: 50, right: 50 } });
         
         const pageWidth = doc.page.width;
         const pageHeight = doc.page.height;
         const margin = 50;
 
-        // Theme red accent color: rgb(220, 38, 38) -> #DC2626
-        const primaryColor = '#DC2626';
+        // Theme accent color: dynamic from company brand_color or fallback to red
+        const primaryColor = payroll.company_color || '#DC2626';
 
         // 1. Draw Theme Accents (creative top and left borders)
         doc.rect(0, 0, pageWidth, 6).fill(primaryColor);
@@ -760,25 +886,45 @@ class PayrollService {
 
         // 2. Draw Header Info
         const headerY = 25;
-        doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(22).text('HOTEL HIGHWAY KING', margin, headerY);
         
-        doc.fillColor('#000000').font('Helvetica-Bold').fontSize(7.5).text('Near Toll Plaza, Bagru, Ajmer Road, Jaipur, Rajasthan - 303007', margin, headerY + 24);
+        const isHighwayKing = (payroll.company_name || '').toUpperCase().includes('HIGHWAY KING');
+        const companyContactText = isHighwayKing
+            ? 'Contact: +91-9829065000 | info@hotelhighwayking.com | GSTN: 08AAAAA1111A1Z1 | MSME: UDYAM-RJ-17-0000001'
+            : `Contact: ${payroll.company_email || 'N/A'}`;
         
-        // Draw logo character placeholder
-        doc.fillColor(primaryColor);
-        doc.roundedRect(pageWidth - margin - 22, headerY - 2, 22, 22, 4).fill();
-        doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(14).text('H', pageWidth - margin - 15, headerY + 3);
+        const companyAddressText = isHighwayKing
+            ? 'Near Toll Plaza, Bagru, Ajmer Road, Jaipur, Rajasthan - 303007'
+            : `Email: ${payroll.company_email || 'N/A'}`;
+
+        doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(18).text(payroll.company_name || 'MyFastHR Solutions', margin, headerY);
+        doc.fillColor('#475569').font('Helvetica').fontSize(7.5).text(companyAddressText, margin, headerY + 20);
+        doc.fillColor('#64748B').font('Helvetica').fontSize(7).text(companyContactText, margin, headerY + 29);
+        
+        // Draw logo image or character placeholder
+        const fs = require('fs');
+        const path = require('path');
+        const logoPath = payroll.company_logo ? path.join(__dirname, '../../', payroll.company_logo) : null;
+        const logoExists = logoPath && fs.existsSync(logoPath);
+        
+        if (logoExists) {
+            doc.image(logoPath, pageWidth - margin - 80, headerY - 5, { width: 80, height: 26 });
+        } else {
+            const firstChar = (payroll.company_name || 'H').charAt(0).toUpperCase();
+            doc.fillColor(primaryColor);
+            doc.roundedRect(pageWidth - margin - 22, headerY - 2, 22, 22, 4).fill();
+            doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(14).text(firstChar, pageWidth - margin - 15, headerY + 3);
+        }
 
         // Header separator line
-        doc.strokeColor(primaryColor).lineWidth(1.5).moveTo(margin, headerY + 38).lineTo(pageWidth - margin, headerY + 38).stroke();
+        doc.strokeColor(primaryColor).lineWidth(1.5).moveTo(margin, headerY + 43).lineTo(pageWidth - margin, headerY + 43).stroke();
 
         // 3. Document Title
         const monthName = new Date(payroll.year, payroll.month - 1).toLocaleString('default', { month: 'long' });
-        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(13).text('PAYSLIP', margin, headerY + 52, { align: 'center' });
-        doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#475569').text(`FOR THE MONTH OF ${monthName.toUpperCase()} ${payroll.year}`, margin, headerY + 68, { align: 'center' });
+        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(13).text('PAYSLIP', margin, headerY + 56, { align: 'center' });
+        doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#475569').text(`FOR THE MONTH OF ${monthName.toUpperCase()} ${payroll.year}`, margin, headerY + 72, { align: 'center' });
 
         // 4. Employee Info Card Box
-        const infoY = headerY + 84;
+        const infoY = headerY + 92;
         const boxHeight = 75;
         doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(margin, infoY, pageWidth - (margin * 2), boxHeight).stroke();
 
@@ -912,26 +1058,252 @@ class PayrollService {
         const wordsY = netBoxY + netBoxHeight + 10;
         doc.fillColor('#475569').font('Helvetica-Oblique').fontSize(8.5).text(`Amount in Words: ${convertNumberToWords(Math.round(payroll.net_salary || 0))}`, margin + 5, wordsY);
 
-        // 8. Signatures Block
-        const sigsY = wordsY + 38;
-        
-        doc.strokeColor('#CBD5E1').lineWidth(0.5).moveTo(margin + 10, sigsY + 42).lineTo(margin + 130, sigsY + 42).stroke();
-        doc.fillColor('#64748B').font('Helvetica').fontSize(8).text('Employee Signature', margin + 10, sigsY + 48);
-
-        doc.strokeColor('#CBD5E1').lineWidth(0.5).moveTo(pageWidth - margin - 130, sigsY + 42).lineTo(pageWidth - margin - 10, sigsY + 42).stroke();
-        doc.fillColor('#64748B').text('For HOTEL HIGHWAY KING', pageWidth - margin - 130, sigsY);
-        doc.fillColor('#334155').font('Helvetica-Bold').text('Authorized Signatory', pageWidth - margin - 130, sigsY + 48);
+        // 8. Disclaimer Block (System generated slip replaces physical signatures)
+        const disclaimerY = wordsY + 28;
+        doc.fillColor('#64748B')
+            .font('Helvetica-Bold')
+            .fontSize(8.5)
+            .text('This is a computer-generated payslip and does not require a physical signature or stamp.', margin, disclaimerY, { align: 'center', width: pageWidth - (margin * 2) });
 
         // 9. Document Footer
-        const footerY = pageHeight - 42;
-        doc.strokeColor(primaryColor).lineWidth(1.2).moveTo(margin, footerY).lineTo(pageWidth - margin, footerY).stroke();
+        const footerY = pageHeight - 30;
+        doc.strokeColor(primaryColor).lineWidth(1).moveTo(margin, footerY).lineTo(pageWidth - margin, footerY).stroke();
 
-        const footerText = 'Contact - +91-9829065000 | info@hotelhighwayking.com | GSTN - 08AAAAA1111A1Z1 | MSME - UDYAM-RJ-17-0000001';
-        doc.fillColor('#334155').font('Helvetica-Bold').fontSize(7.5).text(footerText, margin, footerY + 6, { align: 'center', width: pageWidth - (margin * 2) });
-        doc.fillColor('#64748B').font('Helvetica').fontSize(7).text('Near Toll Plaza, Bagru, Ajmer Road, Jaipur, Rajasthan - 303007', margin, footerY + 16, { align: 'center', width: pageWidth - (margin * 2) });
+        doc.fillColor('#94A3B8')
+            .font('Helvetica-Bold')
+            .fontSize(7)
+            .text('Generated via MyFastHR Payroll Portal', margin, footerY + 5, { align: 'center', width: pageWidth - (margin * 2) });
 
         return doc;
     }
+
+    async generateLoanSlipPDF(loanId, companyId) {
+        const loan = await db('loans as l')
+            .join('employees as e', 'l.employee_id', 'e.id')
+            .join('companies as c', 'l.company_id', 'c.id')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
+            .where({ 'l.id': loanId, 'l.company_id': companyId })
+            .select(
+                'l.*',
+                'e.first_name',
+                'e.last_name',
+                'e.employee_id_number',
+                'e.designation',
+                'e.office_location',
+                'e.joining_date',
+                'd.name as department_name',
+                'c.name as company_name',
+                'c.email as company_email',
+                'c.logo_url as company_logo',
+                'c.brand_color as company_color'
+            )
+            .first();
+
+        if (!loan) throw new Error('Loan record not found');
+
+        // Fetch repayments history for this loan
+        const repayments = await db('loan_repayments')
+            .where({ loan_id: loanId, company_id: companyId })
+            .orderBy('payment_date', 'asc');
+
+        const doc = new PDFDocument({ size: 'A4', margins: { top: 50, bottom: 0, left: 50, right: 50 } });
+        
+        const pageWidth = doc.page.width;
+        const pageHeight = doc.page.height;
+        const margin = 50;
+
+        // Theme accent color: dynamic from company brand_color or fallback to red/indigo
+        const primaryColor = loan.company_color || '#4361ee';
+
+        // 1. Draw Theme Accents (creative top and left borders)
+        doc.rect(0, 0, pageWidth, 6).fill(primaryColor);
+        doc.rect(0, 0, 4, pageHeight).fill(primaryColor);
+
+        // 2. Draw Header Info
+        const headerY = 25;
+        
+        const isHighwayKing = (loan.company_name || '').toUpperCase().includes('HIGHWAY KING');
+        const companyContactText = isHighwayKing
+            ? 'Contact: +91-9829065000 | info@hotelhighwayking.com | GSTN: 08AAAAA1111A1Z1 | MSME: UDYAM-RJ-17-0000001'
+            : `Contact: ${loan.company_email || 'N/A'}`;
+        
+        const companyAddressText = isHighwayKing
+            ? 'Near Toll Plaza, Bagru, Ajmer Road, Jaipur, Rajasthan - 303007'
+            : `Email: ${loan.company_email || 'N/A'}`;
+
+        doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(18).text(loan.company_name || 'MyFastHR Solutions', margin, headerY);
+        doc.fillColor('#475569').font('Helvetica').fontSize(7.5).text(companyAddressText, margin, headerY + 20);
+        doc.fillColor('#64748B').font('Helvetica').fontSize(7).text(companyContactText, margin, headerY + 29);
+        
+        // Draw logo image or character placeholder
+        const fs = require('fs');
+        const path = require('path');
+        const logoPath = loan.company_logo ? path.join(__dirname, '../../', loan.company_logo) : null;
+        const logoExists = logoPath && fs.existsSync(logoPath);
+        
+        if (logoExists) {
+            doc.image(logoPath, pageWidth - margin - 80, headerY - 5, { width: 80, height: 26 });
+        } else {
+            const firstChar = (loan.company_name || 'H').charAt(0).toUpperCase();
+            doc.fillColor(primaryColor);
+            doc.roundedRect(pageWidth - margin - 22, headerY - 2, 22, 22, 4).fill();
+            doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(14).text(firstChar, pageWidth - margin - 15, headerY + 3);
+        }
+
+        // Header separator line
+        doc.strokeColor(primaryColor).lineWidth(1.5).moveTo(margin, headerY + 43).lineTo(pageWidth - margin, headerY + 43).stroke();
+
+        // 3. Document Title
+        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(13).text('LOAN / ADVANCE SLIP', margin, headerY + 56, { align: 'center' });
+        doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#475569').text(`RECORD OF DISBURSAL & ACCOUNT STATEMENT`, margin, headerY + 72, { align: 'center' });
+
+        // 4. Employee Info Card Box
+        const infoY = headerY + 92;
+        const boxHeight = 75;
+        doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(margin, infoY, pageWidth - (margin * 2), boxHeight).stroke();
+
+        // Row 1
+        doc.fillColor('#64748B').font('Helvetica-Bold').fontSize(8.5).text('Employee Name:', margin + 15, infoY + 12);
+        doc.fillColor('#0F172A').font('Helvetica-Bold').text(`${loan.first_name} ${loan.last_name}`, margin + 105, infoY + 12);
+
+        doc.fillColor('#64748B').text('Employee ID:', margin + 260, infoY + 12);
+        doc.fillColor('#0F172A').text(loan.employee_id_number || 'N/A', margin + 340, infoY + 12);
+
+        // Row 2
+        doc.fillColor('#64748B').text('Designation:', margin + 15, infoY + 32);
+        doc.fillColor('#0F172A').text(loan.designation || 'N/A', margin + 105, infoY + 32);
+
+        doc.fillColor('#64748B').text('Department:', margin + 260, infoY + 32);
+        doc.fillColor('#0F172A').text(loan.department_name || 'N/A', margin + 340, infoY + 32);
+
+        // Row 3
+        const formatDisplayDate = (dVal) => {
+            if (!dVal) return 'N/A';
+            const d = new Date(dVal);
+            if (isNaN(d.getTime())) return 'N/A';
+            const day = String(d.getDate()).padStart(2, '0');
+            const monthShort = d.toLocaleString('default', { month: 'short' });
+            const yearVal = d.getFullYear();
+            return `${day} ${monthShort} ${yearVal}`;
+        };
+        doc.fillColor('#64748B').text('Disbursal Date:', margin + 15, infoY + 52);
+        doc.fillColor('#0F172A').text(formatDisplayDate(loan.created_at), margin + 105, infoY + 52);
+
+        doc.fillColor('#64748B').text('Office Location:', margin + 260, infoY + 52);
+        doc.fillColor('#0F172A').text(loan.office_location || 'N/A', margin + 340, infoY + 52);
+
+        // 5. Advance Financials Overview
+        const finY = infoY + boxHeight + 20;
+        const colWidth = (pageWidth - (margin * 2) - 15) / 2; // Split width evenly
+        const rightColX = margin + colWidth + 15;
+
+        // Draw Loan Ledger Table Header
+        doc.fillColor('#F8FAFC').rect(margin, finY, colWidth, 20).fill();
+        doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(margin, finY, colWidth, 20).stroke();
+        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(8.5).text('ADVANCE TERMS', margin + 10, finY + 6);
+        doc.text('Details', margin + colWidth - 85, finY + 6, { align: 'right', width: 75 });
+
+        doc.fillColor('#F8FAFC').rect(rightColX, finY, colWidth, 20).fill();
+        doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(rightColX, finY, colWidth, 20).stroke();
+        doc.fillColor('#0F172A').font('Helvetica-Bold').text('CURRENT BALANCE', rightColX + 10, finY + 6);
+        doc.text('Amount (INR)', rightColX + colWidth - 85, finY + 6, { align: 'right', width: 75 });
+
+        // Gather loan details
+        const termsList = [
+            { label: 'Advance Title', val: loan.title || 'Salary Advance' },
+            { label: 'Principal Amount', val: `INR ${parseFloat(loan.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` },
+            { label: 'Monthly EMI', val: `INR ${parseFloat(loan.monthly_emi).toLocaleString('en-IN', { minimumFractionDigits: 2 })}/mo` }
+        ];
+
+        const balanceList = [
+            { label: 'Original Principal', val: parseFloat(loan.amount) },
+            { label: 'Remaining Balance', val: parseFloat(loan.remaining_balance) },
+            { label: 'Repayment Status', val: (loan.status || 'pending').toUpperCase() }
+        ];
+
+        const rowHeight = 22;
+        for (let i = 0; i < 3; i++) {
+            const rY = finY + 20 + (i * rowHeight);
+
+            // Terms cell
+            doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(margin, rY, colWidth, rowHeight).stroke();
+            doc.fillColor('#334155').font('Helvetica').fontSize(8).text(termsList[i].label, margin + 10, rY + 7);
+            doc.fillColor('#0F172A').font('Helvetica-Bold').text(termsList[i].val.toString(), margin + colWidth - 160, rY + 7, { align: 'right', width: 150 });
+
+            // Balance cell
+            doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(rightColX, rY, colWidth, rowHeight).stroke();
+            doc.fillColor('#334155').font('Helvetica').fontSize(8).text(balanceList[i].label, rightColX + 10, rY + 7);
+            if (typeof balanceList[i].val === 'number') {
+                doc.fillColor('#0F172A').font('Helvetica-Bold').text(balanceList[i].val.toLocaleString('en-IN', { minimumFractionDigits: 2 }), rightColX + colWidth - 85, rY + 7, { align: 'right', width: 75 });
+            } else {
+                const isPaid = balanceList[i].val === 'COMPLETED';
+                const isActive = balanceList[i].val === 'ACTIVE';
+                const statusColor = isPaid ? '#10B981' : (isActive ? '#4361ee' : '#F59E0B');
+                doc.fillColor(statusColor).font('Helvetica-Bold').text(balanceList[i].val, rightColX + colWidth - 85, rY + 7, { align: 'right', width: 75 });
+            }
+        }
+
+        // Shaded summary box for Outstanding Balance
+        const sumY = finY + 20 + (3 * rowHeight) + 10;
+        doc.fillColor('#FEF2F2').rect(margin, sumY, pageWidth - (margin * 2), 32).fill();
+        doc.strokeColor('#FCA5A5').lineWidth(1).rect(margin, sumY, pageWidth - (margin * 2), 32).stroke();
+        doc.fillColor('#991B1B').font('Helvetica-Bold').fontSize(8.5).text('OUTSTANDING BALANCE TO REPAY', margin + 15, sumY + 11);
+        doc.fillColor('#991B1B').font('Helvetica-Bold').fontSize(12).text(`INR ${parseFloat(loan.remaining_balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - margin - 215, sumY + 10, { align: 'right', width: 200 });
+
+        // Amount in Words (Outstanding)
+        const wordY = sumY + 32 + 8;
+        doc.fillColor('#475569').font('Helvetica-Oblique').fontSize(8.5).text(`Outstanding in Words: ${convertNumberToWords(Math.round(parseFloat(loan.remaining_balance)))}`, margin + 5, wordY);
+
+        // 6. Repayment History Section
+        let lastY = wordY + 20;
+        if (repayments && repayments.length > 0) {
+            doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(10).text('REPAYMENT HISTORY LEDGER', margin, lastY);
+            lastY += 14;
+
+            // Header for Repayments
+            const repColWidth = (pageWidth - (margin * 2)) / 4;
+            doc.fillColor('#F8FAFC').rect(margin, lastY, pageWidth - (margin * 2), 18).fill();
+            doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(margin, lastY, pageWidth - (margin * 2), 18).stroke();
+            doc.fillColor('#475569').font('Helvetica-Bold').fontSize(8);
+            doc.text('Date', margin + 10, lastY + 5);
+            doc.text('Payment Method', margin + repColWidth + 10, lastY + 5);
+            doc.text('Notes / Reference', margin + (repColWidth * 2) + 10, lastY + 5);
+            doc.text('Amount Paid', margin + (repColWidth * 3) + 10, lastY + 5, { width: repColWidth - 20, align: 'right' });
+            lastY += 18;
+
+            // Repayment Rows
+            repayments.forEach((rep) => {
+                doc.strokeColor('#E2E8F0').lineWidth(0.5).rect(margin, lastY, pageWidth - (margin * 2), 18).stroke();
+                doc.fillColor('#334155').font('Helvetica').fontSize(7.5);
+                doc.text(formatDisplayDate(rep.payment_date), margin + 10, lastY + 5);
+                doc.text((rep.payment_method || 'manual').toUpperCase(), margin + repColWidth + 10, lastY + 5);
+                doc.text(rep.notes || 'N/A', margin + (repColWidth * 2) + 10, lastY + 5);
+                doc.fillColor('#10B981').font('Helvetica-Bold').text(`INR ${parseFloat(rep.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, margin + (repColWidth * 3) + 10, lastY + 5, { width: repColWidth - 20, align: 'right' });
+                lastY += 18;
+            });
+        } else {
+            doc.fillColor('#64748B').font('Helvetica-Oblique').fontSize(8.5).text('No repayment transactions have been recorded yet.', margin, lastY);
+            lastY += 20;
+        }
+
+        // 7. Disclaimer Block
+        const disclaimerY = lastY + 15;
+        doc.fillColor('#64748B')
+            .font('Helvetica-Bold')
+            .fontSize(8)
+            .text('This is a system-generated record of advance/loan terms and transaction ledger, and does not require a physical signature.', margin, disclaimerY, { align: 'center', width: pageWidth - (margin * 2) });
+
+        // 8. Document Footer
+        const footerY = pageHeight - 30;
+        doc.strokeColor(primaryColor).lineWidth(1).moveTo(margin, footerY).lineTo(pageWidth - margin, footerY).stroke();
+        doc.fillColor('#94A3B8')
+            .font('Helvetica-Bold')
+            .fontSize(7)
+            .text('MyFastHR Loan & Advance Management Console', margin, footerY + 5, { align: 'center', width: pageWidth - (margin * 2) });
+
+        return doc;
+    }
+
     async saveBonusAdjustment(companyId, employeeId, month, year, overtimeBonus) {
         // Check if inputs are locked
         const controls = await this.getPayrollControls(companyId, month, year);
@@ -1059,13 +1431,16 @@ class PayrollService {
     async getLoans(companyId) {
         return await db('loans')
             .join('employees', 'loans.employee_id', '=', 'employees.id')
+            .leftJoin('departments', 'employees.department_id', '=', 'departments.id')
             .where('loans.company_id', companyId)
             .select(
                 'loans.*',
                 'employees.first_name',
                 'employees.last_name',
                 'employees.employee_id_number',
-                'employees.office_location'
+                'employees.office_location',
+                'employees.designation',
+                'departments.name as department_name'
             )
             .orderBy('loans.created_at', 'desc');
     }
@@ -1293,13 +1668,17 @@ class PayrollService {
         return await db('loan_repayments')
             .join('loans', 'loan_repayments.loan_id', '=', 'loans.id')
             .join('employees', 'loans.employee_id', '=', 'employees.id')
+            .leftJoin('departments', 'employees.department_id', '=', 'departments.id')
             .where('loan_repayments.company_id', companyId)
             .select(
                 'loan_repayments.*',
                 'loans.title as loan_title',
                 'employees.first_name',
                 'employees.last_name',
-                'employees.employee_id_number'
+                'employees.employee_id_number',
+                'employees.office_location',
+                'employees.designation',
+                'departments.name as department_name'
             )
             .orderBy('loan_repayments.payment_date', 'desc');
     }

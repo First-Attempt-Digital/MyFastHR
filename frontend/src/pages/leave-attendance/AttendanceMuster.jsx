@@ -283,20 +283,202 @@ const AttendanceMuster = () => {
         return dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
     };
 
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Helper to format string to Title Case/capitalize
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
     // Unique outlets, departments, designations list
-    const uniqueOutlets = ['all', ...[...new Set(matrix.map(emp => emp.location).filter(Boolean))].sort()];
-    const uniqueDepts = ['all', ...[...new Set(matrix.map(emp => emp.department).filter(Boolean))].sort()];
-    const uniqueDesignations = ['all', ...[...new Set(matrix.map(emp => emp.role).filter(Boolean))].sort()];
+    const uniqueOutlets = React.useMemo(() => {
+        const map = new Map();
+        matrix.forEach(emp => {
+            const val = emp.location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        entryRequests.forEach(req => {
+            const val = req.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        entryHistory.forEach(req => {
+            const val = req.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        notCheckedIn.forEach(emp => {
+            const val = emp.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [matrix, entryRequests, entryHistory, notCheckedIn]);
+
+    const uniqueDepts = React.useMemo(() => {
+        const map = new Map();
+        matrix.forEach(emp => {
+            const val = emp.department_name || emp.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        entryRequests.forEach(req => {
+            const val = req.department_name || req.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        entryHistory.forEach(req => {
+            const val = req.department_name || req.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        notCheckedIn.forEach(emp => {
+            const val = emp.department_name || emp.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [matrix, entryRequests, entryHistory, notCheckedIn]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        matrix.forEach(emp => {
+            const val = emp.role || emp.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        entryRequests.forEach(req => {
+            const val = req.designation || req.role;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        entryHistory.forEach(req => {
+            const val = req.designation || req.role;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        notCheckedIn.forEach(emp => {
+            const val = emp.designation || emp.role;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [matrix, entryRequests, entryHistory, notCheckedIn]);
 
     // Filter employees
-    const filteredEmployees = matrix.filter(emp => {
-        const matchesQuery = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                             (emp.code && emp.code.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesOutlet = selectedOutlet === 'all' || emp.location === selectedOutlet;
-        const matchesDept = selectedDept === 'all' || emp.department === selectedDept;
-        const matchesDesignation = selectedDesignation === 'all' || emp.role === selectedDesignation;
-        return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
-    });
+    const filteredEmployees = React.useMemo(() => {
+        return matrix.filter(emp => {
+            const matchesQuery = (emp.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 (emp.code && emp.code.toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesOutlet = matchText(emp.location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.role || emp.designation, selectedDesignation);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [matrix, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+
+    // Filter entry requests, history, and not checked-in today lists
+    const filteredEntryRequests = React.useMemo(() => {
+        return entryRequests.filter(req => {
+            const name = `${req.first_name || ''} ${req.last_name || ''}`;
+            const matchesQuery = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 (req.employee_id_number && String(req.employee_id_number).toLowerCase().includes(searchQuery.toLowerCase())) ||
+                                 (req.employee_code && String(req.employee_code).toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesOutlet = matchText(req.office_location, selectedOutlet);
+            const matchesDept = matchText(req.department_name || req.department, selectedDept);
+            const matchesDesignation = matchText(req.designation || req.role, selectedDesignation);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [entryRequests, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+
+    const filteredEntryHistory = React.useMemo(() => {
+        return entryHistory.filter(req => {
+            const name = `${req.first_name || ''} ${req.last_name || ''}`;
+            const matchesQuery = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 (req.employee_id_number && String(req.employee_id_number).toLowerCase().includes(searchQuery.toLowerCase())) ||
+                                 (req.employee_code && String(req.employee_code).toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesOutlet = matchText(req.office_location, selectedOutlet);
+            const matchesDept = matchText(req.department_name || req.department, selectedDept);
+            const matchesDesignation = matchText(req.designation || req.role, selectedDesignation);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [entryHistory, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+
+    const filteredNotCheckedIn = React.useMemo(() => {
+        return notCheckedIn.filter(emp => {
+            const name = `${emp.first_name || ''} ${emp.last_name || ''}`;
+            const matchesQuery = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 (emp.employee_id_number && String(emp.employee_id_number).toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesOutlet = matchText(emp.office_location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation || emp.role, selectedDesignation);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [notCheckedIn, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Grid Cell Styling configuration
     const getStatusStyle = (status) => {
@@ -752,189 +934,295 @@ const AttendanceMuster = () => {
             )}
 
             {activeTab === 'entry_requests' && (
-                /* Entry/Exit Exception Requests & Pre-approvals */
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-in slide-in-from-bottom-4 duration-500">
-                    {/* Pending Requests Column */}
-                    <div className="lg:col-span-7">
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[600px] overflow-hidden">
-                            <div className="p-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
-                                <div className="flex gap-1">
-                                    <button
-                                        onClick={() => setRequestsTab('pending')}
-                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                                            requestsTab === 'pending'
-                                                ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
-                                                : 'text-slate-400 hover:text-slate-600'
-                                        }`}
-                                    >
-                                        Pending ({entryRequests.length})
-                                    </button>
-                                    <button
-                                        onClick={() => setRequestsTab('history')}
-                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer ${
-                                            requestsTab === 'history'
-                                                ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
-                                                : 'text-slate-400 hover:text-slate-600'
-                                        }`}
-                                    >
-                                        History ({entryHistory.length})
-                                    </button>
-                                </div>
+                <div className="space-y-6">
+                    {/* --- FILTERS ROW FOR ENTRY REQUESTS --- */}
+                    <div className="bg-white border border-slate-200/40 p-4 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Search field */}
+                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 w-full xl:w-56 shrink-0 shadow-inner">
+                                <Search size={13} className="text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search name or ID..."
+                                    className="bg-transparent border-none text-[11px] font-bold text-slate-700 outline-none w-full"
+                                />
                             </div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {requestsLoading ? (
-                                    <div className="flex flex-col items-center justify-center h-full gap-2">
-                                        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loading Requests...</p>
-                                    </div>
-                                ) : requestsTab === 'pending' ? (
-                                    entryRequests.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full opacity-40 p-6 text-center">
-                                            <CheckCircle size={32} className="text-emerald-500 mb-2" />
-                                            <p className="text-[10px] font-black uppercase tracking-widest">All Clear</p>
-                                            <p className="text-[9px] font-bold text-slate-400 mt-1">No pending late-in or early-out exceptions found.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="divide-y divide-slate-50">
-                                            {entryRequests.map((req) => (
-                                                <div key={req.id} className="p-4 flex justify-between items-start hover:bg-slate-50/50 transition-all animate-in fade-in duration-300">
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black text-slate-700 uppercase">{req.first_name} {req.last_name}</span>
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">#{req.employee_id_number}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
-                                                                req.request_type === 'late_in' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
-                                                            }`}>
-                                                                {req.request_type === 'late_in' ? 'Late In' : 'Early Out'}
-                                                            </span>
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">
-                                                                Date: {req.date ? new Date(req.date).toLocaleDateString() : 'N/A'}
-                                                            </span>
-                                                            {req.punch_time && (
-                                                                <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                                                    Time: {formatPunchTime(req.punch_time)}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => setApprovalModalRequest(req)}
-                                                            disabled={approvingId === req.id}
-                                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm shadow-emerald-100 disabled:opacity-50"
-                                                        >
-                                                            Approve
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleRequestAction(req.id, 'rejected')}
-                                                            disabled={approvingId === req.id}
-                                                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm shadow-rose-100 disabled:opacity-50"
-                                                        >
-                                                            Reject
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )
-                                ) : (
-                                    entryHistory.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center h-full opacity-40 p-6 text-center">
-                                            <Clock size={32} className="text-slate-400 mb-2" />
-                                            <p className="text-[10px] font-black uppercase tracking-widest">No History</p>
-                                            <p className="text-[9px] font-bold text-slate-400 mt-1">No processed exception requests found.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="divide-y divide-slate-50">
-                                            {entryHistory.map((req) => (
-                                                <div key={req.id} className="p-4 flex justify-between items-start hover:bg-slate-50/50 transition-all animate-in fade-in duration-300">
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black text-slate-700 uppercase">{req.first_name} {req.last_name}</span>
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">#{req.employee_id_number}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
-                                                                req.request_type === 'late_in' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
-                                                            }`}>
-                                                                {req.request_type === 'late_in' ? 'Late In' : 'Early Out'}
-                                                            </span>
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">
-                                                                Date: {req.date ? new Date(req.date).toLocaleDateString() : 'N/A'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <span className={`inline-flex px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                                                            req.status === 'approved'
-                                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                                : 'bg-rose-50 text-rose-600 border border-rose-100'
-                                                        }`}>
-                                                            {req.status}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )
-                                )}
+
+                            {/* Outlet Selector */}
+                            <div className="relative">
+                                <select 
+                                    value={selectedOutlet} 
+                                    onChange={(e) => setSelectedOutlet(e.target.value)}
+                                    className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                                >
+                                    <option value="all">All Outlets</option>
+                                    {uniqueOutlets.filter(o => o !== 'all').map(o => (
+                                        <option key={o} value={o}>{o}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+
+                            {/* Department Selector */}
+                            <div className="relative">
+                                <select 
+                                    value={selectedDept} 
+                                    onChange={(e) => setSelectedDept(e.target.value)}
+                                    className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                                >
+                                    <option value="all">All Departments</option>
+                                    {uniqueDepts.filter(d => d !== 'all').map(d => (
+                                        <option key={d} value={d}>{d}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+
+                            {/* Designation Selector */}
+                            <div className="relative">
+                                <select 
+                                    value={selectedDesignation} 
+                                    onChange={(e) => setSelectedDesignation(e.target.value)}
+                                    className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                                >
+                                    <option value="all">All Designations</option>
+                                    {uniqueDesignations.filter(d => d !== 'all').map(d => (
+                                        <option key={d} value={d}>{d}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                             </div>
                         </div>
                     </div>
 
-                    {/* Today's Not Checked-In Column */}
-                    <div className="lg:col-span-5">
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[600px] overflow-hidden">
-                            <div className="p-4 border-b border-slate-50 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Clock size={14} className="text-slate-700" />
-                                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Not Checked-In Today</h3>
+                    {/* Entry/Exit Exception Requests & Pre-approvals Columns Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-in slide-in-from-bottom-4 duration-500">
+                        {/* Pending Requests Column */}
+                        <div className="lg:col-span-7">
+                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[600px] overflow-hidden">
+                                <div className="p-2 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => setRequestsTab('pending')}
+                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                                                requestsTab === 'pending'
+                                                    ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                            }`}
+                                        >
+                                            Pending ({filteredEntryRequests.length})
+                                        </button>
+                                        <button
+                                            onClick={() => setRequestsTab('history')}
+                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer ${
+                                                requestsTab === 'history'
+                                                    ? 'bg-white text-slate-900 shadow-sm border border-slate-100'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                            }`}
+                                        >
+                                            History ({filteredEntryHistory.length})
+                                        </button>
+                                    </div>
                                 </div>
-                                <span className="inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter bg-slate-100 text-slate-500">
-                                    {notCheckedIn.length} Left
-                                </span>
-                            </div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {requestsLoading ? (
-                                    <div className="flex flex-col items-center justify-center h-full gap-2">
-                                        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loading List...</p>
-                                    </div>
-                                ) : notCheckedIn.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full opacity-40 p-6 text-center">
-                                        <Users size={32} className="text-slate-400 mb-2" />
-                                        <p className="text-[10px] font-black uppercase tracking-widest">No Employees Left</p>
-                                        <p className="text-[9px] font-bold text-slate-400 mt-1">Everyone has checked in or has a pre-approval.</p>
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-slate-50">
-                                        {notCheckedIn.map((emp) => (
-                                            <div key={emp.id} className="p-3.5 flex justify-between items-center hover:bg-slate-50/50 transition-all">
-                                                <div>
-                                                    <p className="text-[10px] font-black text-slate-700 uppercase">{emp.first_name} {emp.last_name}</p>
-                                                    <p className="text-[8px] font-bold text-slate-400 uppercase">#{emp.employee_id_number} {emp.shift_name ? `• ${emp.shift_name}` : ''}</p>
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <button
-                                                        onClick={() => handlePreApprove(emp.id, 'late_in')}
-                                                        disabled={preApprovingId === emp.id}
-                                                        className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[8px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
-                                                        title="Pre-approve late punch-in for today"
-                                                    >
-                                                        Pre-Approve Late
-                                                    </button>
-                                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    {requestsLoading ? (
+                                        <div className="flex flex-col items-center justify-center h-full gap-2">
+                                            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loading Requests...</p>
+                                        </div>
+                                    ) : requestsTab === 'pending' ? (
+                                        filteredEntryRequests.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-full opacity-40 p-6 text-center">
+                                                <CheckCircle size={32} className="text-emerald-500 mb-2" />
+                                                <p className="text-[10px] font-black uppercase tracking-widest">All Clear</p>
+                                                <p className="text-[9px] font-bold text-slate-400 mt-1">No pending late-in or early-out exceptions found.</p>
                                             </div>
-                                        ))}
+                                        ) : (
+                                            <div className="divide-y divide-slate-50">
+                                                {filteredEntryRequests.map((req) => (
+                                                    <div key={req.id} className="p-4 flex justify-between items-start hover:bg-slate-50/50 transition-all animate-in fade-in duration-300">
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-black text-slate-700 uppercase">{req.first_name} {req.last_name}</span>
+                                                            </div>
+                                                            <div className="text-[8px] font-bold text-slate-450 uppercase flex items-center gap-1.5 flex-wrap">
+                                                                <span>#{req.employee_id_number || req.employee_code || 'N/A'}</span>
+                                                                {req.office_location && (
+                                                                    <>
+                                                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                                        <span>{req.office_location}</span>
+                                                                    </>
+                                                                )}
+                                                                {req.department_name && (
+                                                                    <>
+                                                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                                        <span>{req.department_name}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
+                                                                    req.request_type === 'late_in' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
+                                                                }`}>
+                                                                    {req.request_type === 'late_in' ? 'Late In' : 'Early Out'}
+                                                                </span>
+                                                                <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                                                    Date: {req.date ? new Date(req.date).toLocaleDateString() : 'N/A'}
+                                                                </span>
+                                                                {req.punch_time && (
+                                                                    <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                                                        Time: {formatPunchTime(req.punch_time)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => setApprovalModalRequest(req)}
+                                                                disabled={approvingId === req.id}
+                                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm shadow-emerald-100 disabled:opacity-50 cursor-pointer animate-in fade-in duration-150"
+                                                            >
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRequestAction(req.id, 'rejected')}
+                                                                disabled={approvingId === req.id}
+                                                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm shadow-rose-100 disabled:opacity-50 cursor-pointer animate-in fade-in duration-150"
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )
+                                    ) : (
+                                        filteredEntryHistory.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center h-full opacity-40 p-6 text-center">
+                                                <Clock size={32} className="text-slate-400 mb-2" />
+                                                <p className="text-[10px] font-black uppercase tracking-widest">No History</p>
+                                                <p className="text-[9px] font-bold text-slate-400 mt-1">No processed exception requests found.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y divide-slate-50">
+                                                {filteredEntryHistory.map((req) => (
+                                                    <div key={req.id} className="p-4 flex justify-between items-start hover:bg-slate-50/50 transition-all animate-in fade-in duration-300">
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] font-black text-slate-700 uppercase">{req.first_name} {req.last_name}</span>
+                                                            </div>
+                                                            <div className="text-[8px] font-bold text-slate-450 uppercase flex items-center gap-1.5 flex-wrap">
+                                                                <span>#{req.employee_id_number || req.employee_code || 'N/A'}</span>
+                                                                {req.office_location && (
+                                                                    <>
+                                                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                                        <span>{req.office_location}</span>
+                                                                    </>
+                                                                )}
+                                                                {req.department_name && (
+                                                                    <>
+                                                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                                        <span>{req.department_name}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter ${
+                                                                    req.request_type === 'late_in' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
+                                                                }`}>
+                                                                    {req.request_type === 'late_in' ? 'Late In' : 'Early Out'}
+                                                                </span>
+                                                                <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                                                    Date: {req.date ? new Date(req.date).toLocaleDateString() : 'N/A'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <span className={`inline-flex px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                                                                req.status === 'approved'
+                                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                                    : 'bg-rose-50 text-rose-600 border border-rose-100'
+                                                            }`}>
+                                                                {req.status}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Today's Not Checked-In Column */}
+                        <div className="lg:col-span-5">
+                            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[600px] overflow-hidden">
+                                <div className="p-4 border-b border-slate-50 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Clock size={14} className="text-slate-700" />
+                                        <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Not Checked-In Today</h3>
                                     </div>
-                                )}
+                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter bg-slate-100 text-slate-500">
+                                        {filteredNotCheckedIn.length} Left
+                                    </span>
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    {requestsLoading ? (
+                                        <div className="flex flex-col items-center justify-center h-full gap-2">
+                                            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loading List...</p>
+                                        </div>
+                                    ) : filteredNotCheckedIn.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full opacity-40 p-6 text-center">
+                                            <Users size={32} className="text-slate-400 mb-2" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest">No Employees Left</p>
+                                            <p className="text-[9px] font-bold text-slate-400 mt-1">Everyone has checked in or has a pre-approval.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-slate-50">
+                                            {filteredNotCheckedIn.map((emp) => (
+                                                <div key={emp.id} className="p-3.5 flex justify-between items-center hover:bg-slate-50/50 transition-all">
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-700 uppercase">{emp.first_name} {emp.last_name}</p>
+                                                        <p className="text-[8px] font-bold text-slate-400 uppercase flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                            <span>#{emp.employee_id_number || emp.employee_code || 'N/A'}</span>
+                                                            {emp.office_location && (
+                                                                <>
+                                                                    <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                                    <span>{emp.office_location}</span>
+                                                                </>
+                                                            )}
+                                                            {emp.shift_name && (
+                                                                <>
+                                                                    <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                                    <span>{emp.shift_name}</span>
+                                                                </>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button
+                                                            onClick={() => handlePreApprove(emp.id, 'late_in')}
+                                                            disabled={preApprovingId === emp.id}
+                                                            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[8px] font-black uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+                                                            title="Pre-approve late punch-in for today"
+                                                        >
+                                                            Pre-Approve Late
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        )}
+            )}
 
             {/* --- DAILY CELL DETAIL MODAL --- */}
             <AnimatePresence>

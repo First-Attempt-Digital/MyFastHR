@@ -28,19 +28,68 @@ const LeaveGranter = () => {
     const [selectedPeriod, setSelectedPeriod] = useState('All');
     const [selectedScheme, setSelectedScheme] = useState('All');
 
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Helper to format string to Title Case/capitalize
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
     const uniqueDepartments = React.useMemo(() => {
-        const depts = employees.map(emp => emp.department_name || emp.department).filter(Boolean);
-        return ['All', ...new Set(depts)].sort();
+        const map = new Map();
+        employees.forEach(emp => {
+            const val = emp.department_name || emp.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['All', ...Array.from(map.values()).sort()];
     }, [employees]);
 
     const uniqueDesignations = React.useMemo(() => {
-        const roles = employees.map(emp => emp.designation).filter(Boolean);
-        return ['All', ...new Set(roles)].sort();
+        const map = new Map();
+        employees.forEach(emp => {
+            const val = emp.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['All', ...Array.from(map.values()).sort()];
     }, [employees]);
 
     const uniqueOutlets = React.useMemo(() => {
-        const locations = employees.map(emp => emp.office_location || emp.location).filter(Boolean);
-        return ['All', ...new Set(locations)].sort();
+        const map = new Map();
+        employees.forEach(emp => {
+            const val = emp.office_location || emp.location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['All', ...Array.from(map.values()).sort()];
     }, [employees]);
 
     // Modal
@@ -251,9 +300,9 @@ const LeaveGranter = () => {
                 const empDesg = emp.designation || employees.find(e => e.id === emp.employee_id)?.designation || '';
                 const empLoc = emp.office_location || employees.find(e => e.id === emp.employee_id)?.office_location || 'Unassigned';
 
-                const matchesDept = filterDept === 'All' || String(empDept).toLowerCase() === String(filterDept).toLowerCase();
-                const matchesDesignation = filterDesignation === 'All' || String(empDesg).toLowerCase() === String(filterDesignation).toLowerCase();
-                const matchesOutlet = filterOutlet === 'All' || String(empLoc).toLowerCase() === String(filterOutlet).toLowerCase();
+                const matchesDept = matchText(empDept, filterDept);
+                const matchesDesignation = matchText(empDesg, filterDesignation);
+                const matchesOutlet = matchText(empLoc, filterOutlet);
 
                 return matchesDept && matchesDesignation && matchesOutlet;
             });

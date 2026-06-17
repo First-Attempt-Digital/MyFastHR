@@ -856,6 +856,9 @@ class EmployeeService {
             'include lwf': 'include_lwf',
             'include_lwf': 'include_lwf',
             'lwf active': 'include_lwf',
+            'include gratuity': 'include_gratuity',
+            'include_gratuity': 'include_gratuity',
+            'gratuity active': 'include_gratuity',
 
             // Bank / Payment Details
             'payment type': 'payment_type',
@@ -1102,6 +1105,7 @@ class EmployeeService {
                 employeeData.include_pf = parseBoolean(employeeData.include_pf);
                 employeeData.include_esi = parseBoolean(employeeData.include_esi);
                 employeeData.include_lwf = parseBoolean(employeeData.include_lwf);
+                employeeData.include_gratuity = parseBoolean(employeeData.include_gratuity);
 
                 // Resolve Reporting Manager relationship
                 if (employeeData.manager_value) {
@@ -1181,6 +1185,18 @@ class EmployeeService {
         }
 
         return { successCount, failedCount, errors };
+    }
+
+    async updateStatutorySettings(id, companyId, data) {
+        const updateData = {};
+        if (data.include_pf !== undefined) updateData.include_pf = data.include_pf ? 1 : 0;
+        if (data.include_esi !== undefined) updateData.include_esi = data.include_esi ? 1 : 0;
+        if (data.include_lwf !== undefined) updateData.include_lwf = data.include_lwf ? 1 : 0;
+        if (data.include_gratuity !== undefined) updateData.include_gratuity = data.include_gratuity ? 1 : 0;
+
+        return await db('employees')
+            .where({ id, company_id: companyId })
+            .update(updateData);
     }
 }
 

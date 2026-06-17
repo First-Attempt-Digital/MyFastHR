@@ -11,24 +11,32 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api, { fetchBranding, getAssetUrl, setOpenDeleteSecurityModal, clearOpenDeleteSecurityModal } from '../../utils/api';
 import DeleteSecurityModal from '../common/DeleteSecurityModal';
+import CustomAlertModal from '../common/CustomAlertModal';
 
-const AppMenuItem = ({ icon: Icon, label, path, active = false, disabled = false, color = "bg-indigo-50", iconColor = "text-indigo-600", onClick }) => {
+const AppMenuItem = ({ icon: Icon, label, description, path, active = false, disabled = false, color = "bg-indigo-50", iconColor = "text-indigo-600", onClick }) => {
   if (disabled) return null;
 
   return (
     <Link 
       to={path} 
       onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all group ${
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
         active ? 'bg-slate-50' : 'hover:bg-slate-50'
       }`}
     >
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${color}`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 shrink-0 ${color}`}>
         <Icon size={18} className={iconColor} />
       </div>
-      <span className={`text-xs font-bold ${active ? 'text-slate-900' : 'text-slate-600'}`}>
-        {label}
-      </span>
+      <div className="flex flex-col">
+        <span className={`text-xs font-bold ${active ? 'text-indigo-600' : 'text-slate-700 group-hover:text-indigo-600 transition-colors'}`}>
+          {label}
+        </span>
+        {description && (
+          <span className="text-[10px] text-slate-400 font-medium">
+            {description}
+          </span>
+        )}
+      </div>
     </Link>
   );
 };
@@ -55,6 +63,50 @@ const SidebarMenuItem = ({ icon: Icon, label, path, active, color, iconColor }) 
         />
       )}
     </Link>
+  );
+};
+
+const EmployeeMenuItem = ({ employee, onClick }) => {
+  const navigate = useNavigate();
+  const initials = `${employee.first_name?.[0] || ''}${employee.last_name?.[0] || ''}`.toUpperCase() || 'EMP';
+  
+  return (
+    <div 
+      onClick={() => {
+        navigate(`/profile?id=${employee.id}`);
+        onClick();
+      }}
+      className="flex items-center justify-between px-3 py-2 rounded-xl transition-all hover:bg-slate-50 cursor-pointer group"
+    >
+      <div className="flex items-center gap-3">
+        {employee.photo ? (
+          <img 
+            src={getAssetUrl(`/uploads/kyc/${employee.photo}`)} 
+            alt={employee.first_name} 
+            className="w-9 h-9 rounded-xl object-cover border border-slate-100" 
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = '';
+            }}
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-650 flex items-center justify-center font-bold text-xs">
+            {initials}
+          </div>
+        )}
+        <div className="flex flex-col">
+          <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+            {employee.first_name} {employee.last_name}
+          </span>
+          <span className="text-[10px] text-slate-400">
+            {employee.designation || 'Staff'} • {employee.department_name || employee.department || 'General'}
+          </span>
+        </div>
+      </div>
+      <span className="text-[9px] font-black text-slate-350 bg-slate-50 px-2 py-0.5 rounded-full uppercase group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
+        {employee.employee_id_number || `ID: ${employee.id}`}
+      </span>
+    </div>
   );
 };
 
@@ -93,6 +145,9 @@ const AppShell = ({ children }) => {
   const [showAppMenu, setShowAppMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
+  const [searchedEmployees, setSearchedEmployees] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchContainerRef = useRef(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState('active');
   const menuRef = useRef(null);
@@ -161,6 +216,36 @@ const AppShell = ({ children }) => {
     setOpenDeleteSecurityModal(deleteCallback);
 
     // Register global custom confirm & alert utilities
+    if (!window._originalConfirm) {
+        window._originalConfirm = window.confirm;
+        window.confirm = (message, title = 'Confirm Action') => {
+            if (window.customConfirm) {
+                return window.customConfirm(message, title);
+            }
+            return window._originalConfirm ? window._originalConfirm(message) : true;
+        };
+    }
+
+    if (!window._originalAlert) {
+        window._originalAlert = window.alert;
+        window.alert = (message, title = 'Alert') => {
+            if (window.customAlert) {
+                let typeTitle = 'Alert';
+                const msgLower = String(message).toLowerCase();
+                if (msgLower.includes('success') || msgLower.includes('saved') || msgLower.includes('completed') || msgLower.includes('uploaded') || msgLower.includes('sent') || msgLower.includes('initiated')) {
+                    typeTitle = 'Success';
+                } else if (msgLower.includes('failed') || msgLower.includes('error') || msgLower.includes('invalid') || msgLower.includes('cannot') || msgLower.includes('denied') || msgLower.includes('incorrect')) {
+                    typeTitle = 'Action Failed';
+                } else if (msgLower.includes('warning') || msgLower.includes('caution') || msgLower.includes('attention')) {
+                    typeTitle = 'Warning';
+                }
+                window.customAlert(message, typeTitle);
+            } else if (window._originalAlert) {
+                window._originalAlert(message);
+            }
+        };
+    }
+
     window.customConfirm = (message, title = 'Confirm Action') => {
         return new Promise((resolve) => {
             setCustomConfirm({
@@ -212,9 +297,43 @@ const AppShell = ({ children }) => {
       window.removeEventListener('branding_updated', handleBrandingUpdate);
       window.removeEventListener('system_freeze_updated', handleSystemFreezeUpdate);
       clearOpenDeleteSecurityModal(deleteCallback); // Clean up global callback safely
-      delete window.customConfirm;
-      delete window.customAlert;
     };
+  }, []);
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      const q = searchQuery.trim();
+      if (q.length >= 2) {
+        setSearching(true);
+        try {
+          const res = await api.get(`/employees?search=${encodeURIComponent(q)}`);
+          if (Array.isArray(res)) {
+            setSearchedEmployees(res.slice(0, 5));
+          } else {
+            setSearchedEmployees([]);
+          }
+        } catch (err) {
+          console.error("Global search failed:", err);
+          setSearchedEmployees([]);
+        } finally {
+          setSearching(false);
+        }
+      } else {
+        setSearchedEmployees([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+        setSearchQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchCompanyStatus = async () => {
@@ -355,7 +474,7 @@ const AppShell = ({ children }) => {
   };
 
   const roles = {
-    'super_admin': { label: 'Super Admin', token: 'test.super.token', color: 'bg-purple-600', short: 'SA' },
+'super_admin': { label: 'Super Admin', token: 'test.super.token', color: 'bg-purple-600', short: 'SA' },
     'company_admin': { label: 'Company Admin', token: 'test.admin.token', color: 'bg-indigo-600', short: 'AD' },
     'manager': { label: 'Team Manager', token: 'test.manager.token', color: 'bg-emerald-600', short: 'TM' },
     'employee': { label: 'Employee', token: 'test.employee.token', color: 'bg-rose-600', short: 'EM' }
@@ -371,20 +490,422 @@ const AppShell = ({ children }) => {
     { icon: Network, label: "Live Org-Chart", path: "/employees/org-chart", color: "bg-orange-50", iconColor: "text-orange-500", visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) },
     { icon: Shield, label: "Verification Hub", path: "/admin/compliance", color: "bg-blue-50", iconColor: "text-blue-500", visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) },
     { icon: Lock, label: "Identity Documents", path: "/identity-vault", color: "bg-slate-100", iconColor: "text-slate-600", visible: (role === 'super_admin' && superAdminViewMode === 'platform') },
-    { icon: Settings, label: "Settings", path: "/settings", color: "bg-gray-100", iconColor: "text-gray-600", visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) },
+    { icon: Settings, label: "Settings", path: "/settings", color: "bg-gray-100", iconColor: "text-gray-655", visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) },
     { icon: Briefcase, label: "Task", path: "/admin/tasks", color: "bg-violet-50", iconColor: "text-violet-500", visible: enabledFeatures.includes('kudos') && (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) },
     
     // Employee Specific Tabs
     { icon: UserCircle, label: "Profile", path: "/profile", color: "bg-indigo-50", iconColor: "text-indigo-500", visible: (role === 'employee') },
-    { icon: Calendar, label: "Leaves", path: "/leaves", color: "bg-rose-50", iconColor: "text-rose-500", visible: (role === 'employee') },
-    { icon: FileText, label: "Payslips", path: "/payslips", color: "bg-emerald-50", iconColor: "text-emerald-500", visible: enabledFeatures.includes('payroll') && (role === 'employee') },
-    { icon: Clock, label: "Attendance Logs", path: "/attendance", color: "bg-blue-50", iconColor: "text-blue-500", visible: (role === 'employee') },
-    { icon: TrendingUp, label: "Performance", path: "/analytics", color: "bg-amber-50", iconColor: "text-amber-500", visible: (role === 'employee') }
+    { icon: Calendar, label: "Leaves", path: "/leaves", color: "bg-rose-50", iconColor: "text-rose-550", visible: (role === 'employee') },
+    { icon: FileText, label: "Payslips", path: "/payslips", color: "bg-emerald-50", iconColor: "text-emerald-555", visible: enabledFeatures.includes('payroll') && (role === 'employee') },
+    { icon: Clock, label: "Attendance Logs", path: "/attendance", color: "bg-blue-50", iconColor: "text-blue-550", visible: (role === 'employee') },
+    { icon: TrendingUp, label: "Performance", path: "/analytics", color: "bg-amber-50", iconColor: "text-amber-555", visible: (role === 'employee') }
   ];
 
-  const filteredItems = searchQuery.trim() === '' ? [] : menuItems.filter(item => 
-    item.visible && item.label.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const searchMenuItems = [
+    { 
+      icon: Home, 
+      label: "Homepage", 
+      description: "Main dashboard, summaries, and quick navigation", 
+      path: "/dashboard", 
+      color: "bg-fuchsia-50", 
+      iconColor: "text-fuchsia-500", 
+      keywords: ["home", "dashboard", "index", "welcome", "main", "overview", "summary"],
+      visible: true 
+    },
+    { 
+      icon: Building2, 
+      label: "Super Admin Portal", 
+      description: "Manage system companies, SaaS subscriptions, and tenant controls", 
+      path: "/admin/companies", 
+      color: "bg-purple-50", 
+      iconColor: "text-purple-600", 
+      keywords: ["super", "admin", "platform", "companies", "saas", "tenant", "subscriptions"],
+      visible: (role === 'super_admin' && superAdminViewMode === 'platform') 
+    },
+    { 
+      icon: Users, 
+      label: "Employee Directory", 
+      description: "View and manage active, terminated, and detailed employee list", 
+      path: "/employees", 
+      color: "bg-teal-50", 
+      iconColor: "text-teal-550", 
+      keywords: ["employee", "staff", "directory", "members", "team", "workers", "list", "database"],
+      visible: (role === 'company_admin' || role === 'manager' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: LayoutGrid, 
+      label: "Workforce Overview", 
+      description: "Aggregated stats, headcount summaries, and active staff counts", 
+      path: "/employees/overview", 
+      color: "bg-indigo-50", 
+      iconColor: "text-indigo-650", 
+      keywords: ["workforce", "overview", "stats", "headcount", "departments", "active", "status"],
+      visible: (role === 'company_admin' || role === 'manager' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Plus, 
+      label: "Onboard New Talent", 
+      description: "Onboard a new employee and trigger credential email flows", 
+      path: "/employees/onboard", 
+      color: "bg-emerald-50", 
+      iconColor: "text-emerald-650", 
+      keywords: ["onboard", "add", "create", "register", "employee", "new hire", "hire", "recruitment"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: TrendingUp, 
+      label: "Workforce Analytics", 
+      description: "Analyze headcount metrics, turnover, diversity, and hiring stats", 
+      path: "/employees/analytics", 
+      color: "bg-cyan-50", 
+      iconColor: "text-cyan-600", 
+      keywords: ["analytics", "charts", "headcount", "turnover", "gender", "diversity", "reports"],
+      visible: (role === 'company_admin' || role === 'manager' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Network, 
+      label: "Organization Chart", 
+      description: "Interactive hierarchical visualization of team structures", 
+      path: "/employees/org-chart", 
+      color: "bg-orange-50", 
+      iconColor: "text-orange-500", 
+      keywords: ["org chart", "hierarchy", "structure", "tree", "reporting", "manager", "roles"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: FileText, 
+      label: "Letter Generator", 
+      description: "Generate official letters, offers, relieving, and certificates", 
+      path: "/admin/letters/generate", 
+      color: "bg-amber-50", 
+      iconColor: "text-amber-600", 
+      keywords: ["letters", "generate", "pdf", "templates", "offer letter", "experience", "relieving", "contracts"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Upload, 
+      label: "Bulk Documents Upload", 
+      description: "Upload employee docs, forms, and KYC verifications in batches", 
+      path: "/admin/documents/bulk-upload", 
+      color: "bg-rose-50", 
+      iconColor: "text-rose-600", 
+      keywords: ["bulk upload", "import", "mass upload", "files", "kyc", "documents", "batch"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Database, 
+      label: "Document Vault", 
+      description: "Secure central library containing all employee records and letters", 
+      path: "/admin/documents/vault", 
+      color: "bg-sky-50", 
+      iconColor: "text-sky-600", 
+      keywords: ["vault", "storage", "archives", "files", "library", "records", "pdf", "documents"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Shield, 
+      label: "Verification Hub", 
+      description: "Track and approve employee identity proofs, PAN, and Aadhaar compliance", 
+      path: "/admin/compliance", 
+      color: "bg-blue-50", 
+      iconColor: "text-blue-500", 
+      keywords: ["compliance", "verification", "background check", "kyc", "pan", "aadhaar", "audit"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Calendar, 
+      label: "Leave Portal", 
+      description: "Admin overview of leave balance, limits, and request histories", 
+      path: "/leaves/overview", 
+      color: "bg-purple-50", 
+      iconColor: "text-purple-500", 
+      keywords: ["leaves", "leave", "vacation", "holidays", "overview", "balance", "requests"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Clock, 
+      label: "Attendance Overview", 
+      description: "Real-time daily status, clock-in timings, and present staff logging", 
+      path: "/leaves/attendance-overview", 
+      color: "bg-indigo-50", 
+      iconColor: "text-indigo-500", 
+      keywords: ["attendance", "clock in", "punch", "daily logs", "tracking", "records", "present"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Calendar, 
+      label: "Leave Calendar", 
+      description: "Company-wide leave scheduling calendar and timelines", 
+      path: "/leaves/calendar", 
+      color: "bg-teal-50", 
+      iconColor: "text-teal-650", 
+      keywords: ["calendar", "leaves", "schedule", "monthly view", "timeline", "who is out"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: UserCheck, 
+      label: "Who is online", 
+      description: "Live monitoring of currently logged in and active staff", 
+      path: "/leaves/who-is-in", 
+      color: "bg-emerald-50", 
+      iconColor: "text-emerald-550", 
+      keywords: ["online", "active", "who is in", "present", "working", "checked in"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Calendar, 
+      label: "Shift Roaster", 
+      description: "Manage shift schemes, schedules, and timing rotations", 
+      path: "/leaves/shift-roaster", 
+      color: "bg-amber-50", 
+      iconColor: "text-amber-550", 
+      keywords: ["shift", "roster", "schedule", "rotations", "hours", "timings", "work time"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: FileText, 
+      label: "Attendance Muster", 
+      description: "Comprehensive monthly grid sheet of daily work records", 
+      path: "/leaves/attendance-muster", 
+      color: "bg-slate-100", 
+      iconColor: "text-slate-600", 
+      keywords: ["muster", "sheet", "monthly", "grid", "report", "attendance muster", "timesheet"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: CheckCircle2, 
+      label: "Regularization Approvals", 
+      description: "Review, approve, or reject attendance correction punch requests", 
+      path: "/leaves/regularizations", 
+      color: "bg-emerald-50", 
+      iconColor: "text-emerald-650", 
+      keywords: ["regularization", "approvals", "adjustments", "fix punch", "correction", "requests"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: UserCheck, 
+      label: "Leave Granter", 
+      description: "Manually credit, debit, or adjust leave balance configurations", 
+      path: "/leaves/granter", 
+      color: "bg-violet-50", 
+      iconColor: "text-violet-650", 
+      keywords: ["leave granter", "credit", "debit", "adjust", "manual leave", "balance"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Shield, 
+      label: "Scheme Assignment", 
+      description: "Assign shift schemes and attendance policies to staff", 
+      path: "/leaves/assign-scheme", 
+      color: "bg-sky-50", 
+      iconColor: "text-sky-600", 
+      keywords: ["scheme", "assignment", "policies", "rules", "assign shift", "attendance rules"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: History, 
+      label: "Manual Override", 
+      description: "Manually override check-in/out logs for any date", 
+      path: "/leaves/manual-override", 
+      color: "bg-stone-100", 
+      iconColor: "text-stone-600", 
+      keywords: ["manual override", "edit punch", "force punch", "override", "adjust logs"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: CheckCircle2, 
+      label: "Entry/Exit Approvals", 
+      description: "Approve or reject gate entry/exit logs and manual requests", 
+      path: "/leaves/attendance-muster?tab=entry_requests", 
+      color: "bg-rose-50", 
+      iconColor: "text-rose-550", 
+      keywords: ["entry", "exit", "approvals", "gate logs", "requests", "gate request"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Clock, 
+      label: "Shift Overrides", 
+      description: "Customize temporary shift settings for individual employees", 
+      path: "/leaves/shift-override", 
+      color: "bg-indigo-50", 
+      iconColor: "text-indigo-650", 
+      keywords: ["shift overrides", "override shift", "custom shift", "temporary"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Calendar, 
+      label: "Holiday List", 
+      description: "Manage and publish the list of public calendar holidays", 
+      path: "/leaves/holidays", 
+      color: "bg-orange-50", 
+      iconColor: "text-orange-500", 
+      keywords: ["holidays", "public holidays", "festival", "holiday list", "calendar"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Calendar, 
+      label: "Weekend Override Config", 
+      description: "Set default weekly offs, Saturdays, and custom weekends", 
+      path: "/leaves/weekend-override", 
+      color: "bg-red-50", 
+      iconColor: "text-red-550", 
+      keywords: ["weekend", "weekly off", "saturday rules", "sunday", "override weekend"],
+      visible: (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: TrendingUp, 
+      label: "Payroll Dashboard", 
+      description: "Salary cycle, Cost to Company (CTC) summaries, and net pays", 
+      path: "/payroll?tab=overview", 
+      color: "bg-rose-50", 
+      iconColor: "text-rose-550", 
+      keywords: ["payroll", "salary", "ctc", "payouts", "cost", "cycle", "net pay"],
+      visible: enabledFeatures.includes('payroll') && (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Coins, 
+      label: "Pay Register", 
+      description: "Broken-down monthly registers of allowances, basic pay, and ESI/PF", 
+      path: "/payroll?tab=register", 
+      color: "bg-emerald-50", 
+      iconColor: "text-emerald-550", 
+      keywords: ["pay register", "salary slip register", "breakdown", "allowances", "basic salary", "deductions"],
+      visible: enabledFeatures.includes('payroll') && (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: FileText, 
+      label: "Payroll Inputs", 
+      description: "Adjust variable pay, unpaid leaves, incentives, and overtimes", 
+      path: "/payroll?tab=inputs", 
+      color: "bg-amber-50", 
+      iconColor: "text-amber-550", 
+      keywords: ["payroll inputs", "unpaid leaves", "lop", "variable pay", "incentives", "overtime pay"],
+      visible: enabledFeatures.includes('payroll') && (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: UserMinus, 
+      label: "Exit & FNF", 
+      description: "Resignations, full & final settlements, and exit checklists", 
+      path: "/payroll?tab=separations", 
+      color: "bg-slate-100", 
+      iconColor: "text-slate-700", 
+      keywords: ["exit", "fnf", "separations", "resignation", "full and final", "settlement", "relieving"],
+      visible: enabledFeatures.includes('payroll') && (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Calculator, 
+      label: "Statutory Config", 
+      description: "Provident Fund (PF), Employee State Insurance (ESI), and tax systems", 
+      path: "/payroll?tab=global-rules", 
+      color: "bg-blue-50", 
+      iconColor: "text-blue-550", 
+      keywords: ["statutory", "pf", "esi", "provident fund", "tds", "professional tax", "tax settings"],
+      visible: enabledFeatures.includes('payroll') && (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Coins, 
+      label: "Loans & Advances", 
+      description: "Issue salary advances and set up EMI payback models", 
+      path: "/payroll?tab=loans", 
+      color: "bg-purple-50", 
+      iconColor: "text-purple-650", 
+      keywords: ["loans", "advances", "emi", "payback", "borrow", "salary advance"],
+      visible: enabledFeatures.includes('payroll') && (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Briefcase, 
+      label: "Task Management", 
+      description: "Assign goals, checklists, and review KPIs of your team members", 
+      path: "/admin/tasks", 
+      color: "bg-violet-50", 
+      iconColor: "text-violet-500", 
+      keywords: ["tasks", "todo", "assign goal", "checklist", "kpi", "performance goal", "tasks logs"],
+      visible: enabledFeatures.includes('kudos') && (role !== 'employee' && !(role === 'super_admin' && superAdminViewMode === 'platform')) 
+    },
+    { 
+      icon: Settings, 
+      label: "Settings", 
+      description: "Company profile, dynamic branding, custom fields, and configurations", 
+      path: "/settings", 
+      color: "bg-gray-100", 
+      iconColor: "text-gray-655", 
+      keywords: ["settings", "branding", "company profile", "custom fields", "configurations", "theme"],
+      visible: (role === 'company_admin' || (role === 'super_admin' && superAdminViewMode === 'tenant')) 
+    },
+    { 
+      icon: Lock, 
+      label: "Identity Documents", 
+      description: "Secure vault database for storing company licensing files", 
+      path: "/identity-vault", 
+      color: "bg-slate-100", 
+      iconColor: "text-slate-600", 
+      keywords: ["identity", "vault", "passwords", "licensing", "credentials", "corporate vault"],
+      visible: (role === 'super_admin' && superAdminViewMode === 'platform') 
+    },
+    
+    // Employee Specific Pages
+    { 
+      icon: UserCircle, 
+      label: "My Profile", 
+      description: "View and edit your personal information, job history, and banking details", 
+      path: "/profile", 
+      color: "bg-indigo-50", 
+      iconColor: "text-indigo-550", 
+      keywords: ["my profile", "biodata", "job details", "banking details", "personal info", "documents"],
+      visible: (role === 'employee') 
+    },
+    { 
+      icon: Calendar, 
+      label: "My Leaves", 
+      description: "Apply for time off, view holiday calendar, and check balances", 
+      path: "/leaves", 
+      color: "bg-rose-50", 
+      iconColor: "text-rose-550", 
+      keywords: ["my leaves", "apply leave", "sick leave", "casual leave", "balances", "vacation time"],
+      visible: (role === 'employee') 
+    },
+    { 
+      icon: FileText, 
+      label: "My Payslips", 
+      description: "Download monthly payslips and view annual compensation structure", 
+      path: "/payslips", 
+      color: "bg-emerald-50", 
+      iconColor: "text-emerald-555", 
+      keywords: ["payslips", "payslip download", "salary slip", "ctc sheet", "monthly pay"],
+      visible: enabledFeatures.includes('payroll') && (role === 'employee') 
+    },
+    { 
+      icon: Clock, 
+      label: "My Attendance Logs", 
+      description: "View monthly punch logs, regularization status, and shift mappings", 
+      path: "/attendance", 
+      color: "bg-blue-50", 
+      iconColor: "text-blue-550", 
+      keywords: ["my attendance", "punch logs", "work hours", "checkin logs", "regularization request"],
+      visible: (role === 'employee') 
+    },
+    { 
+      icon: TrendingUp, 
+      label: "My Performance", 
+      description: "Monitor KPIs, assigned work tasks, and feedback records", 
+      path: "/analytics", 
+      color: "bg-amber-50", 
+      iconColor: "text-amber-550", 
+      keywords: ["my performance", "kpi", "assigned tasks", "goals", "feedback", "progress chart"],
+      visible: (role === 'employee') 
+    }
+  ];
+
+  const filteredModules = searchQuery.trim() === '' ? [] : searchMenuItems.filter(item => {
+    if (!item.visible) return false;
+    const query = searchQuery.toLowerCase().trim();
+    const matchesLabel = item.label.toLowerCase().includes(query);
+    const matchesDescription = item.description ? item.description.toLowerCase().includes(query) : false;
+    const matchesKeywords = item.keywords ? item.keywords.some(k => k.toLowerCase().includes(query)) : false;
+    return matchesLabel || matchesDescription || matchesKeywords;
+  });
+
+  const hasResults = filteredModules.length > 0 || searchedEmployees.length > 0;
 
   const handleExitImpersonation = () => {
     const originalToken = localStorage.getItem('super_admin_token');
@@ -909,49 +1430,89 @@ const AppShell = ({ children }) => {
 
 
           {/* Search Bar - Desktop */}
-          {role !== 'employee' && (
-            <div className="hidden xl:flex flex-1 max-w-xs xl:max-w-md mx-4 xl:mx-8">
-              <div className="relative w-full group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
-                <input 
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search metrics, employees, or modules... (Ctrl + K)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-11 bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 text-sm font-medium focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 transition-all outline-none"
-                />
-                
-                <AnimatePresence>
-                  {searchQuery.trim() !== '' && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="absolute top-14 left-0 right-0 bg-white rounded-[24px] shadow-2xl border border-slate-100 p-2 z-[70] overflow-hidden"
-                    >
-                      {filteredItems.length > 0 ? (
-                        <div className="space-y-0.5">
-                          {filteredItems.map((item, idx) => (
-                            <AppMenuItem 
-                              key={idx}
-                              {...item}
-                              active={location.pathname === item.path}
-                              onClick={() => setSearchQuery('')}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="p-8 text-center">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">No matches found</p>
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+          <div className="hidden xl:flex flex-1 max-w-xs xl:max-w-md mx-4 xl:mx-8" ref={searchContainerRef}>
+            <div className="relative w-full group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
+              <input 
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search metrics, employees, or modules... (Ctrl + K)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-11 bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-10 text-sm font-medium focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-200 transition-all outline-none"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 transition-colors p-1 hover:bg-slate-100 rounded-full"
+                >
+                  <X size={14} />
+                </button>
+              )}
+              
+              <AnimatePresence>
+                {searchQuery.trim() !== '' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute top-14 left-0 right-0 bg-white/95 backdrop-blur-md rounded-[24px] shadow-2xl border border-slate-100/80 p-2.5 z-[70] max-h-[400px] overflow-y-auto custom-scrollbar"
+                  >
+                    {searching && searchedEmployees.length === 0 && filteredModules.length === 0 ? (
+                      <div className="p-8 text-center flex flex-col items-center justify-center gap-2">
+                        <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Searching...</p>
+                      </div>
+                    ) : hasResults ? (
+                      <div className="space-y-3">
+                        {/* Modules Section */}
+                        {filteredModules.length > 0 && (
+                          <div>
+                            <div className="px-3 py-1 text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                              Modules
+                            </div>
+                            <div className="space-y-0.5">
+                              {filteredModules.map((item, idx) => (
+                                <AppMenuItem 
+                                  key={idx}
+                                  {...item}
+                                  active={location.pathname === item.path}
+                                  onClick={() => setSearchQuery('')}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Employees Section */}
+                        {searchedEmployees.length > 0 && (
+                          <div className={filteredModules.length > 0 ? "border-t border-slate-50 pt-2" : ""}>
+                            <div className="px-3 py-1 text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                              <span>Employees</span>
+                              {searching && <div className="w-3.5 h-3.5 border border-indigo-600 border-t-transparent rounded-full animate-spin" />}
+                            </div>
+                            <div className="space-y-0.5">
+                              {searchedEmployees.map((employee) => (
+                                <EmployeeMenuItem 
+                                  key={employee.id}
+                                  employee={employee}
+                                  onClick={() => setSearchQuery('')}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">No matches found</p>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          )}
+          </div>
 
           <div className="flex items-center gap-3">
             {role === 'super_admin' && (
@@ -1460,101 +2021,55 @@ const AppShell = ({ children }) => {
       />
 
       {/* Global Custom Confirm Modal */}
-      {customConfirm.isOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 font-outfit">
-          <div className="relative w-full max-w-md bg-white border-2 border-black rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-6 border-b-2 border-black bg-indigo-50/30">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-500/10 rounded-xl text-indigo-600">
-                  <Shield size={24} className="stroke-[2.5]" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">{customConfirm.title}</h3>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-650 bg-indigo-100 px-2 py-0.5 rounded-full">Confirmation Required</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  customConfirm.resolve(false);
-                  setCustomConfirm({ isOpen: false, title: '', message: '', resolve: null });
-                }}
-                className="p-2 rounded-xl text-slate-400 hover:text-black hover:bg-slate-50 transition-colors"
-              >
-                <X size={18} className="stroke-[2.5]" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <p className="text-sm font-bold text-slate-500 leading-relaxed text-center">
-                {customConfirm.message}
-              </p>
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    customConfirm.resolve(false);
-                    setCustomConfirm({ isOpen: false, title: '', message: '', resolve: null });
-                  }}
-                  className="flex-1 py-3 border-2 border-black hover:bg-slate-50 text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    customConfirm.resolve(true);
-                    setCustomConfirm({ isOpen: false, title: '', message: '', resolve: null });
-                  }}
-                  className="flex-1 py-3 bg-black hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg"
-                >
-                  Yes, Proceed
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <CustomAlertModal
+        isOpen={customConfirm.isOpen}
+        title={customConfirm.title}
+        message={customConfirm.message}
+        type="confirm"
+        confirmText="Yes, Proceed"
+        cancelText="Cancel"
+        onConfirm={() => {
+          customConfirm.resolve(true);
+        }}
+        onClose={() => {
+          customConfirm.resolve(false);
+          setCustomConfirm({ isOpen: false, title: '', message: '', resolve: null });
+        }}
+      />
 
       {/* Global Custom Alert Modal */}
-      {customAlert.isOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 font-outfit">
-          <div className="relative w-full max-w-md bg-white border-2 border-black rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-6 border-b-2 border-black bg-rose-50/30">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-rose-500/10 rounded-xl text-rose-600">
-                  <Shield size={24} className="stroke-[2.5]" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">{customAlert.title}</h3>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-rose-500 bg-rose-100 px-2 py-0.5 rounded-full">System Alert</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  customAlert.resolve();
-                  setCustomAlert({ isOpen: false, title: '', message: '', resolve: null });
-                }}
-                className="p-2 rounded-xl text-slate-400 hover:text-black hover:bg-slate-50 transition-colors"
-              >
-                <X size={18} className="stroke-[2.5]" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <p className="text-sm font-bold text-slate-500 leading-relaxed text-center">
-                {customAlert.message}
-              </p>
-              <div className="pt-2">
-                <button
-                  onClick={() => {
-                    customAlert.resolve();
-                    setCustomAlert({ isOpen: false, title: '', message: '', resolve: null });
-                  }}
-                  className="w-full py-3 bg-black hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg"
-                >
-                  OK
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <CustomAlertModal
+        isOpen={customAlert.isOpen}
+        title={customAlert.title}
+        message={customAlert.message}
+        type={
+          String(customAlert.message).toLowerCase().includes('success') || 
+          String(customAlert.message).toLowerCase().includes('saved') || 
+          String(customAlert.message).toLowerCase().includes('completed') || 
+          String(customAlert.message).toLowerCase().includes('uploaded') || 
+          String(customAlert.message).toLowerCase().includes('sent') ||
+          String(customAlert.message).toLowerCase().includes('initiated')
+            ? 'success'
+            : String(customAlert.message).toLowerCase().includes('failed') || 
+              String(customAlert.message).toLowerCase().includes('error') || 
+              String(customAlert.message).toLowerCase().includes('invalid') || 
+              String(customAlert.message).toLowerCase().includes('cannot') || 
+              String(customAlert.message).toLowerCase().includes('denied') || 
+              String(customAlert.message).toLowerCase().includes('missing') ||
+              String(customAlert.message).toLowerCase().includes('incorrect')
+            ? 'error'
+            : String(customAlert.message).toLowerCase().includes('warning') || 
+              String(customAlert.message).toLowerCase().includes('caution') || 
+              String(customAlert.message).toLowerCase().includes('attention')
+            ? 'warning'
+            : 'info'
+        }
+        confirmText="OK"
+        onClose={() => {
+          customAlert.resolve?.();
+          setCustomAlert({ isOpen: false, title: '', message: '', resolve: null });
+        }}
+      />
     </div>
   );
 };

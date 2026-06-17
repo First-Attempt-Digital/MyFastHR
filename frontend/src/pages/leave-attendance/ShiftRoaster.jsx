@@ -73,8 +73,55 @@ const ShiftRoaster = () => {
     const [selectedOutlet, setSelectedOutlet] = useState('all');
     const [selectedDesignation, setSelectedDesignation] = useState('All');
 
-    const uniqueLocations = ['all', ...[...new Set(rosterData.map(e => e.location).filter(Boolean))].sort()];
-    const uniqueDesignations = ['All', ...[...new Set(rosterData.map(e => e.designation).filter(Boolean))].sort()];
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Helper to format string to Title Case/capitalize
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
+    const uniqueLocations = React.useMemo(() => {
+        const map = new Map();
+        rosterData.forEach(e => {
+            const val = e.location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [rosterData]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        rosterData.forEach(e => {
+            const val = e.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['All', ...Array.from(map.values()).sort()];
+    }, [rosterData]);
 
     // Shift overriding states
     const [selectedCell, setSelectedCell] = useState(null); // { employee, date, day }
@@ -255,28 +302,28 @@ const ShiftRoaster = () => {
         }
     };
 
-    const filteredRoster = rosterData.filter(emp => {
-        const query = searchQuery.toLowerCase().trim();
-        const searchMatch = query === '' || 
-            `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(query) ||
-            emp.employee_id_number?.toLowerCase().includes(query);
+    const filteredRoster = React.useMemo(() => {
+        return rosterData.filter(emp => {
+            const query = searchQuery.toLowerCase().trim();
+            const searchMatch = query === '' || 
+                `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase().includes(query) ||
+                (emp.employee_id_number || '').toLowerCase().includes(query);
 
-        const categoryMatch = filters.category === 'All' || 
-            String(emp.department_name).toLowerCase() === String(filters.category).toLowerCase() ||
-            String(emp.department_id) === String(filters.category);
+            const categoryMatch = filters.category === 'All' || 
+                matchText(emp.department_name, filters.category) ||
+                String(emp.department_id) === String(filters.category);
 
-        const cycleMatch = filters.cycle === 'All' || 
-            String(emp.scheme_id) === String(filters.cycle) ||
-            String(emp.scheme_name).toLowerCase() === String(filters.cycle).toLowerCase();
+            const cycleMatch = filters.cycle === 'All' || 
+                String(emp.scheme_id) === String(filters.cycle) ||
+                matchText(emp.scheme_name, filters.cycle);
 
-        const outletMatch = selectedOutlet === 'all' || 
-            String(emp.location).toLowerCase() === selectedOutlet.toLowerCase();
+            const outletMatch = matchText(emp.location, selectedOutlet);
 
-        const designationMatch = selectedDesignation === 'All' ||
-            String(emp.designation).toLowerCase() === selectedDesignation.toLowerCase();
+            const designationMatch = matchText(emp.designation, selectedDesignation);
 
-        return searchMatch && categoryMatch && cycleMatch && outletMatch && designationMatch;
-    });
+            return searchMatch && categoryMatch && cycleMatch && outletMatch && designationMatch;
+        });
+    }, [rosterData, searchQuery, filters.category, filters.cycle, selectedOutlet, selectedDesignation]);
 
     return (
         <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6 pb-20">

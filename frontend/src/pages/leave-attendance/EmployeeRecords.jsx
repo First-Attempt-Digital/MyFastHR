@@ -131,40 +131,96 @@ const EmployeeRecords = () => {
         exportToCSV(dataToExport, `Leave_Applications_Log_${new Date().getFullYear()}.csv`, headers);
     };
 
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Helper to format string to Title Case/capitalize
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
     // Unique lists
-    const uniqueOutlets = ['All', ...[...new Set([
-        ...balances.map(b => b.office_location),
-        ...applications.map(a => a.office_location)
-    ].filter(Boolean))].sort()];
+    const uniqueOutlets = React.useMemo(() => {
+        const map = new Map();
+        const check = (val) => {
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        };
+        balances.forEach(b => check(b.office_location));
+        applications.forEach(a => check(a.office_location));
+        return ['All', ...Array.from(map.values()).sort()];
+    }, [balances, applications]);
 
-    const uniqueDepts = ['All', ...[...new Set([
-        ...balances.map(b => b.department_name),
-        ...applications.map(a => a.department_name)
-    ].filter(Boolean))].sort()];
+    const uniqueDepts = React.useMemo(() => {
+        const map = new Map();
+        const check = (val) => {
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        };
+        balances.forEach(b => check(b.department_name || b.department));
+        applications.forEach(a => check(a.department_name || a.department));
+        return ['All', ...Array.from(map.values()).sort()];
+    }, [balances, applications]);
 
-    const uniqueDesignations = ['All', ...[...new Set([
-        ...balances.map(b => b.designation),
-        ...applications.map(a => a.designation)
-    ].filter(Boolean))].sort()];
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        const check = (val) => {
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        };
+        balances.forEach(b => check(b.designation));
+        applications.forEach(a => check(a.designation));
+        return ['All', ...Array.from(map.values()).sort()];
+    }, [balances, applications]);
 
     // Filtered data based on search & outlet & dept & designation
-    const filteredBalances = balances.filter(emp => {
-        const matchesSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (emp.designation && emp.designation.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesOutlet = selectedOutlet === 'All' || emp.office_location === selectedOutlet;
-        const matchesDept = selectedDept === 'All' || emp.department_name === selectedDept;
-        const matchesDesignation = selectedDesignation === 'All' || emp.designation === selectedDesignation;
-        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
-    });
+    const filteredBalances = React.useMemo(() => {
+        return balances.filter(emp => {
+            const matchesSearch = (emp.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (emp.designation && emp.designation.toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesOutlet = matchText(emp.office_location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation, selectedDesignation);
+            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [balances, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
 
-    const filteredApplications = applications.filter(app => {
-        const matchesSearch = `${app.first_name} ${app.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            app.leave_type_name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesOutlet = selectedOutlet === 'All' || app.office_location === selectedOutlet;
-        const matchesDept = selectedDept === 'All' || app.department_name === selectedDept;
-        const matchesDesignation = selectedDesignation === 'All' || app.designation === selectedDesignation;
-        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
-    });
+    const filteredApplications = React.useMemo(() => {
+        return applications.filter(app => {
+            const matchesSearch = `${app.first_name || ''} ${app.last_name || ''}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (app.leave_type_name || '').toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesOutlet = matchText(app.office_location, selectedOutlet);
+            const matchesDept = matchText(app.department_name || app.department, selectedDept);
+            const matchesDesignation = matchText(app.designation, selectedDesignation);
+            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [applications, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
 
     // Approve / Reject Leave Handler
     const handleStatusUpdate = async (id, status) => {

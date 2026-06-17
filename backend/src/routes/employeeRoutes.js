@@ -153,6 +153,7 @@ router.get('/:id', employeeController.getDetail);
 router.put('/:id', employeeController.update);
 router.patch('/:id/fire', employeeController.fire);
 router.patch('/:id/activate', employeeController.activate);
+router.patch('/:id/statutory-settings', employeeController.updateStatutorySettings);
 router.delete('/:id', employeeController.remove);
 router.post('/:id/credentials', authorize(['company_admin', 'manager', 'employee']), employeeController.resetCredentials);
 router.post('/:id/generate-password-token', employeeController.generatePasswordToken);

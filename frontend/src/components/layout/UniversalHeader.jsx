@@ -166,7 +166,7 @@ const UniversalHeader = () => {
               Book Demo
             </button>
             <button onClick={() => navigate('/login')} className="btn-primary px-4 py-1.5 text-xs">
-              Free Trial
+              Login
             </button>
           </div>
 
@@ -194,7 +194,7 @@ const UniversalHeader = () => {
               Book Demo
             </button>
             <button onClick={() => handleDropdownItemClick('/login')} className="btn-primary w-full py-2.5 text-xs">
-              Free Trial
+              Login
             </button>
           </div>
         </div>

@@ -388,6 +388,34 @@ router.post('/bonus-adjustment', payrollController.saveBonusAdjustment);
 router.post('/deduction-adjustment', payrollController.saveDeductionAdjustment);
 
 // Employee Loans & Advances
+router.get('/loans/download-slip/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const db = require('../config/db');
+        const loan = await db('loans').where({ id }).first();
+        if (!loan) {
+            return res.status(404).json({ message: 'Loan record not found' });
+        }
+
+        // If the requester is an employee, verify if they own the loan
+        if (req.user.role_name === 'employee') {
+            if (loan.employee_id !== req.user.employee_id) {
+                return res.status(403).json({ message: 'Access denied: You can only view your own loan slips.' });
+            }
+        }
+
+        const pdfDoc = await payrollService.generateLoanSlipPDF(id, req.company_id || req.user.company_id);
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=loan-slip-${id}.pdf`);
+
+        pdfDoc.pipe(res);
+        pdfDoc.end();
+    } catch (err) {
+        res.status(404).json({ message: err.message });
+    }
+});
+
 router.get('/loans', payrollController.getLoans);
 router.post('/loans', payrollController.createLoan);
 router.post('/loans/:id/status', payrollController.updateLoanStatus);

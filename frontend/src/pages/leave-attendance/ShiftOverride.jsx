@@ -87,9 +87,69 @@ const ShiftManagement = () => {
     const [selectedDept, setSelectedDept] = useState('all');
     const [selectedDesignation, setSelectedDesignation] = useState('all');
 
-    const uniqueLocations = ['all', ...[...new Set(employees.map(e => e.office_location).filter(Boolean))].sort()];
-    const uniqueDepts = ['all', ...[...new Set(employees.map(e => e.department_name).filter(Boolean))].sort()];
-    const uniqueDesignations = ['all', ...[...new Set(employees.map(e => e.designation).filter(Boolean))].sort()];
+    // Helper to perform normalized alphanumeric comparisons for search filters (handles spacing like "F & B" vs "F&B", "Floor   Manager" vs "Floor Manager")
+    const matchText = (val, filterVal) => {
+        if (!filterVal || filterVal.toLowerCase() === 'all') return true;
+        if (!val) return false;
+        const clean = (str) => String(str).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return clean(val) === clean(filterVal);
+    };
+
+    // Helper to format string to Title Case/capitalize
+    const formatLabel = (str) => {
+        if (!str) return '';
+        const trimmed = str.trim();
+        if (!trimmed) return '';
+        return trimmed.split(' ').map(word => {
+            if (!word) return '';
+            if (word.includes('/')) {
+                return word.split('/').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('/');
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        }).join(' ');
+    };
+
+    const uniqueLocations = React.useMemo(() => {
+        const map = new Map();
+        employees.forEach(e => {
+            const val = e.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employees]);
+
+    const uniqueDepts = React.useMemo(() => {
+        const map = new Map();
+        employees.forEach(e => {
+            const val = e.department_name || e.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employees]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        employees.forEach(e => {
+            const val = e.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employees]);
     const [shiftConfig, setShiftConfig] = useState({
         name: '',
         start_time: '09:00',
@@ -319,16 +379,18 @@ const ShiftManagement = () => {
         );
     };
 
-    const filteredEmployees = employees.filter(emp => {
-        const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
-        const search = searchQuery.toLowerCase();
-        const empId = (emp.employee_id_number || '').toLowerCase();
-        const matchesSearch = fullName.includes(search) || empId.includes(search);
-        const matchesOutlet = selectedOutlet === 'all' || emp.office_location === selectedOutlet;
-        const matchesDept = selectedDept === 'all' || emp.department_name === selectedDept;
-        const matchesDesignation = selectedDesignation === 'all' || emp.designation === selectedDesignation;
-        return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
-    });
+    const filteredEmployees = React.useMemo(() => {
+        return employees.filter(emp => {
+            const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+            const search = searchQuery.toLowerCase();
+            const empId = (emp.employee_id_number || '').toLowerCase();
+            const matchesSearch = fullName.includes(search) || empId.includes(search);
+            const matchesOutlet = matchText(emp.office_location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation, selectedDesignation);
+            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
+        });
+    }, [employees, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
 
     const handleExport = () => {
         if (!filteredEmployees || filteredEmployees.length === 0) {
@@ -1137,7 +1199,7 @@ const ShiftManagement = () => {
                                 <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
                                     {editingShiftId ? 'Assign to Employees (Optional)' : 'Select Employees for Assignment'}
                                 </h3>
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-4 flex-wrap">
                                     <select
                                         value={selectedOutlet}
                                         onChange={(e) => setSelectedOutlet(e.target.value)}
@@ -1146,6 +1208,28 @@ const ShiftManagement = () => {
                                         {uniqueLocations.map(loc => (
                                             <option key={loc} value={loc}>
                                                 {loc === 'all' ? 'All Outlets' : loc}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedDept}
+                                        onChange={(e) => setSelectedDept(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-indigo-300 shadow-sm"
+                                    >
+                                        {uniqueDepts.map(dept => (
+                                            <option key={dept} value={dept}>
+                                                {dept === 'all' ? 'All Departments' : dept}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedDesignation}
+                                        onChange={(e) => setSelectedDesignation(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-indigo-300 shadow-sm"
+                                    >
+                                        {uniqueDesignations.map(desg => (
+                                            <option key={desg} value={desg}>
+                                                {desg === 'all' ? 'All Designations' : desg}
                                             </option>
                                         ))}
                                     </select>
@@ -1177,9 +1261,18 @@ const ShiftManagement = () => {
                                             }`}>
                                             {(emp.first_name?.[0] || '')}{(emp.last_name?.[0] || '')}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-black uppercase truncate leading-none mb-1">{emp.first_name} {emp.last_name}</p>
-                                            <p className={`text-[8px] font-bold uppercase tracking-tighter truncate ${selectedEmployees.some(e => e.id === emp.id) ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                        <div className="flex-1 min-w-0 leading-tight">
+                                            <p className="text-[10px] font-black uppercase truncate mb-0.5">{emp.first_name} {emp.last_name}</p>
+                                            <p className={`text-[8px] font-bold uppercase tracking-tighter truncate flex items-center gap-1 flex-wrap mb-0.5 ${selectedEmployees.some(e => e.id === emp.id) ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                                <span>#{emp.employee_id_number || 'N/A'}</span>
+                                                {emp.office_location && (
+                                                    <>
+                                                        <span className="w-0.5 h-0.5 bg-current opacity-40 rounded-full" />
+                                                        <span>{emp.office_location}</span>
+                                                    </>
+                                                )}
+                                            </p>
+                                            <p className={`text-[7.5px] font-black uppercase tracking-wider truncate ${selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-indigo-600'}`}>
                                                 {emp.assigned_shift || 'Available'}
                                             </p>
                                         </div>
@@ -1259,6 +1352,28 @@ const ShiftManagement = () => {
                                             </option>
                                         ))}
                                     </select>
+                                    <select
+                                        value={selectedDept}
+                                        onChange={(e) => setSelectedDept(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                    >
+                                        {uniqueDepts.map(dept => (
+                                            <option key={dept} value={dept}>
+                                                {dept === 'all' ? 'All Departments' : dept}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedDesignation}
+                                        onChange={(e) => setSelectedDesignation(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                    >
+                                        {uniqueDesignations.map(desg => (
+                                            <option key={desg} value={desg}>
+                                                {desg === 'all' ? 'All Designations' : desg}
+                                            </option>
+                                        ))}
+                                    </select>
                                     <div className="relative">
                                         <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                         <input
@@ -1290,9 +1405,18 @@ const ShiftManagement = () => {
                                                     }`}>
                                                     {(emp.first_name?.[0] || '')}{(emp.last_name?.[0] || '')}
                                                 </div>
-                                                <div>
+                                                <div className="leading-tight">
                                                     <p className={`text-[10px] font-black uppercase ${selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-slate-700'}`}>{emp.first_name} {emp.last_name}</p>
-                                                    <p className={`text-[8px] font-bold uppercase tracking-tighter ${selectedEmployees.some(e => e.id === emp.id) ? 'text-slate-400' : 'text-slate-400'}`}>
+                                                    <p className={`text-[8px] font-bold uppercase tracking-tighter flex items-center gap-1 flex-wrap mt-0.5 ${selectedEmployees.some(e => e.id === emp.id) ? 'text-slate-300' : 'text-slate-400'}`}>
+                                                        <span>#{emp.employee_id_number || 'N/A'}</span>
+                                                        {emp.office_location && (
+                                                            <>
+                                                                <span className="w-0.5 h-0.5 bg-current opacity-40 rounded-full" />
+                                                                <span>{emp.office_location}</span>
+                                                            </>
+                                                        )}
+                                                    </p>
+                                                    <p className={`text-[7.5px] font-black uppercase tracking-wider mt-0.5 ${selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-indigo-600'}`}>
                                                         Current: {emp.assigned_shift || 'None'}
                                                     </p>
                                                 </div>

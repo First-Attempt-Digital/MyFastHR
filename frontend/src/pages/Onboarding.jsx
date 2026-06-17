@@ -498,6 +498,7 @@ const Onboarding = () => {
     const [activeOptionManager, setActiveOptionManager] = useState(null); // { field, title }
     const [errors, setErrors] = useState({});
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [globalRules, setGlobalRules] = useState([]);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     
@@ -538,9 +539,10 @@ const Onboarding = () => {
 
         // Step 3: Statutory Info
         pan_number: '',
-        include_pf: false,
-        include_esi: false,
-        include_lwf: false,
+        include_pf: true,
+        include_esi: true,
+        include_lwf: true,
+        include_gratuity: true,
         pf_number: '',
         uan_number: '',
         pf_excess_contribution: 'ceiling', // 'ceiling' or 'above'
@@ -602,6 +604,18 @@ const Onboarding = () => {
         }
     }, [editId]);
 
+    useEffect(() => {
+        const fetchGlobalRules = async () => {
+            try {
+                const res = await api.get('/payroll/global-rules');
+                setGlobalRules(res || []);
+            } catch (err) {
+                console.error('Failed to fetch global rules on onboarding:', err);
+            }
+        };
+        fetchGlobalRules();
+    }, []);
+
     const fetchEmployeeToEdit = async () => {
         try {
             setLoading(true);
@@ -619,7 +633,7 @@ const Onboarding = () => {
                 const empBal = balances.find(b => String(b.id) === String(editId));
                 if (empBal && empBal.balances) {
                     empBal.balances.forEach(b => {
-                        employeeLeaves[b.type_id] = b.allocated;
+                        employeeLeaves[b.type_id] = Number((b.allocated / 12).toFixed(2));
                     });
                 }
             } catch (balErr) {
@@ -648,6 +662,16 @@ const Onboarding = () => {
                 ...prev,
                 ...res,
                 employee_number_series: series,
+                first_name: res.first_name || '',
+                last_name: res.last_name || '',
+                aadhaar_number: res.aadhaar_number || '',
+                email: res.email || '',
+                phone: res.phone || '',
+                emergency_contact_name: res.emergency_contact_name || '',
+                emergency_contact_number: res.emergency_contact_number || '',
+                father_name: res.father_name || '',
+                spouse_name: res.spouse_name || '',
+                mother_name: res.mother_name || '',
                 location: res.office_location || res.location || '',
                 date_of_birth: formatDate(res.date_of_birth),
                 joining_date: formatDate(res.joining_date),
@@ -662,8 +686,20 @@ const Onboarding = () => {
                 department_id: res.department_id || '',
                 shift: res.shift_name || res.shift || '',
                 shift_id: res.shift_id || '',
+                pan_number: res.pan_number || '',
+                include_pf: !!res.include_pf,
+                include_esi: !!res.include_esi,
+                include_lwf: !!res.include_lwf,
+                include_gratuity: !!res.include_gratuity,
+                pf_number: res.pf_number || '',
                 uan_number: res.uan_number || '',
                 pf_excess_contribution: (res.pf_excess_contribution === 'above' || res.pf_excess_contribution === 1 || res.pf_excess_contribution === true) ? 'above' : 'ceiling',
+                esi_number: res.esi_number || '',
+                payment_type: res.payment_type || '',
+                bank_name: res.bank_name || '',
+                bank_branch: res.bank_branch || '',
+                account_number: res.account_number || '',
+                ifsc_code: res.ifsc_code || '',
                 initial_leaves: employeeLeaves,
                 role_name: res.role_name || 'employee'
             }));
@@ -732,7 +768,7 @@ const Onboarding = () => {
                     const leavesInit = { ...prev.initial_leaves };
                     activeLeaves.forEach(lt => {
                         if (leavesInit[lt.id] === undefined) {
-                            leavesInit[lt.id] = lt.days_per_year;
+                            leavesInit[lt.id] = Number((lt.days_per_year / 12).toFixed(2));
                         }
                     });
                     return { ...prev, initial_leaves: leavesInit };
@@ -893,6 +929,11 @@ const Onboarding = () => {
         }
     }, [formData.joining_date, formData.probation_period]);
 
+    const hasPfRule = globalRules.some(r => !!r.is_active && (r.rule_name.toLowerCase().includes('pf') || r.rule_name.toLowerCase().includes('provident')));
+    const hasEsiRule = globalRules.some(r => !!r.is_active && (r.rule_name.toLowerCase().includes('esic') || r.rule_name.toLowerCase().includes('esi') || r.rule_name.toLowerCase().includes('insurance')));
+    const hasLwfRule = globalRules.some(r => !!r.is_active && r.rule_name.toLowerCase().includes('lwf'));
+    const hasGratuityRule = globalRules.some(r => !!r.is_active && r.rule_name.toLowerCase().includes('gratuity'));
+
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         
@@ -1002,9 +1043,18 @@ const Onboarding = () => {
                 return `${year}-${month}-${day}`;
             };
 
+            const submissionLeaves = {};
+            if (formData.initial_leaves) {
+                Object.keys(formData.initial_leaves).forEach(key => {
+                    const monthlyVal = Number(formData.initial_leaves[key]);
+                    submissionLeaves[key] = isNaN(monthlyVal) ? 0 : Number((monthlyVal * 12).toFixed(2));
+                });
+            }
+
             // Mapping fields to what the backend expects
             const submissionData = {
                 ...formData,
+                initial_leaves: submissionLeaves,
                 location: formData.location, 
                 // Add default password for now as existing modal does
                 password: 'Password@123',
@@ -1378,10 +1428,11 @@ const Onboarding = () => {
 
                         <div className="flex flex-wrap gap-12">
                             {[
-                                { label: 'Include PF', name: 'include_pf' },
-                                { label: 'Include ESI', name: 'include_esi' },
-                                { label: 'Include LWF', name: 'include_lwf' },
-                            ].map(cb => (
+                                { label: 'Include PF', name: 'include_pf', show: hasPfRule },
+                                { label: 'Include ESI', name: 'include_esi', show: hasEsiRule },
+                                { label: 'Include LWF', name: 'include_lwf', show: hasLwfRule },
+                                { label: 'Include Gratuity', name: 'include_gratuity', show: hasGratuityRule },
+                            ].filter(cb => cb.show).map(cb => (
                                 <label key={cb.name} className="flex items-center gap-3 cursor-pointer group">
                                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${formData[cb.name] ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
                                         {!!formData[cb.name] && <Check size={12} className="text-white" />}
@@ -1401,12 +1452,12 @@ const Onboarding = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 pt-4">
                             {/* PF Section */}
                             <div className="space-y-6">
-                                {!!formData.include_pf && (
+                                {!!formData.include_pf && hasPfRule && (
                                     <>
                                         <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">PF Number</label>
-                                                {formData.pf_number.length >= 26 && !/^[A-Z0-9]{2}\/[A-Z0-9]{3}\/[0-9]{7}\/[0-9]{3}\/[0-9]{7}$/.test(formData.pf_number) && (
+                                                {(formData.pf_number || '').length >= 26 && !/^[A-Z0-9]{2}\/[A-Z0-9]{3}\/[0-9]{7}\/[0-9]{3}\/[0-9]{7}$/.test(formData.pf_number || '') && (
                                                     <span className="text-[10px] font-bold text-rose-500">Please enter a valid value</span>
                                                 )}
                                             </div>
@@ -1414,9 +1465,9 @@ const Onboarding = () => {
                                                 type="text" 
                                                 name="pf_number" 
                                                 maxLength={26}
-                                                value={formData.pf_number} 
+                                                value={formData.pf_number || ''} 
                                                 onChange={(e) => {
-                                                    let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                                                    let val = (e.target.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
                                                     let formatted = '';
                                                     if (val.length > 0) formatted += val.substring(0, 2);
                                                     if (val.length > 2) formatted += '/' + val.substring(2, 5);
@@ -1427,7 +1478,7 @@ const Onboarding = () => {
                                                 }}
                                                 placeholder="AA/BBB/0000000/000/0000000"
                                                 className={`px-4 py-2 bg-white border rounded text-sm font-mono tracking-wider focus:outline-none transition-all ${
-                                                    formData.pf_number.length >= 26 && !/^[A-Z0-9]{2}\/[A-Z0-9]{3}\/[0-9]{7}\/[0-9]{3}\/[0-9]{7}$/.test(formData.pf_number)
+                                                    (formData.pf_number || '').length >= 26 && !/^[A-Z0-9]{2}\/[A-Z0-9]{3}\/[0-9]{7}\/[0-9]{3}\/[0-9]{7}$/.test(formData.pf_number || '')
                                                     ? 'border-rose-400 bg-rose-50 ring-1 ring-rose-100'
                                                     : 'border-slate-300 focus:border-indigo-400'
                                                 }`}
@@ -1438,7 +1489,7 @@ const Onboarding = () => {
                                         <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">UAN Number</label>
-                                                {formData.uan_number && formData.uan_number.length !== 12 && (
+                                                {formData.uan_number && (formData.uan_number || '').length !== 12 && (
                                                     <span className="text-[10px] font-bold text-rose-500 uppercase tracking-tight">Invalid UAN Number</span>
                                                 )}
                                             </div>
@@ -1446,14 +1497,14 @@ const Onboarding = () => {
                                                 type="text" 
                                                 name="uan_number" 
                                                 maxLength={12}
-                                                value={formData.uan_number} 
+                                                value={formData.uan_number || ''} 
                                                 onChange={(e) => {
-                                                    const val = e.target.value.replace(/\D/g, ''); // Numbers only
+                                                    const val = (e.target.value || '').replace(/\D/g, ''); // Numbers only
                                                     if (val.length <= 12) handleChange({ target: { name: 'uan_number', value: val } });
                                                 }}
                                                 placeholder="12 Digit UAN Number"
                                                 className={`px-4 py-2 bg-white border rounded text-sm focus:outline-none transition-all ${
-                                                    formData.uan_number && formData.uan_number.length !== 12 
+                                                    formData.uan_number && (formData.uan_number || '').length !== 12 
                                                     ? 'border-rose-400 bg-rose-50' 
                                                     : 'border-slate-300 focus:border-indigo-400'
                                                 }`}
@@ -1493,13 +1544,13 @@ const Onboarding = () => {
 
                             {/* ESI Section */}
                             <div className="space-y-6">
-                                {!!formData.include_esi && (
+                                {!!formData.include_esi && hasEsiRule && (
                                     <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                                         <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">ESI Number</label>
                                         <input 
                                             type="text" 
                                             name="esi_number" 
-                                            value={formData.esi_number} 
+                                            value={formData.esi_number || ''} 
                                             onChange={handleChange}
                                             className="px-4 py-2 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-indigo-400"
                                         />
@@ -1591,14 +1642,14 @@ const Onboarding = () => {
                             Specify initial leave entitlements for the employee. Leaving these as-is will assign the company's default active leave rules.
                         </div>
                         {leaveTypes.map(lt => {
-                            const val = formData.initial_leaves?.[lt.id] ?? lt.days_per_year;
+                            const val = formData.initial_leaves?.[lt.id] ?? Number((lt.days_per_year / 12).toFixed(2));
                             return (
                                 <div key={lt.id} className="grid grid-cols-1 md:grid-cols-3 items-center gap-4 py-2 border-b border-slate-100">
                                     <div className="md:col-span-2 flex items-center gap-2">
                                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: lt.color || '#4361ee' }} />
                                         <div>
                                             <h4 className="text-sm font-bold text-slate-800">{lt.name}</h4>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Default: {lt.days_per_year} days per year</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Default: {Number((lt.days_per_year / 12).toFixed(2))} days per month</p>
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-1">

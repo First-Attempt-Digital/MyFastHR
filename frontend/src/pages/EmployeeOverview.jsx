@@ -359,7 +359,7 @@ const EmployeeOverview = () => {
             sparkColor: "#ef4444",
             trend: exitsTrend || "0%",
             sparkData: separationsTrend,
-            path: "/employees"
+            path: "/payroll?tab=separations"
         }
     ];
 

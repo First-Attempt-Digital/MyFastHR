@@ -37,7 +37,7 @@ const syncDatabaseSchema = async () => {
         const columnsToCheck = [
             'father_name', 'mother_name', 'spouse_name', 'pan_number', 'aadhaar_number',
             'bank_name', 'account_number', 'ifsc_code', 'bank_branch', 'dd_payable_at',
-            'uan_number', 'pf_number', 'esi_number', 'include_pf', 'include_esi', 'include_lwf', 'pf_excess_contribution',
+            'uan_number', 'pf_number', 'esi_number', 'include_pf', 'include_esi', 'include_lwf', 'include_gratuity', 'pf_excess_contribution',
             'payment_type', 'probation_period', 'confirmation_date', 'contract_start_date', 'contract_end_date', 'referred_by', 'shift',
             'emergency_contact_name', 'emergency_contact_number', 'emergency_contact_relation', 
             'emergency_email', 'emergency_contact_address', 'emergency_city',
@@ -78,6 +78,7 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('include_pf')) table.boolean('include_pf').defaultTo(false);
                 if (missingColumns.includes('include_esi')) table.boolean('include_esi').defaultTo(false);
                 if (missingColumns.includes('include_lwf')) table.boolean('include_lwf').defaultTo(false);
+                if (missingColumns.includes('include_gratuity')) table.boolean('include_gratuity').defaultTo(false);
                 if (missingColumns.includes('pf_excess_contribution')) table.boolean('pf_excess_contribution').defaultTo(false);
                 
                 if (missingColumns.includes('payment_type')) table.string('payment_type').nullable();

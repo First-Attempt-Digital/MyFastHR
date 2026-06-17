@@ -917,11 +917,13 @@ class AttendanceService {
                         status = '-';
                     } else if (firstLog.punch_source === 'manual' || firstLog.punch_source === 'manual_override') {
                         status = mapDbStatusToFrontend(dbStatus);
-                        if (status === 'P') stats.P++;
+                        if (status === 'P' || status === 'R') stats.P++;
                         else if (status === 'HD') stats.P += 0.5;
                         else if (status === 'L') stats.L++;
                         else if (status === 'E') stats.P++;
                         else if (status === 'A') stats.A++;
+                        else if (status === 'OFF') stats.OFF++;
+                        else if (status === 'H') stats.H++;
                     } else if (dayRegularization || dbStatus === 'regularized' || dbStatus === 'r' || firstLog.punch_source === 'regularization') {
                         status = 'R';
                         stats.P++;
@@ -2627,6 +2629,7 @@ class AttendanceService {
 
         let empQuery = db('employees as e')
             .leftJoin('shifts as s', 'e.shift_id', 's.id')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
             .where({ 'e.company_id': companyId, 'e.status': 'active' });
 
         if (!isAdmin) {
@@ -2641,6 +2644,9 @@ class AttendanceService {
             'e.first_name',
             'e.last_name',
             'e.employee_id_number',
+            'e.office_location',
+            'e.designation',
+            'd.name as department_name',
             's.name as shift_name',
             's.start_time as shift_start',
             's.end_time as shift_end'
@@ -2666,6 +2672,9 @@ class AttendanceService {
                 first_name: emp.first_name,
                 last_name: emp.last_name,
                 employee_id_number: emp.employee_id_number,
+                office_location: emp.office_location,
+                designation: emp.designation,
+                department_name: emp.department_name,
                 shift_name: emp.shift_name,
                 shift_start: emp.shift_start,
                 shift_end: emp.shift_end,
@@ -2723,6 +2732,7 @@ class AttendanceService {
 
         let query = db('attendance_entry_requests as r')
             .join('employees as e', 'r.employee_id', 'e.id')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
             .where('r.company_id', companyId);
 
         if (statusFilter === 'history') {
@@ -2743,7 +2753,11 @@ class AttendanceService {
             'r.*',
             'e.first_name',
             'e.last_name',
-            'e.employee_id_number as employee_code'
+            'e.employee_id_number',
+            'e.employee_id_number as employee_code',
+            'e.office_location',
+            'e.designation',
+            'd.name as department_name'
         ).orderBy('r.created_at', 'desc');
     }
 

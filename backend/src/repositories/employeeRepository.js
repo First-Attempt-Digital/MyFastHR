@@ -50,7 +50,10 @@ class EmployeeRepository {
             'ss.allowances',
             'ss.deductions'
         )
-        .leftJoin('salary_structures as ss', 'e.id', 'ss.employee_id')
+        .leftJoin('salary_structures as ss', function() {
+            this.on('e.id', '=', 'ss.employee_id')
+                .andOn('ss.id', '=', db.raw('(SELECT MAX(id) FROM salary_structures WHERE employee_id = e.id)'));
+        })
         .orderBy('e.created_at', 'desc');
     }
 
@@ -111,6 +114,7 @@ class EmployeeRepository {
             include_esi: cleanBool(data.include_esi),
             esi_number: cleanString(data.esi_number),
             include_lwf: cleanBool(data.include_lwf),
+            include_gratuity: cleanBool(data.include_gratuity),
             payment_type: cleanString(data.payment_type),
             bank_name: cleanString(data.bank_name),
             bank_branch: cleanString(data.bank_branch),

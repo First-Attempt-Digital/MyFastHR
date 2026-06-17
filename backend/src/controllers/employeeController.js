@@ -363,6 +363,15 @@ class EmployeeController {
             res.status(500).json({ message: err.message || 'Internal server error during bulk import' });
         }
     }
+
+    async updateStatutorySettings(req, res) {
+        try {
+            await employeeService.updateStatutorySettings(req.params.id, req.user.company_id, req.body);
+            res.json({ message: 'Statutory settings updated successfully' });
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
 }
 
 module.exports = new EmployeeController();
