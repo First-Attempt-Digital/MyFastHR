@@ -179,6 +179,21 @@ class EmployeeService {
         const { role_name, initial_leaves, ...employeeData } = data;
         
         return await db.transaction(async (trx) => {
+            const currentEmployee = await trx('employees').where({ id, company_id: companyId }).first();
+            if (!currentEmployee) {
+                throw new Error('Employee not found');
+            }
+
+            // If employee_id_number is unchanged, remove it from update payload to prevent duplicate key errors
+            if (employeeData.employee_id_number && currentEmployee.employee_id_number === employeeData.employee_id_number) {
+                delete employeeData.employee_id_number;
+            }
+
+            // If email is unchanged, remove it from update payload to prevent duplicate key errors
+            if (employeeData.email && currentEmployee.email === employeeData.email) {
+                delete employeeData.email;
+            }
+
             const updated = await employeeRepository.update(id, companyId, employeeData, trx);
             
             // Sync user email if it has changed

@@ -1428,10 +1428,10 @@ const Onboarding = () => {
 
                         <div className="flex flex-wrap gap-12">
                             {[
-                                { label: 'Include PF', name: 'include_pf', show: hasPfRule },
-                                { label: 'Include ESI', name: 'include_esi', show: hasEsiRule },
-                                { label: 'Include LWF', name: 'include_lwf', show: hasLwfRule },
-                                { label: 'Include Gratuity', name: 'include_gratuity', show: hasGratuityRule },
+                                { label: 'Include PF', name: 'include_pf', show: true },
+                                { label: 'Include ESI', name: 'include_esi', show: true },
+                                { label: 'Include LWF', name: 'include_lwf', show: true },
+                                { label: 'Include Gratuity', name: 'include_gratuity', show: true },
                             ].filter(cb => cb.show).map(cb => (
                                 <label key={cb.name} className="flex items-center gap-3 cursor-pointer group">
                                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${formData[cb.name] ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
@@ -1452,7 +1452,7 @@ const Onboarding = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 pt-4">
                             {/* PF Section */}
                             <div className="space-y-6">
-                                {!!formData.include_pf && hasPfRule && (
+                                {!!formData.include_pf && (
                                     <>
                                         <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                                             <div className="flex items-center justify-between">
@@ -1544,7 +1544,7 @@ const Onboarding = () => {
 
                             {/* ESI Section */}
                             <div className="space-y-6">
-                                {!!formData.include_esi && hasEsiRule && (
+                                {!!formData.include_esi && (
                                     <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                                         <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">ESI Number</label>
                                         <input 
