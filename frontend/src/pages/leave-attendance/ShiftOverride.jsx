@@ -440,8 +440,18 @@ const ShiftManagement = () => {
                                 >
                                     <Info size={12} className={showRules ? 'animate-pulse' : ''} />
                                 </button>
-                                <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-2 bg-slate-900 text-white text-[9px] rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-normal z-50 text-center">
-                                    {showRules ? 'Hide Shift Guidelines / नियम छुपाएं' : 'Show Shift Guidelines / नियम देखें'}
+                                <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-80 p-3 bg-slate-900 text-white text-[9px] rounded-xl shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-relaxed z-50 text-left">
+                                    <span className="block font-black text-indigo-400 mb-1 text-center">
+                                        {showRules ? 'Hide Shift Guidelines / नियम छुपाएं' : 'Show Shift Guidelines / नियम देखें'}
+                                    </span>
+                                    <div className="space-y-1.5 mt-1.5 border-t border-slate-800 pt-1.5 text-slate-300">
+                                        <div>
+                                            <strong className="text-white">EN:</strong> Toggle shift policy guidelines. In-time check-ins inside grace period mark Present; later check-ins trigger Late In. Less than Half Day hours = Absent. First punch within last 2 hours of shift = NC (Zero Check-In).
+                                        </div>
+                                        <div className="border-t border-slate-800/60 pt-1.5 mt-1.5">
+                                            <strong className="text-white">HI:</strong> शिफ्ट पॉलिसी दिशानिर्देश देखें/छिपाएं। ग्रेस पीरियड में चेक-इन करने पर प्रेजेंट मार्क होगा, बाद में लेट इन। हाफ-डे से कम काम करने पर Absent। शिफ्ट खत्म होने के आखिरी 2 घंटे में सीधे पहला पंच करने पर NC (Zero Check-In) मार्क होगा।
+                                        </div>
+                                    </div>
                                 </span>
                             </div>
                         </h1>
@@ -554,7 +564,7 @@ const ShiftManagement = () => {
                                             </h4>
                                             <p className="text-slate-500 leading-relaxed font-bold">
                                                 Employees checking in inside the <span className="text-slate-700 font-extrabold">Grace Period</span> (e.g. 15 mins) are marked Present directly. Punching after the grace limit triggers a <span className="text-indigo-600 bg-indigo-50 px-1 rounded font-extrabold">Late Mark</span> which requires manager regularization.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(ग्रेस पीरियड (जैसे 15 मिनट) के भीतर आने पर प्रेजेंट मार्क होगी। लेट आने पर सुधार अनुरोध जनरेट होगा।)</span>
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(ग्रेस पीरियड (जैसे 15 मिनट) के भीतर आने पर प्रेजेंट मार्क किया जाएगा। लेट आने पर लेट मार्क लगेगा, जिसे मैनेजर द्वारा नियमित (regularize) करना होगा।)</span>
                                             </p>
                                         </div>
                                         <div>
@@ -563,7 +573,7 @@ const ShiftManagement = () => {
                                             </h4>
                                             <p className="text-slate-500 leading-relaxed font-bold">
                                                 Calculated automatically: Under <span className="text-rose-600 bg-rose-50 px-1 rounded font-extrabold">Half Day Minimum Hours</span> = Absent (checkouts before this do not trigger early-out approval requests). Early-out requests are only generated if punching out after completing half-day hours but before full shift.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(हाफ-डे से कम समय पर Absent मार्क होगा और कोई रिक्वेस्ट जनरेट नहीं होगी। हाफ-डे पूरा होने के बाद ही जल्दी जाने पर अर्ली-आउट रिक्वेस्ट भेजी जाएगी।)</span>
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(हाफ-डे से कम समय काम करने पर Absent मार्क किया जाएगा और कोई रिक्वेस्ट जनरेट नहीं होगी। हाफ-डे का समय पूरा होने के बाद और शिफ्ट खत्म होने से पहले जाने पर ही अर्ली-आउट रिक्वेस्ट जनरेट होगी।)</span>
                                             </p>
                                         </div>
                                         <div>
@@ -572,7 +582,7 @@ const ShiftManagement = () => {
                                             </h4>
                                             <p className="text-slate-500 leading-relaxed font-bold">
                                                 If an employee punches for the first time within 2 hours of shift end or later, it is marked as <span className="text-rose-600 bg-rose-50 px-1 rounded font-extrabold">NC (Checkout Attempt - Zero Check-In)</span> instead of a late check-in.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(यदि कर्मचारी बिना सुबह के पंच के सीधे छुट्टी के अंतिम 2 घंटे या उसके बाद पहला पंच करता है, तो इसे NC (Zero Check-In) मार्क किया जाता है।)</span>
+                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(यदि कोई कर्मचारी बिना सुबह के पंच (Check-in) के सीधे शिफ्ट खत्म होने के अंतिम 2 घंटे या उसके बाद पहला पंच करता है, तो इसे लेट चेक-इन के बजाय NC (Checkout Attempt - Zero Check-In) मार्क किया जाता है।)</span>
                                             </p>
                                         </div>
                                     </div>
