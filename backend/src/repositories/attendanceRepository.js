@@ -133,6 +133,7 @@ class AttendanceRepository {
                 'shifts.session2_out_margin as shift_session2_out_margin',
                 'attendance_schemes.grace_period as scheme_grace',
                 'attendance_schemes.weekoffs as scheme_weekoffs',
+                'shifts.terminate_hour as terminate_hour',
                 'employees.joining_date',
                 'employees.resignation_date'
             );
