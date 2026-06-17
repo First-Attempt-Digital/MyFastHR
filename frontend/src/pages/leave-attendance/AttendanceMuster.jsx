@@ -1379,7 +1379,11 @@ const AttendanceMuster = () => {
                                                                 <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl space-y-1">
                                                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Check Out</span>
                                                                     <h4 className="text-xs font-black text-slate-800">
-                                                                        {log.check_out ? new Date(log.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'}
+                                                                        {log.check_out_text 
+                                                                            ? log.check_out_text 
+                                                                            : (log.check_out 
+                                                                                ? new Date(log.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) 
+                                                                                : '--:--')}
                                                                     </h4>
                                                                     <p className="text-[8px] font-bold text-slate-400 leading-none mt-1">Device: {log.device_id || 'N/A'}</p>
                                                                 </div>
@@ -1438,7 +1442,11 @@ const AttendanceMuster = () => {
                                                     <div className="bg-slate-50/50 border border-slate-200/60 p-4 rounded-2xl space-y-2">
                                                         <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Punch Out</span>
                                                         <h4 className="text-lg font-black text-slate-800 leading-tight">
-                                                            {modalData.attendance.check_out ? new Date(modalData.attendance.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'}
+                                                            {modalData.attendance.check_out_text 
+                                                                ? modalData.attendance.check_out_text 
+                                                                : (modalData.attendance.check_out 
+                                                                    ? new Date(modalData.attendance.check_out).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) 
+                                                                    : '--:--')}
                                                         </h4>
                                                         <p className="text-[9px] font-bold text-slate-400 leading-none">Device: {modalData.attendance.device_id || 'N/A'}</p>
                                                     </div>

@@ -140,7 +140,22 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                 s1Present = true;
                 s1PunchText = `S1: ${s1Late ? 'Late' : 'On-Time'} (${safeFormatTime(s1Log.check_in)} - ${safeFormatTime(s1Log.check_out)})`;
             } else {
-                s1PunchText = `S1: No Out (${safeFormatTime(s1Log.check_in)} - --:--)`;
+                let isS1Terminated = false;
+                if (shift.terminate_hour) {
+                    const checkInDateStr = toLocalYMD(dbDateToUTC(s1Log.check_in));
+                    const [sHours, sMins] = (shift.start_time || '09:00').split(':').map(Number);
+                    const [eHours, eMins] = (shift.end_time || '13:00').split(':').map(Number);
+                    const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                    let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                    if (shiftEndDate < shiftStartDate) {
+                        shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                    }
+                    const terminationDate = new Date(shiftEndDate.getTime() + parseInt(shift.terminate_hour) * 60 * 60 * 1000);
+                    if (new Date() > terminationDate) {
+                        isS1Terminated = true;
+                    }
+                }
+                s1PunchText = `S1: ${isS1Terminated ? 'Terminated (No Out)' : 'No Out'} (${safeFormatTime(s1Log.check_in)} - --:--)`;
             }
         }
 
@@ -160,7 +175,22 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                 s2Present = true;
                 s2PunchText = `S2: ${s2Late ? 'Late' : 'On-Time'} (${safeFormatTime(s2Log.check_in)} - ${safeFormatTime(s2Log.check_out)})`;
             } else {
-                s2PunchText = `S2: No Out (${safeFormatTime(s2Log.check_in)} - --:--)`;
+                let isS2Terminated = false;
+                if (shift.terminate_hour) {
+                    const checkInDateStr = toLocalYMD(dbDateToUTC(s2Log.check_in));
+                    const [sHours, sMins] = (shift.session2_start_time || '14:00').split(':').map(Number);
+                    const [eHours, eMins] = (shift.session2_end_time || '18:00').split(':').map(Number);
+                    const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                    let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                    if (shiftEndDate < shiftStartDate) {
+                        shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                    }
+                    const terminationDate = new Date(shiftEndDate.getTime() + parseInt(shift.terminate_hour) * 60 * 60 * 1000);
+                    if (new Date() > terminationDate) {
+                        isS2Terminated = true;
+                    }
+                }
+                s2PunchText = `S2: ${isS2Terminated ? 'Terminated (No Out)' : 'No Out'} (${safeFormatTime(s2Log.check_in)} - --:--)`;
             }
         }
 
@@ -216,7 +246,29 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
             const todayYMD = new Date().toLocaleDateString('sv-SE', options);
             const isToday = (checkInYMD === todayYMD);
 
-            if (isToday) {
+            let isTerminated = false;
+            if (shift.terminate_hour) {
+                const checkInDateStr = toLocalYMD(dbDateToUTC(log.check_in));
+                const [sHours, sMins] = (shift.start_time || '09:00').split(':').map(Number);
+                const [eHours, eMins] = (shift.end_time || '18:00').split(':').map(Number);
+                const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                if (shiftEndDate < shiftStartDate) {
+                    shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                }
+                const terminationDate = new Date(shiftEndDate.getTime() + parseInt(shift.terminate_hour) * 60 * 60 * 1000);
+                if (new Date() > terminationDate) {
+                    isTerminated = true;
+                }
+            }
+
+            if (isTerminated) {
+                return {
+                    status: 'A',
+                    explanation: `S1: Terminated (No Out) (${safeFormatTime(log.check_in)} - --:--)`,
+                    punch_count: 1
+                };
+            } else if (isToday) {
                 return {
                     status: 'CI',
                     explanation: `S1: Checked In (${isLate ? 'Late' : 'On-Time'}) (${safeFormatTime(log.check_in)} - --:--)`,
@@ -273,6 +325,7 @@ class AttendanceService {
                 'shifts.session1_grace_out',
                 'shifts.session2_grace_in',
                 'shifts.session2_grace_out',
+                'shifts.terminate_hour',
                 'attendance_schemes.grace_period as scheme_grace',
                 'attendance_schemes.max_late_allowed'
             )
@@ -313,7 +366,8 @@ class AttendanceService {
                     's.session2_out_margin',
                     's.session1_grace_out',
                     's.session2_grace_in',
-                    's.session2_grace_out'
+                    's.session2_grace_out',
+                    's.terminate_hour'
                 )
                 .orderBy('esa.id', 'desc')
                 .first();
@@ -334,6 +388,7 @@ class AttendanceService {
                 employee.session1_grace_out = activeAssignment.session1_grace_out;
                 employee.session2_grace_in = activeAssignment.session2_grace_in;
                 employee.session2_grace_out = activeAssignment.session2_grace_out;
+                employee.terminate_hour = activeAssignment.terminate_hour;
             }
         }
 
@@ -552,7 +607,8 @@ class AttendanceService {
                 'shifts.session2_in_margin',
                 'shifts.session2_out_margin',
                 'shifts.session2_grace_in',
-                'shifts.session2_grace_out'
+                'shifts.session2_grace_out',
+                'shifts.terminate_hour'
             )
             .first();
 
@@ -583,7 +639,8 @@ class AttendanceService {
                     's.session2_in_margin',
                     's.session2_out_margin',
                     's.session2_grace_in',
-                    's.session2_grace_out'
+                    's.session2_grace_out',
+                    's.terminate_hour'
                 )
                 .orderBy('esa.id', 'desc')
                 .first();
@@ -602,6 +659,7 @@ class AttendanceService {
                 employee.session2_out_margin = activeAssignment.session2_out_margin;
                 employee.session2_grace_in = activeAssignment.session2_grace_in;
                 employee.session2_grace_out = activeAssignment.session2_grace_out;
+                employee.terminate_hour = activeAssignment.terminate_hour;
             }
         }
 
@@ -628,6 +686,26 @@ class AttendanceService {
             employee.shift_in_margin = employee.session2_in_margin !== undefined ? employee.session2_in_margin : 30;
             employee.shift_out_margin = employee.session2_out_margin !== undefined ? employee.session2_out_margin : 0;
             employee.shift_grace = employee.session2_grace_in !== undefined ? employee.session2_grace_in : 15;
+        }
+
+        // Shift Terminate Hour check
+        if (employee && employee.terminate_hour) {
+            const checkInDateStr = toLocalYMD(dbDateToUTC(activeEntry.check_in));
+            const shiftStartStr = employee.start_time || '09:00';
+            const shiftEndStr = employee.end_time || '18:00';
+            
+            const [sHours, sMins] = shiftStartStr.split(':').map(Number);
+            const [eHours, eMins] = shiftEndStr.split(':').map(Number);
+            const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+            let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+            if (shiftEndDate < shiftStartDate) {
+                shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+            }
+            
+            const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employee.terminate_hour) * 60 * 60 * 1000);
+            if (now > terminationTime) {
+                throw new Error('PUNCH_BLOCKED: Shift has terminated. Punch out is not allowed after the shift termination limit.');
+            }
         }
 
         // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
@@ -2073,6 +2151,7 @@ class AttendanceService {
                 's.session1_out_margin as default_shift_session1_out_margin',
                 's.session2_in_margin as default_shift_session2_in_margin',
                 's.session2_out_margin as default_shift_session2_out_margin',
+                's.terminate_hour as default_shift_terminate_hour',
                 'asch.weekoffs as scheme_weekoffs'
             )
             .first();
@@ -2182,7 +2261,8 @@ class AttendanceService {
                 's.name', 's.start_time', 's.end_time', 's.total_punches_required',
                 's.session2_start_time', 's.session2_end_time', 's.grace_period',
                 's.session1_grace_out', 's.session2_grace_in', 's.session2_grace_out',
-                's.session1_in_margin', 's.session1_out_margin', 's.session2_in_margin', 's.session2_out_margin'
+                's.session1_in_margin', 's.session1_out_margin', 's.session2_in_margin', 's.session2_out_margin',
+                's.terminate_hour'
             )
             .orderBy('esa.id', 'desc')
             .first();
@@ -2201,8 +2281,82 @@ class AttendanceService {
             session1_in_margin: emp.default_shift_session1_in_margin || 0,
             session1_out_margin: emp.default_shift_session1_out_margin || 0,
             session2_in_margin: emp.default_shift_session2_in_margin || 0,
-            session2_out_margin: emp.default_shift_session2_out_margin || 0
+            session2_out_margin: emp.default_shift_session2_out_margin || 0,
+            terminate_hour: emp.default_shift_terminate_hour || null
         };
+
+        let attendanceCheckOutText = null;
+        if (attendance && attendance.check_in && !attendance.check_out && activeShift.terminate_hour) {
+            const reqPunches = parseInt(activeShift.total_punches_required || 2);
+            const finalEndStr = (reqPunches === 4) 
+                ? (activeShift.session2_end_time || activeShift.end_time || '18:00') 
+                : (activeShift.end_time || '18:00');
+            const [eHours, eMins] = finalEndStr.split(':').map(Number);
+            const checkInDateStr = toLocalYMD(dbDateToUTC(attendance.check_in));
+            const [sHours, sMins] = (activeShift.start_time || '09:00').split(':').map(Number);
+            
+            const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+            let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+            if (shiftEndDate < shiftStartDate) {
+                shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+            }
+            const terminationDate = new Date(shiftEndDate.getTime() + parseInt(activeShift.terminate_hour) * 60 * 60 * 1000);
+            if (new Date() > terminationDate) {
+                attendanceCheckOutText = 'Shift Terminated - No Punch Out Done';
+            }
+        }
+
+        const formattedLogs = attendanceLogs.map((log, idx) => {
+            let logCheckOutText = null;
+            if (log.check_in && !log.check_out && activeShift.terminate_hour) {
+                const reqPunches = parseInt(activeShift.total_punches_required || 2);
+                let sessionEndTimeStr = activeShift.end_time || '18:00';
+                if (reqPunches === 4) {
+                    const checkInTime = dbDateToUTC(log.check_in);
+                    const checkInMins = dateToISTMins(checkInTime);
+                    const s2StartStr = activeShift.session2_start_time || '14:00';
+                    const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
+                    const s2StartMins = s2Hours * 60 + s2Mins;
+                    const s2InMargin = parseInt(activeShift.session2_in_margin || 30);
+                    const session2CutoffMins = s2StartMins - s2InMargin;
+                    
+                    if (checkInMins >= session2CutoffMins) {
+                        sessionEndTimeStr = activeShift.session2_end_time || '18:00';
+                    }
+                }
+                
+                const [eHours, eMins] = sessionEndTimeStr.split(':').map(Number);
+                const checkInDateStr = toLocalYMD(dbDateToUTC(log.check_in));
+                const shiftStartStr = activeShift.start_time || '09:00';
+                const [sHours, sMins] = shiftStartStr.split(':').map(Number);
+                const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                if (shiftEndDate < shiftStartDate) {
+                    shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                }
+                const terminationDate = new Date(shiftEndDate.getTime() + parseInt(activeShift.terminate_hour) * 60 * 60 * 1000);
+                if (new Date() > terminationDate) {
+                    logCheckOutText = 'Shift Terminated - No Punch Out Done';
+                }
+            }
+            return {
+                id: log.id,
+                check_in: log.check_in,
+                check_out: log.check_out,
+                check_out_text: logCheckOutText,
+                status: log.status,
+                punch_source: log.punch_source,
+                device_id: log.device_id,
+                latitude: log.latitude,
+                longitude: log.longitude,
+                punch_location: log.punch_location,
+                remarks: log.remarks,
+                out_latitude: log.out_latitude,
+                out_longitude: log.out_longitude,
+                out_punch_location: log.out_punch_location,
+                out_remarks: log.out_remarks
+            };
+        });
 
         let splitShiftDetails = null;
         if (attendanceLogs.length > 0) {
@@ -2225,11 +2379,12 @@ class AttendanceService {
             is_weekoff: isStandardWeekoff,
             active_shift: activeShift,
             split_shift_details: splitShiftDetails,
-            attendance_logs: attendanceLogs,
+            attendance_logs: formattedLogs,
             attendance: attendance ? {
                 id: attendance.id,
                 check_in: attendance.check_in,
                 check_out: attendance.check_out,
+                check_out_text: attendanceCheckOutText,
                 status: splitShiftDetails ? splitShiftDetails.status : attendance.status,
                 punch_source: attendance.punch_source,
                 device_id: attendance.device_id,

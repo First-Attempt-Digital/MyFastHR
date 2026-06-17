@@ -294,6 +294,7 @@ class MachineAttendanceService {
                     'shifts.session1_grace_out',
                     'shifts.session2_grace_in',
                     'shifts.session2_grace_out',
+                    'shifts.terminate_hour as shift_terminate_hour',
                     'attendance_schemes.grace_period as scheme_grace',
                     'attendance_schemes.max_late_allowed',
                     'attendance_schemes.half_day_hours as scheme_half_day_hours'
@@ -328,7 +329,8 @@ class MachineAttendanceService {
                         's.session2_out_margin',
                         's.session1_grace_out',
                         's.session2_grace_in',
-                        's.session2_grace_out'
+                        's.session2_grace_out',
+                        's.terminate_hour as shift_terminate_hour'
                     )
                     .orderBy('esa.id', 'desc')
                     .first();
@@ -349,6 +351,7 @@ class MachineAttendanceService {
                     employeeWithShift.session1_grace_out = activeAssignment.session1_grace_out;
                     employeeWithShift.session2_grace_in = activeAssignment.session2_grace_in;
                     employeeWithShift.session2_grace_out = activeAssignment.session2_grace_out;
+                    employeeWithShift.shift_terminate_hour = activeAssignment.shift_terminate_hour;
                 }
             }
 
@@ -617,6 +620,34 @@ class MachineAttendanceService {
                         error_details: 'Punch ignored: already checked out of Session 1 and before Session 2 margin'
                     });
                     return { status: 'skipped', reason: 'Punch ignored: between Session 1 and Session 2' };
+                }
+
+                // Shift Terminate Hour check
+                if (employeeWithShift && employeeWithShift.shift_terminate_hour) {
+                    const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
+                    const shiftStartStr = employeeWithShift.shift_start || '09:00';
+                    const shiftEndStr = employeeWithShift.shift_end || '18:00';
+                    
+                    const [sHours, sMins] = shiftStartStr.split(':').map(Number);
+                    const [eHours, eMins] = shiftEndStr.split(':').map(Number);
+                    const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                    let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                    if (shiftEndDate < shiftStartDate) {
+                        shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                    }
+                    
+                    const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employeeWithShift.shift_terminate_hour) * 60 * 60 * 1000);
+                    if (punchTime > terminationTime) {
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'skipped',
+                            error_details: 'Punch ignored: shift has terminated (checkout window expired)'
+                        });
+                        return { status: 'skipped', reason: 'Shift terminated' };
+                    }
                 }
 
                 const currentCheckIn = dbDateToUTC(activeLog.check_in);
