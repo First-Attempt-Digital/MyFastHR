@@ -59,28 +59,32 @@ class EmployeeRepository {
 
     _mapEmployeeData(data) {
         const cleanInt = (val) => {
-            if (val === undefined || val === null || val === '') return null;
+            if (val === undefined) return undefined;
+            if (val === null || val === '') return null;
             const parsed = parseInt(val);
             return isNaN(parsed) ? null : parsed;
         };
 
         const cleanString = (val) => {
-            if (val === undefined || val === null) return null;
+            if (val === undefined) return undefined;
+            if (val === null) return null;
             const trimmed = String(val).trim();
             return trimmed === '' ? null : trimmed;
         };
 
         const cleanDate = (val) => {
+            if (val === undefined) return undefined;
             if (!val || val === '' || val === '0000-00-00' || String(val).includes('1899')) return null;
             return val;
         };
 
         const cleanBool = (val) => {
+            if (val === undefined) return undefined;
             if (val === true || val === 'true' || val === 1 || val === '1' || val === 'Yes') return 1;
             return 0;
         };
 
-        return {
+        const result = {
             user_id: cleanInt(data.user_id),
             company_id: cleanInt(data.company_id),
             employee_id_number: cleanString(data.employee_id_number),
@@ -130,6 +134,15 @@ class EmployeeRepository {
             onboarding_status: cleanString(data.onboarding_status),
             onboarding_token_created_at: cleanDate(data.onboarding_token_created_at)
         };
+
+        // Remove undefined keys so Knex doesn't update them
+        Object.keys(result).forEach(key => {
+            if (result[key] === undefined) {
+                delete result[key];
+            }
+        });
+
+        return result;
     }
 
     async create(data, trx = null) {
