@@ -75,6 +75,12 @@ class EmployeeRepository {
         const cleanDate = (val) => {
             if (val === undefined) return undefined;
             if (!val || val === '' || val === '0000-00-00' || String(val).includes('1899')) return null;
+            if (typeof val === 'string' && val.includes('T')) {
+                const parts = val.split('T');
+                const datePart = parts[0];
+                const timePart = parts[1].split('.')[0].split('Z')[0];
+                return `${datePart} ${timePart}`;
+            }
             return val;
         };
 
