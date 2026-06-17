@@ -4,7 +4,7 @@ import {
     Calendar, Users, Clock, Search, Filter, Download, 
     ArrowRight, UserCheck, AlertCircle, ChevronDown, 
     ChevronLeft, ChevronRight, FileText, CheckCircle, 
-    XCircle, HelpCircle, Star, MapPin
+    XCircle, HelpCircle, Star, MapPin, Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../utils/api';
