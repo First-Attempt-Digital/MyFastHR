@@ -143,8 +143,8 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                 let isS1Terminated = false;
                 if (shift.terminate_hour) {
                     const checkInDateStr = toLocalYMD(dbDateToUTC(s1Log.check_in));
-                    const [sHours, sMins] = (shift.start_time || '09:00').split(':').map(Number);
-                    const [eHours, eMins] = (shift.end_time || '13:00').split(':').map(Number);
+                    const [sHours, sMins] = (shift.start_time || shift.shift_start || '09:00').split(':').map(Number);
+                    const [eHours, eMins] = (shift.end_time || shift.shift_end || '13:00').split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
                     let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
                     if (shiftEndDate < shiftStartDate) {
@@ -178,8 +178,8 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                 let isS2Terminated = false;
                 if (shift.terminate_hour) {
                     const checkInDateStr = toLocalYMD(dbDateToUTC(s2Log.check_in));
-                    const [sHours, sMins] = (shift.session2_start_time || '14:00').split(':').map(Number);
-                    const [eHours, eMins] = (shift.session2_end_time || '18:00').split(':').map(Number);
+                    const [sHours, sMins] = (shift.session2_start_time || shift.shift_session2_start || '14:00').split(':').map(Number);
+                    const [eHours, eMins] = (shift.session2_end_time || shift.shift_session2_end || '18:00').split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
                     let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
                     if (shiftEndDate < shiftStartDate) {
@@ -249,8 +249,8 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
             let isTerminated = false;
             if (shift.terminate_hour) {
                 const checkInDateStr = toLocalYMD(dbDateToUTC(log.check_in));
-                const [sHours, sMins] = (shift.start_time || '09:00').split(':').map(Number);
-                const [eHours, eMins] = (shift.end_time || '18:00').split(':').map(Number);
+                const [sHours, sMins] = (shift.start_time || shift.shift_start || '09:00').split(':').map(Number);
+                const [eHours, eMins] = (shift.end_time || shift.shift_end || '18:00').split(':').map(Number);
                 const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
                 let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
                 if (shiftEndDate < shiftStartDate) {
