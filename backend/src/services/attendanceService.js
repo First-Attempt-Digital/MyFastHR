@@ -1811,7 +1811,8 @@ class AttendanceService {
             name, start_time, end_time, grace_period, grace_count_limit, is_night_shift, is_flexi, min_hours,
             total_punches_required, session2_start_time, session2_end_time,
             session1_grace_out, session2_grace_in, session2_grace_out,
-            session1_in_margin, session1_out_margin, session2_in_margin, session2_out_margin
+            session1_in_margin, session1_out_margin, session2_in_margin, session2_out_margin,
+            terminate_hour
         } = data;
 
         // For flexi shifts, start/end time are optional (informational only)
@@ -1842,6 +1843,7 @@ class AttendanceService {
             session1_out_margin: session1_out_margin !== undefined ? parseInt(session1_out_margin) : 0,
             session2_in_margin: session2_in_margin !== undefined ? parseInt(session2_in_margin) : 0,
             session2_out_margin: session2_out_margin !== undefined ? parseInt(session2_out_margin) : 0,
+            terminate_hour: terminate_hour !== undefined && terminate_hour !== null && terminate_hour !== '' ? parseInt(terminate_hour) : null,
             created_at: db.fn.now(),
             updated_at: db.fn.now()
         });
@@ -1854,7 +1856,8 @@ class AttendanceService {
             name, start_time, end_time, grace_period, grace_count_limit, is_night_shift, is_flexi, min_hours,
             total_punches_required, session2_start_time, session2_end_time,
             session1_grace_out, session2_grace_in, session2_grace_out,
-            session1_in_margin, session1_out_margin, session2_in_margin, session2_out_margin
+            session1_in_margin, session1_out_margin, session2_in_margin, session2_out_margin,
+            terminate_hour
         } = data;
 
         if (!id) {
@@ -1882,6 +1885,7 @@ class AttendanceService {
                 session1_out_margin: session1_out_margin !== undefined ? parseInt(session1_out_margin) : 0,
                 session2_in_margin: session2_in_margin !== undefined ? parseInt(session2_in_margin) : 0,
                 session2_out_margin: session2_out_margin !== undefined ? parseInt(session2_out_margin) : 0,
+                terminate_hour: terminate_hour !== undefined && terminate_hour !== null && terminate_hour !== '' ? parseInt(terminate_hour) : null,
                 updated_at: db.fn.now()
             });
 
