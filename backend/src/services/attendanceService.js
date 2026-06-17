@@ -2370,6 +2370,48 @@ class AttendanceService {
             }
         }
 
+        // 9b. Fetch all raw biometric logs
+        const biometricMapping = await db('employee_biometric_mapping')
+            .where({ employee_id: employeeId, company_id: companyId })
+            .select('biometric_enroll_id');
+        const enrollIds = biometricMapping.map(m => m.biometric_enroll_id);
+        enrollIds.push(emp.employee_id_number);
+        if (emp.employee_id_number && emp.employee_id_number.startsWith('0')) {
+            enrollIds.push(emp.employee_id_number.replace(/^0+/, ''));
+        }
+
+        const rawBiometricLogs = await db('biometric_raw_logs')
+            .where({ company_id: companyId })
+            .whereIn('employee_code', enrollIds)
+            .whereRaw('DATE(punch_time) = ?', [dateStr])
+            .orderBy('punch_time', 'asc');
+
+        // 9c. Fetch all entry requests
+        const entryRequests = await db('attendance_entry_requests as er')
+            .leftJoin('users as u', 'er.approved_by', 'u.id')
+            .leftJoin('employees as approver', 'u.id', 'approver.user_id')
+            .where('er.employee_id', employeeId)
+            .where('er.company_id', companyId)
+            .where('er.date', dateStr)
+            .select(
+                'er.id', 'er.request_type', 'er.punch_time', 'er.status', 'er.created_at',
+                'approver.first_name as approved_by_first_name', 'approver.last_name as approved_by_last_name'
+            )
+            .orderBy('er.created_at', 'asc');
+
+        // 9d. Fetch all regularization requests
+        const regularizations = await db('attendance_regularizations as r')
+            .leftJoin('users as u', 'r.approved_by', 'u.id')
+            .leftJoin('employees as approver', 'u.id', 'approver.user_id')
+            .where('r.employee_id', employeeId)
+            .where('r.company_id', companyId)
+            .where('r.date', dateStr)
+            .select(
+                'r.id', 'r.reason', 'r.status', 'r.check_in as req_check_in', 'r.check_out as req_check_out', 'r.created_at',
+                'approver.first_name as approved_by_first_name', 'approver.last_name as approved_by_last_name'
+            )
+            .orderBy('r.created_at', 'asc');
+
         return {
             employee: {
                 id: emp.id,
@@ -2384,6 +2426,31 @@ class AttendanceService {
             active_shift: activeShift,
             split_shift_details: splitShiftDetails,
             attendance_logs: formattedLogs,
+            raw_biometric_logs: rawBiometricLogs.map(log => ({
+                id: log.id,
+                device_serial: log.device_serial,
+                employee_code: log.employee_code,
+                punch_time: log.punch_time,
+                status: log.status,
+                error_details: log.error_details
+            })),
+            entry_requests: entryRequests.map(er => ({
+                id: er.id,
+                request_type: er.request_type,
+                punch_time: er.punch_time,
+                status: er.status,
+                created_at: er.created_at,
+                approved_by: er.approved_by_first_name ? `${er.approved_by_first_name} ${er.approved_by_last_name}` : 'Pending'
+            })),
+            regularizations: regularizations.map(r => ({
+                id: r.id,
+                reason: r.reason,
+                status: r.status,
+                req_check_in: r.req_check_in,
+                req_check_out: r.req_check_out,
+                created_at: r.created_at,
+                approved_by: r.approved_by_first_name ? `${r.approved_by_first_name} ${r.approved_by_last_name}` : 'Pending'
+            })),
             attendance: attendance ? {
                 id: attendance.id,
                 check_in: attendance.check_in,

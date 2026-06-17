@@ -63,6 +63,7 @@ const AttendanceMuster = () => {
     const [selectedEmployee, setSelectedEmployee] = useState(null);
     const [selectedCell, setSelectedCell] = useState(null);
     const [modalData, setModalData] = useState(null);
+    const [punchHistoryOpen, setPunchHistoryOpen] = useState(false);
     const [modalLoading, setModalLoading] = useState(false);
     const [modalError, setModalError] = useState(null);
     const [deletingAttendance, setDeletingAttendance] = useState(false);
@@ -1431,7 +1432,16 @@ const AttendanceMuster = () => {
                                                 <div className="grid grid-cols-2 gap-4">
                                                     {/* In Record */}
                                                     <div className="bg-emerald-50/20 border border-emerald-100 p-4 rounded-2xl space-y-2">
-                                                        <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Punch In</span>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Punch In</span>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); setPunchHistoryOpen(true); }}
+                                                                className="text-slate-400 hover:text-indigo-600 transition-colors p-0.5 cursor-pointer flex items-center justify-center rounded hover:bg-slate-100"
+                                                                title="View Details"
+                                                            >
+                                                                <Info size={11} />
+                                                            </button>
+                                                        </div>
                                                         <h4 className="text-lg font-black text-slate-800 leading-tight">
                                                             {modalData.attendance.check_in ? new Date(modalData.attendance.check_in).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'}
                                                         </h4>
@@ -1440,7 +1450,16 @@ const AttendanceMuster = () => {
 
                                                     {/* Out Record */}
                                                     <div className="bg-slate-50/50 border border-slate-200/60 p-4 rounded-2xl space-y-2">
-                                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Punch Out</span>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Punch Out</span>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); setPunchHistoryOpen(true); }}
+                                                                className="text-slate-400 hover:text-indigo-600 transition-colors p-0.5 cursor-pointer flex items-center justify-center rounded hover:bg-slate-100"
+                                                                title="View Details"
+                                                            >
+                                                                <Info size={11} />
+                                                            </button>
+                                                        </div>
                                                         <h4 className="text-lg font-black text-slate-800 leading-tight">
                                                             {modalData.attendance.check_out_text 
                                                                 ? modalData.attendance.check_out_text 
@@ -1719,6 +1738,154 @@ const AttendanceMuster = () => {
                                     className="px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all cursor-pointer active:scale-95 shadow-md"
                                 >
                                     Close Details
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Punch History Info Overlay Modal */}
+            <AnimatePresence>
+                {punchHistoryOpen && modalData && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        {/* Background Overlay */}
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 0.6 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setPunchHistoryOpen(false)}
+                            className="absolute inset-0 bg-slate-950/40 backdrop-blur-xs"
+                        />
+
+                        {/* Modal Box */}
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 z-10 flex flex-col overflow-hidden max-h-[75vh]"
+                        >
+                            {/* Header */}
+                            <div className="p-5 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
+                                <div>
+                                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Punch & Request Log</h3>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                                        {new Date(selectedCell.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </p>
+                                </div>
+                                <button 
+                                    onClick={() => setPunchHistoryOpen(false)}
+                                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors text-xs font-bold"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            {/* Content body */}
+                            <div className="p-5 overflow-y-auto space-y-5 custom-scrollbar flex-1 text-left">
+                                {/* Section 1: Raw Biometric Logs */}
+                                <div className="space-y-2">
+                                    <h4 className="text-[9px] font-black text-indigo-650 uppercase tracking-widest">Raw Biometric Machine Logs</h4>
+                                    {modalData.raw_biometric_logs && modalData.raw_biometric_logs.length > 0 ? (
+                                        <div className="divide-y divide-slate-50 border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/30">
+                                            {modalData.raw_biometric_logs.map((log) => (
+                                                <div key={log.id} className="p-3 text-[10px] font-bold text-slate-700 space-y-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <span>Time: {formatPunchTime(log.punch_time)}</span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                                            log.status === 'synced' ? 'bg-emerald-50 text-emerald-600' :
+                                                            log.status === 'skipped' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                                                            'bg-rose-50 text-rose-600'
+                                                        }`}>
+                                                            {log.status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[8.5px] text-slate-400 font-bold">
+                                                        Device SN: {log.device_serial || 'N/A'} {log.error_details ? `• Reason: ${log.error_details}` : ''}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[9.5px] font-bold text-slate-450 italic p-3 border border-slate-100 rounded-2xl text-center bg-slate-50/10">
+                                            No raw machine logs recorded for this day.
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Section 2: Late In / Early Out Requests */}
+                                <div className="space-y-2">
+                                    <h4 className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Late In / Early Out Requests</h4>
+                                    {modalData.entry_requests && modalData.entry_requests.length > 0 ? (
+                                        <div className="divide-y divide-slate-50 border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/30">
+                                            {modalData.entry_requests.map((er) => (
+                                                <div key={er.id} className="p-3 text-[10px] font-bold text-slate-700 space-y-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="uppercase text-[8.5px] font-black text-slate-600">{er.request_type.replace('_', ' ')}</span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                                            er.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                                                            er.status === 'rejected' ? 'bg-rose-50 text-rose-600' :
+                                                            'bg-amber-50 text-amber-600'
+                                                        }`}>
+                                                            {er.status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[8.5px] text-slate-455 font-bold flex justify-between">
+                                                        <span>Time: {formatPunchTime(er.punch_time)}</span>
+                                                        <span>Approver: {er.approved_by || 'Pending'}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[9.5px] font-bold text-slate-455 italic p-3 border border-slate-100 rounded-2xl text-center bg-slate-50/10">
+                                            No late/early requests submitted.
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Section 3: Regularization Requests */}
+                                <div className="space-y-2">
+                                    <h4 className="text-[9px] font-black text-[#4361ee] uppercase tracking-widest">Regularization Requests</h4>
+                                    {modalData.regularizations && modalData.regularizations.length > 0 ? (
+                                        <div className="divide-y divide-slate-50 border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/30">
+                                            {modalData.regularizations.map((r) => (
+                                                <div key={r.id} className="p-3 text-[10px] font-bold text-slate-700 space-y-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <span>In: {r.req_check_in || 'N/A'} • Out: {r.req_check_out || 'N/A'}</span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                                            r.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                                                            r.status === 'rejected' ? 'bg-rose-50 text-rose-600' :
+                                                            'bg-amber-50 text-amber-600'
+                                                        }`}>
+                                                            {r.status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-[8.5px] text-slate-500 font-bold">
+                                                        Reason: "{r.reason || 'N/A'}"
+                                                    </div>
+                                                    <div className="text-[8px] text-slate-400 font-bold flex justify-between pt-1 border-t border-slate-100/50">
+                                                        <span>Submitted: {new Date(r.created_at).toLocaleDateString('en-GB')}</span>
+                                                        <span>Approver: {r.approved_by || 'Pending'}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[9.5px] font-bold text-slate-455 italic p-3 border border-slate-100 rounded-2xl text-center bg-slate-50/10">
+                                            No regularization requests submitted.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50/20">
+                                <button 
+                                    onClick={() => setPunchHistoryOpen(false)}
+                                    className="px-5 py-1.5 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-800 transition-colors active:scale-95 shadow-md cursor-pointer"
+                                >
+                                    Close History
                                 </button>
                             </div>
                         </motion.div>
