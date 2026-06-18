@@ -117,6 +117,7 @@ class AttendanceRepository {
                 'employees.employee_id_number',
                 'employees.office_location',
                 'departments.name as department_name',
+                'shifts.name as shift_name',
                 'shifts.start_time as shift_start',
                 'shifts.end_time as shift_end',
                 'shifts.grace_period as shift_grace',

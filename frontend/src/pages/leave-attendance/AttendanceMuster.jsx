@@ -36,6 +36,20 @@ const formatPunchTime = (punchTimeVal) => {
     }
 };
 
+const formatTimeAMPM = (timeStr) => {
+    if (!timeStr) return '';
+    if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) return timeStr;
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return timeStr;
+    let hours = parseInt(parts[0], 10);
+    const minutes = parts[1];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const strHours = hours < 10 ? `0${hours}` : hours;
+    return `${strHours}:${minutes} ${ampm}`;
+};
+
 const AttendanceMuster = () => {
     const [searchParams] = useSearchParams();
     const initialTab = searchParams.get('tab') === 'entry_requests' ? 'entry_requests' : 'muster';
@@ -1972,11 +1986,23 @@ const AttendanceMuster = () => {
                                                 <Clock size={16} />
                                             </div>
                                             <div className="leading-tight">
-                                                <span className="text-[10px] font-bold text-slate-800">General Morning Shift</span>
-                                                <p className="text-[8px] font-black text-[#4361ee] uppercase tracking-widest mt-0.5">09:00 AM - 06:00 PM</p>
+                                                <span className="text-[10px] font-bold text-slate-800">
+                                                    {selectedEmployee.shift_name || 'General Morning Shift'}
+                                                </span>
+                                                <p className="text-[8px] font-black text-[#4361ee] uppercase tracking-widest mt-0.5">
+                                                    {selectedEmployee.shift_name ? (
+                                                        selectedEmployee.shift_is_flexi 
+                                                            ? 'Flexi Shift' 
+                                                            : `${formatTimeAMPM(selectedEmployee.shift_start)} - ${formatTimeAMPM(selectedEmployee.shift_end)}`
+                                                    ) : (
+                                                        '09:00 AM - 06:00 PM'
+                                                    )}
+                                                </p>
                                             </div>
                                         </div>
-                                        <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 uppercase">Active</span>
+                                        <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 uppercase">
+                                            {selectedEmployee.shift_name ? 'Active' : 'Default'}
+                                        </span>
                                     </div>
                                 </div>
 
