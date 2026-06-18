@@ -956,6 +956,97 @@ class AttendanceService {
             return String(val).split('T')[0];
         };
 
+        // Pre-format shift assignments and group them by employee_id for O(1) employee shift overrides lookup
+        const shiftAssignmentsByEmployee = {};
+        shiftAssignments.forEach(sa => {
+            const empId = sa.employee_id;
+            if (!shiftAssignmentsByEmployee[empId]) {
+                shiftAssignmentsByEmployee[empId] = [];
+            }
+            shiftAssignmentsByEmployee[empId].push({
+                ...sa,
+                fromStr: formatDbDate(sa.from_date),
+                toStr: formatDbDate(sa.to_date)
+            });
+        });
+
+        // Pre-parse and group attendance logs by employee_id and day
+        const attendanceMap = {};
+        raw.attendance.forEach(a => {
+            const empId = a.employee_id;
+            const dateObj = new Date(a.check_in);
+            const day = dateObj.getDate();
+            const time = dateObj.getTime();
+            
+            if (!attendanceMap[empId]) {
+                attendanceMap[empId] = {};
+            }
+            if (!attendanceMap[empId][day]) {
+                attendanceMap[empId][day] = [];
+            }
+            attendanceMap[empId][day].push({
+                ...a,
+                day,
+                time
+            });
+        });
+        
+        // Sort each array
+        Object.keys(attendanceMap).forEach(empId => {
+            Object.keys(attendanceMap[empId]).forEach(day => {
+                attendanceMap[empId][day].sort((a, b) => a.time - b.time);
+            });
+        });
+
+        // Pre-parse and group regularizations by employee_id and day
+        const regularizationsMap = {};
+        if (raw.regularizations) {
+            raw.regularizations.forEach(r => {
+                const empId = r.employee_id;
+                const dObj = new Date(r.date);
+                const day = dObj.getDate();
+                if (!regularizationsMap[empId]) {
+                    regularizationsMap[empId] = {};
+                }
+                regularizationsMap[empId][day] = r;
+            });
+        }
+
+        // Pre-parse and group entry/exit requests by employee_id and day
+        const entryRequestsMap = {};
+        if (raw.entryRequests) {
+            raw.entryRequests.forEach(er => {
+                const empId = er.employee_id;
+                const dObj = new Date(er.date);
+                const day = dObj.getDate();
+                if (!entryRequestsMap[empId]) {
+                    entryRequestsMap[empId] = {};
+                }
+                entryRequestsMap[empId][day] = er;
+            });
+        }
+
+        // Pre-parse and group leaves by employee_id with timestamp bounds
+        const leavesMap = {};
+        if (raw.leaves) {
+            raw.leaves.forEach(l => {
+                const empId = l.employee_id;
+                const start = new Date(l.start_date);
+                const end = new Date(l.end_date);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+                
+                if (!leavesMap[empId]) {
+                    leavesMap[empId] = [];
+                }
+                leavesMap[empId].push({
+                    ...l,
+                    startTime: start.getTime(),
+                    endTime: end.getTime()
+                });
+            });
+        }
+
         const matrix = raw.employees.map(emp => {
             const grid = {};
             const grid_timings = {};
@@ -980,18 +1071,19 @@ class AttendanceService {
             const empJoinStr = emp.joining_date ? toLocalYMD(emp.joining_date) : null;
             const empResignStr = emp.resignation_date ? toLocalYMD(emp.resignation_date) : null;
 
+            const empAssignments = shiftAssignmentsByEmployee[emp.id] || [];
+            const empLeaves = leavesMap[emp.id] || [];
+
             for (let d = 1; d <= daysInMonth; d++) {
                 const date = new Date(year, month - 1, d);
                 const dayName = dayNames[date.getDay()];
                 const targetDateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const dateTime = date.getTime();
 
                 // Resolve active shift for this employee on targetDateStr
-                const activeAssignment = shiftAssignments.find(sa => {
-                    const fromStr = formatDbDate(sa.from_date);
-                    const toStr = formatDbDate(sa.to_date);
-                    return sa.employee_id === emp.id &&
-                        fromStr <= targetDateStr &&
-                        (!toStr || toStr >= targetDateStr);
+                const activeAssignment = empAssignments.find(sa => {
+                    return sa.fromStr <= targetDateStr &&
+                        (!sa.toStr || sa.toStr >= targetDateStr);
                 });
 
                 const resolvedShift = {
@@ -1039,26 +1131,10 @@ class AttendanceService {
                     stats.H++;
                 }
                 // C. Check Attendance
-                const dayLogs = raw.attendance.filter(a =>
-                    a.employee_id === emp.id &&
-                    new Date(a.check_in).getDate() === d
-                ).sort((a, b) => new Date(a.check_in) - new Date(b.check_in));
+                const dayLogs = (attendanceMap[emp.id] && attendanceMap[emp.id][d]) || [];
 
-                const getDayOfDate = (dateVal) => {
-                    if (!dateVal) return null;
-                    const dObj = new Date(dateVal);
-                    return dObj.getDate();
-                };
-
-                const dayRegularization = raw.regularizations?.find(r =>
-                    r.employee_id === emp.id &&
-                    getDayOfDate(r.date) === d
-                );
-
-                const dayEarlyOut = raw.entryRequests?.find(er =>
-                    er.employee_id === emp.id &&
-                    getDayOfDate(er.date) === d
-                );
+                const dayRegularization = regularizationsMap[emp.id]?.[d];
+                const dayEarlyOut = entryRequestsMap[emp.id]?.[d];
 
                 if (dayLogs.length > 0) {
                     const firstLog = dayLogs[0];
@@ -1131,10 +1207,8 @@ class AttendanceService {
                     stats.P++;
                 } else {
                     // C. Check Leaves
-                    const onLeave = raw.leaves.find(l =>
-                        l.employee_id === emp.id &&
-                        new Date(l.start_date) <= date &&
-                        new Date(l.end_date) >= date
+                    const onLeave = empLeaves.find(l =>
+                        l.startTime <= dateTime && l.endTime >= dateTime
                     );
 
                     if (onLeave) {
