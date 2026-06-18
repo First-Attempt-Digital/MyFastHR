@@ -314,7 +314,8 @@ const syncDatabaseSchema = async () => {
                 'session1_out_margin',
                 'session2_in_margin',
                 'session2_out_margin',
-                'terminate_hour'
+                'terminate_hour',
+                'grace_count_limit'
             ];
             const missingShiftCols = [];
             for (const col of shiftColumns) {
@@ -338,6 +339,7 @@ const syncDatabaseSchema = async () => {
                     if (missingShiftCols.includes('session2_in_margin')) table.integer('session2_in_margin').defaultTo(0);
                     if (missingShiftCols.includes('session2_out_margin')) table.integer('session2_out_margin').defaultTo(0);
                     if (missingShiftCols.includes('terminate_hour')) table.integer('terminate_hour').nullable();
+                    if (missingShiftCols.includes('grace_count_limit')) table.integer('grace_count_limit').defaultTo(3);
                 });
                 console.log('>>> [DB-SYNC]: shifts table columns updated.');
             }
