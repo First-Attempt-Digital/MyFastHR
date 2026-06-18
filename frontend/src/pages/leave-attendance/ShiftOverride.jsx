@@ -76,6 +76,7 @@ const ShiftManagement = () => {
     // Delete Protection States
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteTargetId, setDeleteTargetId] = useState(null);
+    const [showUnassignedModal, setShowUnassignedModal] = useState(false);
     const [overrideConfig, setOverrideConfig] = useState({
         from_date: new Date().toISOString().split('T')[0],
         to_date: ''
@@ -528,9 +529,21 @@ const ShiftManagement = () => {
                             { label: 'Total Staff', value: employees.length, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                             { label: 'Active Shifts', value: shifts.length, icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
                             { label: 'Assigned', value: employees.filter(e => e.assigned_shift).length, icon: UserCheck, color: 'text-amber-600', bg: 'bg-amber-50' },
-                            { label: 'Unassigned', value: employees.filter(e => !e.assigned_shift).length, icon: Info, color: 'text-rose-600', bg: 'bg-rose-50' }
+                            { label: 'Unassigned', value: employees.filter(e => !e.assigned_shift).length, icon: Info, color: 'text-rose-600', bg: 'bg-rose-50', clickable: true }
                         ].map((stat, i) => (
-                            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+                            <div 
+                                key={i} 
+                                onClick={() => {
+                                    if (stat.clickable) {
+                                        setShowUnassignedModal(true);
+                                    }
+                                }}
+                                className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3 ${
+                                    stat.clickable 
+                                        ? 'cursor-pointer hover:border-rose-250 hover:border-rose-200 hover:shadow-md transition-all active:scale-[0.98]' 
+                                        : ''
+                                }`}
+                            >
                                 <div className={`w-8 h-8 rounded-lg ${stat.bg} ${stat.color} flex items-center justify-center`}>
                                     <stat.icon size={16} />
                                 </div>
@@ -1571,6 +1584,83 @@ const ShiftManagement = () => {
                                     Confirm
                                 </button>
                             </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Unassigned Employees Modal */}
+            <AnimatePresence>
+                {showUnassignedModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="bg-white rounded-[32px] p-6 max-w-md w-full mx-4 shadow-2xl border border-slate-100 flex flex-col gap-4 max-h-[80vh]"
+                        >
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                                        <Info size={16} />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-800">
+                                            Unassigned Staff
+                                        </h4>
+                                        <p className="text-[9px] text-slate-400 uppercase tracking-tight font-bold">
+                                            Shift not assigned / शिफ्ट रहित कर्मचारी
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowUnassignedModal(false)}
+                                    className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all cursor-pointer flex items-center justify-center"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+
+                            {/* Scrollable list */}
+                            <div className="overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-[45vh]">
+                                {employees.filter(e => !e.assigned_shift).length === 0 ? (
+                                    <div className="py-8 text-center text-slate-400">
+                                        <CheckCircle size={24} className="mx-auto mb-2 text-emerald-500" />
+                                        <p className="text-[10px] font-black uppercase tracking-widest">All Staff Assigned</p>
+                                    </div>
+                                ) : (
+                                    employees.filter(e => !e.assigned_shift).map((emp) => (
+                                        <div 
+                                            key={emp.id} 
+                                            className="p-3 rounded-xl border border-slate-50 bg-slate-50/50 flex items-center justify-between"
+                                        >
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-[10px] font-black text-slate-700 uppercase">
+                                                    {emp.first_name} {emp.last_name}
+                                                </span>
+                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
+                                                    Code: {emp.employee_id_number || 'N/A'} • {emp.designation || 'Staff'}
+                                                </span>
+                                            </div>
+                                            <span className="text-[8px] font-extrabold text-slate-400 bg-white px-2 py-1 rounded border border-slate-100">
+                                                {emp.department_name || emp.department || 'General'}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <button
+                                onClick={() => setShowUnassignedModal(false)}
+                                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-lg cursor-pointer active:scale-95"
+                            >
+                                Close List
+                            </button>
                         </motion.div>
                     </motion.div>
                 )}
