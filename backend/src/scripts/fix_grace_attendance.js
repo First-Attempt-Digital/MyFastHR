@@ -48,11 +48,11 @@ async function fixGraceAttendance() {
         const requests = await db('attendance_entry_requests')
             .where({
                 request_type: 'late_in',
-                status: 'pending',
                 date: targetDate
-            });
+            })
+            .whereIn('status', ['pending', 'approved']);
 
-        console.log(`Found ${requests.length} pending late_in requests for ${targetDate}.\n`);
+        console.log(`Found ${requests.length} late_in requests (pending/approved) for ${targetDate}.\n`);
 
         let fixedCount = 0;
         for (const req of requests) {
@@ -168,16 +168,26 @@ async function fixGraceAttendance() {
                 console.log(`    Shift Start: ${s1StartStr} (${s1StartMinsVal} mins)`);
                 console.log(`    Grace Limit: ${s1Grace} mins (Allowed until ${s1AllowedMins} mins)`);
 
-                // 1. Update request status to 'approved'
+                // Parse punch source and device serial from location_data
+                let source = 'web';
+                let deviceId = null;
+                if (req.location_data) {
+                    try {
+                        const loc = typeof req.location_data === 'string' ? JSON.parse(req.location_data) : req.location_data;
+                        if (loc.source) source = loc.source;
+                        if (loc.device_serial) deviceId = loc.device_serial;
+                    } catch (e) {
+                        // ignore parsing errors
+                    }
+                }
+
+                // 1. Delete the incorrect entry request so it doesn't show up in logs or UI
                 await db('attendance_entry_requests')
                     .where({ id: req.id })
-                    .update({
-                        status: 'approved',
-                        updated_at: db.fn.now()
-                    });
-                console.log(`    -> Approved entry request ID ${req.id}`);
+                    .delete();
+                console.log(`    -> Deleted incorrect late_in request ID ${req.id}`);
 
-                // 2. Insert/Update attendance record
+                // 2. Insert/Update attendance record with proper punch_source (biometric/web)
                 const existingAtt = await db('attendance')
                     .where({ employee_id: empId })
                     .whereRaw('DATE(check_in) = ?', [targetDate])
@@ -190,19 +200,21 @@ async function fixGraceAttendance() {
                         check_in: punchTime,
                         check_out: null,
                         status: 'present',
-                        punch_source: 'entry_request',
+                        punch_source: source,
+                        device_id: deviceId,
                         created_at: db.fn.now()
                     });
-                    console.log(`    -> Created new attendance record as 'present'`);
+                    console.log(`    -> Created new attendance record as 'present' (Source: ${source})`);
                 } else {
                     await db('attendance')
                         .where({ id: existingAtt.id })
                         .update({
                             status: 'present',
-                            punch_source: 'entry_request',
+                            punch_source: source,
+                            device_id: deviceId || existingAtt.device_id,
                             updated_at: db.fn.now()
                         });
-                    console.log(`    -> Updated existing attendance record ID ${existingAtt.id} status to 'present'`);
+                    console.log(`    -> Updated existing attendance record ID ${existingAtt.id} status to 'present' (Source: ${source})`);
                 }
                 fixedCount++;
             } else {
