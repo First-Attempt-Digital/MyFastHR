@@ -915,6 +915,47 @@ class AttendanceService {
         const raw = await attendanceRepository.getCompanyMatrix(user, month, year);
         const daysInMonth = new Date(year, month, 0).getDate();
 
+        const employeeIds = raw.employees.map(e => e.id);
+        const shiftAssignments = employeeIds.length > 0 ? await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .whereIn('esa.employee_id', employeeIds)
+            .where(function() {
+                this.where('esa.from_date', '<=', `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`)
+                    .andWhere(function() {
+                        this.where('esa.to_date', '>=', `${year}-${String(month).padStart(2, '0')}-01`)
+                            .orWhereNull('esa.to_date');
+                    });
+            })
+            .select(
+                'esa.employee_id',
+                'esa.from_date',
+                'esa.to_date',
+                's.is_flexi',
+                's.min_hours',
+                's.start_time',
+                's.end_time',
+                's.grace_period',
+                's.total_punches_required',
+                's.session2_start_time',
+                's.session2_end_time',
+                's.session1_grace_out',
+                's.session2_grace_in',
+                's.session2_grace_out',
+                's.session1_in_margin',
+                's.session1_out_margin',
+                's.session2_in_margin',
+                's.session2_out_margin',
+                's.terminate_hour'
+            ) : [];
+
+        const formatDbDate = (val) => {
+            if (!val) return null;
+            if (val instanceof Date) {
+                return val.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+            }
+            return String(val).split('T')[0];
+        };
+
         const matrix = raw.employees.map(emp => {
             const grid = {};
             const grid_timings = {};
@@ -943,6 +984,35 @@ class AttendanceService {
                 const date = new Date(year, month - 1, d);
                 const dayName = dayNames[date.getDay()];
                 const targetDateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+                // Resolve active shift for this employee on targetDateStr
+                const activeAssignment = shiftAssignments.find(sa => {
+                    const fromStr = formatDbDate(sa.from_date);
+                    const toStr = formatDbDate(sa.to_date);
+                    return sa.employee_id === emp.id &&
+                        fromStr <= targetDateStr &&
+                        (!toStr || toStr >= targetDateStr);
+                });
+
+                const resolvedShift = {
+                    ...emp,
+                    is_flexi: activeAssignment ? activeAssignment.is_flexi : emp.shift_is_flexi,
+                    min_hours: activeAssignment ? activeAssignment.min_hours : emp.min_hours,
+                    start_time: activeAssignment ? activeAssignment.start_time : emp.shift_start,
+                    end_time: activeAssignment ? activeAssignment.end_time : emp.shift_end,
+                    grace_period: activeAssignment ? activeAssignment.grace_period : emp.shift_grace,
+                    total_punches_required: activeAssignment ? activeAssignment.total_punches_required : emp.shift_total_punches,
+                    session2_start_time: activeAssignment ? activeAssignment.session2_start_time : emp.shift_session2_start,
+                    session2_end_time: activeAssignment ? activeAssignment.session2_end_time : emp.shift_session2_end,
+                    session1_grace_out: activeAssignment ? activeAssignment.session1_grace_out : emp.shift_session1_grace_out,
+                    session2_grace_in: activeAssignment ? activeAssignment.session2_grace_in : emp.shift_session2_grace_in,
+                    session2_grace_out: activeAssignment ? activeAssignment.session2_grace_out : emp.shift_session2_grace_out,
+                    session1_in_margin: activeAssignment ? activeAssignment.session1_in_margin : emp.shift_session1_in_margin,
+                    session1_out_margin: activeAssignment ? activeAssignment.session1_out_margin : emp.shift_session1_out_margin,
+                    session2_in_margin: activeAssignment ? activeAssignment.session2_in_margin : emp.shift_session2_in_margin,
+                    session2_out_margin: activeAssignment ? activeAssignment.session2_out_margin : emp.shift_session2_out_margin,
+                    terminate_hour: activeAssignment ? activeAssignment.terminate_hour : emp.terminate_hour
+                };
 
                 // Check joining date constraint
                 if (empJoinStr && targetDateStr < empJoinStr) {
@@ -1040,12 +1110,12 @@ class AttendanceService {
                     } else if (dbStatus === 'early-out' || dbStatus === 'early_out' || dbStatus === 'eo' || dbStatus === 'e') {
                         status = 'E';
                         stats.P++;
-                    } else if (emp.shift_is_flexi) {
+                    } else if (resolvedShift.is_flexi) {
                         status = 'P';
                         stats.P++;
                     } else {
                         // Compute status using split-shift helper
-                        const calc = calculateSplitShiftStatus(dayLogs, emp, rules);
+                        const calc = calculateSplitShiftStatus(dayLogs, resolvedShift, rules);
                         status = calc.status;
                         if (status === 'P') stats.P++;
                         else if (status === 'HD') stats.P += 0.5;
@@ -1093,15 +1163,15 @@ class AttendanceService {
                     return dateToISTMins(dateVal);
                 };
 
-                const reqPunches = parseInt(emp.shift_total_punches || 2);
+                const reqPunches = parseInt(resolvedShift.total_punches_required || 2);
                 if (dayLogs && dayLogs.length > 0) {
-                    const s1Start = timeToMinsLocal(emp.shift_start || '09:00');
-                    const grace1In = parseInt(emp.shift_grace || rules.grace_period || 15);
+                    const s1Start = timeToMinsLocal(resolvedShift.start_time || '09:00');
+                    const grace1In = parseInt(emp.scheme_grace ?? resolvedShift.grace_period ?? rules.grace_period ?? 15);
 
                     if (reqPunches === 4) {
-                        const s2Start = timeToMinsLocal(emp.shift_session2_start || '14:00');
-                        const grace2In = parseInt(emp.shift_session2_grace_in || 15);
-                        const s2InMargin = parseInt(emp.shift_session2_in_margin || 30);
+                        const s2Start = timeToMinsLocal(resolvedShift.session2_start_time || '14:00');
+                        const grace2In = parseInt(resolvedShift.session2_grace_in || 15);
+                        const s2InMargin = parseInt(resolvedShift.session2_in_margin || 30);
 
                         const s1Logs = dayLogs.filter(log => dateToMinsLocal(log.check_in) < (s2Start - s2InMargin));
                         const s2Logs = dayLogs.filter(log => dateToMinsLocal(log.check_in) >= (s2Start - s2InMargin));
