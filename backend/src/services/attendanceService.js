@@ -349,8 +349,8 @@ class AttendanceService {
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', empId)
                 .where('esa.from_date', '<=', dateStr)
-                .andWhere(function () {
-                    this.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
+                .andWhere(qb => {
+                    qb.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
                 })
                 .select(
                     's.is_flexi',
@@ -626,8 +626,8 @@ class AttendanceService {
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', empId)
                 .where('esa.from_date', '<=', checkInDateStr)
-                .andWhere(function () {
-                    this.where('esa.to_date', '>=', checkInDateStr).orWhereNull('esa.to_date');
+                .andWhere(qb => {
+                    qb.where('esa.to_date', '>=', checkInDateStr).orWhereNull('esa.to_date');
                 })
                 .select(
                     's.is_flexi',
@@ -919,10 +919,10 @@ class AttendanceService {
         const shiftAssignments = employeeIds.length > 0 ? await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .whereIn('esa.employee_id', employeeIds)
-            .where(function() {
-                this.where('esa.from_date', '<=', `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`)
-                    .andWhere(function() {
-                        this.where('esa.to_date', '>=', `${year}-${String(month).padStart(2, '0')}-01`)
+            .where(qb => {
+                qb.where('esa.from_date', '<=', `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`)
+                    .andWhere(qb2 => {
+                        qb2.where('esa.to_date', '>=', `${year}-${String(month).padStart(2, '0')}-01`)
                             .orWhereNull('esa.to_date');
                     });
             })

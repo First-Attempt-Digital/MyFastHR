@@ -96,8 +96,8 @@ async function fixGraceAttendance() {
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', empId)
                 .where('esa.from_date', '<=', targetDate)
-                .andWhere(function () {
-                    this.where('esa.to_date', '>=', targetDate).orWhereNull('esa.to_date');
+                .andWhere(qb => {
+                    qb.where('esa.to_date', '>=', targetDate).orWhereNull('esa.to_date');
                 })
                 .select(
                     's.is_flexi',

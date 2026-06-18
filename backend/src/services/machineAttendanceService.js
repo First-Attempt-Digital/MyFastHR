@@ -312,8 +312,8 @@ class MachineAttendanceService {
                     .join('shifts as s', 'esa.shift_id', 's.id')
                     .where('esa.employee_id', employeeId)
                     .where('esa.from_date', '<=', targetShiftDate)
-                    .andWhere(function () {
-                        this.where('esa.to_date', '>=', targetShiftDate).orWhereNull('esa.to_date');
+                    .andWhere(qb => {
+                        qb.where('esa.to_date', '>=', targetShiftDate).orWhereNull('esa.to_date');
                     })
                     .select(
                         's.is_flexi',
