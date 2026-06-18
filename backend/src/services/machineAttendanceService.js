@@ -283,6 +283,7 @@ class MachineAttendanceService {
                     'shifts.start_time as shift_start', 
                     'shifts.end_time as shift_end',
                     'shifts.grace_period as shift_grace',
+                    'shifts.grace_count_limit as shift_grace_count_limit',
                     'shifts.is_flexi as shift_is_flexi',
                     'shifts.total_punches_required as shift_total_punches',
                     'shifts.session1_in_margin as shift_in_margin',
@@ -320,6 +321,7 @@ class MachineAttendanceService {
                         's.start_time',
                         's.end_time',
                         's.grace_period as shift_grace',
+                        's.grace_count_limit as shift_grace_count_limit',
                         's.total_punches_required as shift_total_punches',
                         's.session1_in_margin as shift_in_margin',
                         's.session1_out_margin as shift_out_margin',
@@ -341,6 +343,7 @@ class MachineAttendanceService {
                     employeeWithShift.shift_start = activeAssignment.start_time;
                     employeeWithShift.shift_end = activeAssignment.end_time;
                     employeeWithShift.shift_grace = activeAssignment.shift_grace;
+                    employeeWithShift.shift_grace_count_limit = activeAssignment.shift_grace_count_limit;
                     employeeWithShift.shift_total_punches = activeAssignment.shift_total_punches;
                     employeeWithShift.shift_in_margin = activeAssignment.shift_in_margin;
                     employeeWithShift.shift_out_margin = activeAssignment.shift_out_margin;
@@ -555,7 +558,9 @@ class MachineAttendanceService {
 
                         const allowedGraceLimit = employeeWithShift?.max_late_allowed !== undefined && employeeWithShift?.max_late_allowed !== null 
                             ? parseInt(employeeWithShift.max_late_allowed) 
-                            : 3;
+                            : (employeeWithShift?.shift_grace_count_limit !== undefined && employeeWithShift?.shift_grace_count_limit !== null
+                                ? parseInt(employeeWithShift.shift_grace_count_limit)
+                                : 3);
 
                         if (graceCount >= allowedGraceLimit) {
                             isLate = true;

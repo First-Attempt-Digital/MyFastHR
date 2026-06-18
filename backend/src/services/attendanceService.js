@@ -314,6 +314,7 @@ class AttendanceService {
                 'shifts.start_time as shift_start',
                 'shifts.end_time as shift_end',
                 'shifts.grace_period as shift_grace',
+                'shifts.grace_count_limit as shift_grace_count_limit',
                 'shifts.is_flexi as shift_is_flexi',
                 'shifts.total_punches_required as shift_total_punches',
                 'shifts.session1_in_margin as shift_in_margin',
@@ -538,7 +539,9 @@ class AttendanceService {
 
                 const allowedGraceLimit = employee?.max_late_allowed !== undefined && employee?.max_late_allowed !== null 
                     ? parseInt(employee.max_late_allowed) 
-                    : 3;
+                    : (employee?.shift_grace_count_limit !== undefined && employee?.shift_grace_count_limit !== null
+                        ? parseInt(employee.shift_grace_count_limit)
+                        : 3);
 
                 if (graceCount >= allowedGraceLimit) {
                     isLate = true;
