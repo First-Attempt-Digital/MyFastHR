@@ -10,6 +10,7 @@ module.exports = {
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'myfasthr_db',
       timezone: '+05:30',
+      dateStrings: true,
     },
     migrations: {
       directory: '../database/migrations',
@@ -26,6 +27,7 @@ module.exports = {
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'myfasthr_db',
       timezone: '+05:30',
+      dateStrings: true,
     },
     migrations: {
       directory: '../database/migrations',

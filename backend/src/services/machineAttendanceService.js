@@ -12,13 +12,15 @@ function isNightShift(shift) {
 
 function checkIfLogUsedGrace(log, employee, rules) {
     if (!log.check_in) return false;
-    const logCheckIn = new Date(log.check_in);
+    const logCheckIn = dbDateToUTC(log.check_in);
+    if (!logCheckIn) return false;
     
     const shiftStart = employee?.shift_start || rules.shift_start || '09:00';
     const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
     
     const [sHours, sMins] = shiftStart.split(':').map(Number);
-    const hour = logCheckIn.getHours();
+    const istStr = logCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+    const hour = parseInt(istStr, 10);
     
     let logicalDateStr = logCheckIn.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
     const [sH, sM] = shiftStart.split(':').map(Number);
@@ -42,22 +44,22 @@ function checkIfLogUsedGrace(log, employee, rules) {
  */
 function dbDateToUTC(dateVal) {
     if (!dateVal) return null;
-    let d = new Date(dateVal);
-    if (isNaN(d.getTime())) {
-        const str = String(dateVal).trim();
-        const parts = str.split(/[- : T]/);
-        if (parts.length >= 5) {
-            const yr = parseInt(parts[0]);
-            const mo = parseInt(parts[1]) - 1;
-            const dy = parseInt(parts[2]);
-            const hr = parseInt(parts[3]);
-            const mi = parseInt(parts[4]);
-            const sc = parts[5] ? parseInt(parts[5]) : 0;
-            return new Date(yr, mo, dy, hr, mi, sc);
-        }
-        return null;
+    if (dateVal instanceof Date) {
+        return dateVal;
     }
-    return d;
+    const str = String(dateVal).trim();
+    const parts = str.split(/[- : T]/);
+    if (parts.length >= 3) {
+        const yr = parts[0];
+        const mo = parts[1];
+        const dy = parts[2];
+        const hr = parts[3] || '00';
+        const mi = parts[4] || '00';
+        const sc = parts[5] || '00';
+        return new Date(`${yr}-${mo}-${dy}T${hr}:${mi}:${sc}+05:30`);
+    }
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d;
 }
 
 function toLocalYYYYMMDDHHmmss(dateVal) {
@@ -336,7 +338,8 @@ class MachineAttendanceService {
                 .first();
 
             // Resolve overridden shift for this date
-            const hour = punchTime.getHours();
+            const istHourStr = punchTime.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+            const hour = parseInt(istHourStr, 10);
             let targetShiftDate = dateStr;
             if (!activeLog && hour >= 0 && hour < 6) {
                 const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
