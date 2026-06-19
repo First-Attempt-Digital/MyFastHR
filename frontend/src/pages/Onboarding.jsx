@@ -543,6 +543,7 @@ const Onboarding = () => {
         include_esi: true,
         include_lwf: true,
         include_gratuity: true,
+        applicable_statutory_rules: null,
         pf_number: '',
         uan_number: '',
         pf_excess_contribution: 'ceiling', // 'ceiling' or 'above'
@@ -691,6 +692,31 @@ const Onboarding = () => {
                 include_esi: !!res.include_esi,
                 include_lwf: !!res.include_lwf,
                 include_gratuity: !!res.include_gratuity,
+                applicable_statutory_rules: (() => {
+                    if (res.applicable_statutory_rules) {
+                        try {
+                            return typeof res.applicable_statutory_rules === 'string'
+                                ? JSON.parse(res.applicable_statutory_rules)
+                                : res.applicable_statutory_rules;
+                        } catch (e) {}
+                    }
+                    const rules = [];
+                    globalRules.forEach(r => {
+                        const name = r.rule_name.toLowerCase();
+                        if (name.includes('pf') || name.includes('provident')) {
+                            if (res.include_pf) rules.push(r.id);
+                        } else if (name.includes('esic') || name.includes('esi') || name.includes('insurance')) {
+                            if (res.include_esi) rules.push(r.id);
+                        } else if (name.includes('lwf')) {
+                            if (res.include_lwf) rules.push(r.id);
+                        } else if (name.includes('gratuity')) {
+                            if (res.include_gratuity) rules.push(r.id);
+                        } else {
+                            rules.push(r.id);
+                        }
+                    });
+                    return rules;
+                })(),
                 pf_number: res.pf_number || '',
                 uan_number: res.uan_number || '',
                 pf_excess_contribution: (res.pf_excess_contribution === 'above' || res.pf_excess_contribution === 1 || res.pf_excess_contribution === true) ? 'above' : 'ceiling',
@@ -1427,26 +1453,64 @@ const Onboarding = () => {
                         </div>
 
                         <div className="flex flex-wrap gap-12">
-                            {[
-                                { label: 'Include PF', name: 'include_pf', show: true },
-                                { label: 'Include ESI', name: 'include_esi', show: true },
-                                { label: 'Include LWF', name: 'include_lwf', show: true },
-                                { label: 'Include Gratuity', name: 'include_gratuity', show: true },
-                            ].filter(cb => cb.show).map(cb => (
-                                <label key={cb.name} className="flex items-center gap-3 cursor-pointer group">
-                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${formData[cb.name] ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
-                                        {!!formData[cb.name] && <Check size={12} className="text-white" />}
-                                    </div>
-                                    <input 
-                                        type="checkbox" 
-                                        name={cb.name} 
-                                        checked={!!formData[cb.name]} 
-                                        onChange={handleChange}
-                                        className="hidden"
-                                    />
-                                    <span className="text-sm font-medium text-slate-600">{cb.label}</span>
-                                </label>
-                            ))}
+                            {globalRules.filter(r => !!r.is_active).map(rule => {
+                                const nameLower = rule.rule_name.toLowerCase();
+                                let keyName = '';
+                                if (nameLower.includes('pf') || nameLower.includes('provident')) keyName = 'include_pf';
+                                else if (nameLower.includes('esic') || nameLower.includes('esi') || nameLower.includes('insurance')) keyName = 'include_esi';
+                                else if (nameLower.includes('lwf')) keyName = 'include_lwf';
+                                else if (nameLower.includes('gratuity')) keyName = 'include_gratuity';
+
+                                // For other rules, check the applicable_statutory_rules array in formData
+                                let isChecked = false;
+                                if (keyName) {
+                                    isChecked = !!formData[keyName];
+                                } else {
+                                    // Custom rules
+                                    const appRules = formData.applicable_statutory_rules 
+                                        ? (typeof formData.applicable_statutory_rules === 'string' ? JSON.parse(formData.applicable_statutory_rules) : formData.applicable_statutory_rules) 
+                                        : [];
+                                    isChecked = Array.isArray(appRules) && appRules.includes(rule.id);
+                                }
+
+                                return (
+                                    <label key={rule.id} className="flex items-center gap-3 cursor-pointer group">
+                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 group-hover:border-indigo-400'}`}>
+                                            {isChecked && <Check size={12} className="text-white" />}
+                                        </div>
+                                        <input 
+                                            type="checkbox" 
+                                            name={rule.rule_name} 
+                                            checked={isChecked} 
+                                            onChange={(e) => {
+                                                const newVal = e.target.checked;
+                                                setFormData(prev => {
+                                                    const updated = { ...prev };
+                                                    if (keyName) {
+                                                        updated[keyName] = newVal;
+                                                    }
+                                                    
+                                                    // Sync applicable_statutory_rules
+                                                    let appRules = prev.applicable_statutory_rules 
+                                                        ? (typeof prev.applicable_statutory_rules === 'string' ? JSON.parse(prev.applicable_statutory_rules) : [...prev.applicable_statutory_rules]) 
+                                                        : [];
+                                                    if (!Array.isArray(appRules)) appRules = [];
+                                                    
+                                                    if (newVal) {
+                                                        if (!appRules.includes(rule.id)) appRules.push(rule.id);
+                                                    } else {
+                                                        appRules = appRules.filter(id => id !== rule.id);
+                                                    }
+                                                    updated.applicable_statutory_rules = appRules;
+                                                    return updated;
+                                                });
+                                            }}
+                                            className="hidden"
+                                        />
+                                        <span className="text-sm font-medium text-slate-600">{rule.rule_name}</span>
+                                    </label>
+                                );
+                            })}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 pt-4">

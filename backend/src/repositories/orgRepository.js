@@ -3,7 +3,7 @@ const db = require('../config/db');
 class OrgRepository {
     async getHierarchy(companyId) {
         console.info(`[OrgChart] Constructing hierarchy for Company: ${companyId}`);
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         
         try {
             // 1. Fetch all employees first (Root Query)

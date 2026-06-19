@@ -44,10 +44,10 @@ const syncDatabaseSchema = async () => {
             'photo', 'onboarding_token', 'onboarding_token_created_at', 'onboarding_status', 'onboarding_filled_fields', 'attendance_scheme_id',
             'nick_name', 'extension', 'blood_group', 'marital_status', 'marriage_date',
             'nationality', 'residential_status', 'birth_place', 'origin_country', 'religion', 'is_disabled',
-            'personal_email', 'height', 'weight', 'id_mark', 'hobby', 'caste',
             'present_address', 'city', 'district', 'state', 'country', 'pincode',
             'permanent_address', 'permanent_city', 'permanent_country', 'permanent_pincode',
-            'department_id', 'gender', 'date_of_birth', 'resignation_date', 'office_location'
+            'department_id', 'gender', 'date_of_birth', 'resignation_date', 'office_location',
+            'applicable_statutory_rules'
         ];
 
         const missingColumns = [];
@@ -136,6 +136,7 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('date_of_birth')) table.date('date_of_birth').nullable();
                 if (missingColumns.includes('resignation_date')) table.date('resignation_date').nullable();
                 if (missingColumns.includes('office_location')) table.string('office_location', 100).nullable();
+                if (missingColumns.includes('applicable_statutory_rules')) table.text('applicable_statutory_rules').nullable();
             });
 
             // Force drop unique constraint on employee_id_number to allow duplicates as requested

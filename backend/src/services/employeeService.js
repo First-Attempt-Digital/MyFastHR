@@ -1208,6 +1208,12 @@ class EmployeeService {
         if (data.include_esi !== undefined) updateData.include_esi = data.include_esi ? 1 : 0;
         if (data.include_lwf !== undefined) updateData.include_lwf = data.include_lwf ? 1 : 0;
         if (data.include_gratuity !== undefined) updateData.include_gratuity = data.include_gratuity ? 1 : 0;
+        
+        if (data.applicable_statutory_rules !== undefined) {
+            updateData.applicable_statutory_rules = Array.isArray(data.applicable_statutory_rules)
+                ? JSON.stringify(data.applicable_statutory_rules)
+                : data.applicable_statutory_rules;
+        }
 
         return await db('employees')
             .where({ id, company_id: companyId })

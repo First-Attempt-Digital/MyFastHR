@@ -570,7 +570,7 @@ const AttendanceMuster = () => {
                                     ? 'bg-[#4361ee] border-[#4361ee] text-white shadow-md shadow-indigo-100 scale-105' 
                                     : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
                             }`}
-                            title="Show Rules / नियम देखें"
+                            title="Show Rules"
                         >
                             <HelpCircle size={14} className={showRules ? 'animate-pulse' : ''} />
                         </button>
@@ -788,14 +788,14 @@ const AttendanceMuster = () => {
                                         <div className="space-y-1.5">
                                             <div className="flex items-center gap-1.5 text-indigo-700 font-extrabold uppercase tracking-wide text-[10px]">
                                                 <HelpCircle size={14} className="text-indigo-600" />
-                                                Muster Calculations & Attendance Flow / मस्टर गणना एवं हाजिरी नियम
+                                                Muster Calculations & Attendance Flow
                                             </div>
                                             <ul className="list-disc pl-4 space-y-1 text-slate-500 font-bold text-[11px] leading-relaxed">
-                                                <li><strong className="text-slate-700">P (Present):</strong> Working hours meet/exceed full shift hours. (काम के घंटे पूरे होने पर सीधी हाजिरी।)</li>
-                                                <li><strong className="text-slate-700">HD (Half Day):</strong> Working hours equal to or more than Half Day config, but less than Full Day. (काम के घंटे हाफ-डे लिमिट से ज्यादा लेकिन पूरे दिन से कम हैं।)</li>
-                                                <li><strong className="text-slate-700">A (Absent):</strong> Working hours are below the Half Day limit. Early checkouts prior to completing half-day hours do not generate early-out requests. (काम के घंटे हाफ-डे लिमिट से कम होने पर आटोमेटिक अनुपस्थित। हाफ-डे से पहले पंच-आउट करने पर कोई अर्ली-आउट रिक्वेस्ट नहीं बनेगी।)</li>
-                                                <li><strong className="text-slate-700">Direct vs Request:</strong> Punching on-time directly marks present. Late punch-ins or early departures (after half-day hours) will show status <strong className="text-[#4361ee] bg-indigo-50 px-1 rounded">L</strong> / <strong className="text-orange-600 bg-orange-50 px-1 rounded">E</strong> and generate regularization requests in "Entry/Exit Approvals". (समय पर आने पर डायरेक्ट P; लेट आने या हाफ-डे के बाद जल्दी जाने पर अप्रूवल की आवश्यकता होती है।)</li>
-                                                <li><strong className="text-slate-700">Special Indicators / विशेष चिन्ह:</strong> Cells with a <strong className="text-[#4361ee]">Blue Folded Corner</strong> represent manual overrides. Cells with an <strong className="text-amber-500">Amber Dot</strong> represent grace periods applied. (नीले कोने वाले सेल मैन्युअल बदलाव हैं; पीले बिंदु वाले सेल में लेट-इन ग्रेस लिमिट का उपयोग हुआ है।)</li>
+                                                <li><strong className="text-slate-700">P (Present):</strong> Working hours meet/exceed full shift hours.</li>
+                                                <li><strong className="text-slate-700">HD (Half Day):</strong> Working hours equal to or more than Half Day config, but less than Full Day.</li>
+                                                <li><strong className="text-slate-700">A (Absent):</strong> Working hours are below the Half Day limit. Early checkouts prior to completing half-day hours do not generate early-out requests.</li>
+                                                <li><strong className="text-slate-700">Direct vs Request:</strong> Punching on-time directly marks present. Late punch-ins or early departures (after half-day hours) will show status <strong className="text-[#4361ee] bg-indigo-50 px-1 rounded">L</strong> / <strong className="text-orange-600 bg-orange-50 px-1 rounded">E</strong> and generate regularization requests in "Entry/Exit Approvals".</li>
+                                                <li><strong className="text-slate-700">Special Indicators:</strong> Cells with a <strong className="text-[#4361ee]">Blue Folded Corner</strong> represent manual overrides. Cells with an <strong className="text-amber-500">Amber Dot</strong> represent grace periods applied.</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -911,13 +911,13 @@ const AttendanceMuster = () => {
                                                             {emp.meta?.[day]?.is_override && (
                                                                 <div 
                                                                     className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-indigo-600 border-l-[6px] border-l-transparent" 
-                                                                    title="Manual Override / मैन्युअल बदलाव"
+                                                                    title="Manual Override"
                                                                 />
                                                             )}
                                                             {emp.meta?.[day]?.is_grace && (
                                                                 <div 
                                                                     className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full" 
-                                                                    title="Grace Period Applied / रियायत समय"
+                                                                    title="Grace Period Applied"
                                                                 />
                                                             )}
                                                         </td>

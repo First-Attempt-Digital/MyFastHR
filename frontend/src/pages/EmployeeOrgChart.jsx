@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { 
     Users, Search, ChevronRight, ChevronDown, 
     Mail, Smartphone, MapPin, Building2, 
-    X, Loader2, RefreshCw, Network
+    X, Loader2, RefreshCw, Network,
+    ZoomIn, ZoomOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../utils/api';
@@ -171,6 +172,7 @@ const EmployeeOrgChart = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [lastRefresh, setLastRefresh] = useState(null);
+    const [zoom, setZoom] = useState(1);
 
     const fetchChart = useCallback(async (silent = false) => {
         if (!silent) setLoading(true);
@@ -411,9 +413,49 @@ const EmployeeOrgChart = () => {
                     <button onClick={() => fetchChart()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Retry</button>
                 </div>
             ) : (
-                <div className="bg-white rounded-2xl border border-slate-150 p-6 md:p-12 shadow-sm overflow-x-auto custom-scrollbar min-h-[600px]">
+                <div className="bg-white rounded-2xl border border-slate-150 p-6 md:p-12 shadow-sm overflow-auto custom-scrollbar min-h-[600px] relative">
+                    {/* Floating Zoom Controls */}
+                    {!loading && !error && tree.length > 0 && (
+                        <div className="absolute top-6 right-6 flex items-center gap-1.5 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-2xl p-1.5 shadow-lg z-20">
+                            <button 
+                                onClick={() => setZoom(prev => Math.max(0.5, prev - 0.1))} 
+                                disabled={zoom <= 0.5}
+                                className="p-2 bg-white rounded-xl text-slate-500 hover:text-indigo-650 hover:bg-slate-50 transition-all disabled:opacity-40 disabled:hover:bg-white border border-slate-100"
+                                title="Zoom Out"
+                            >
+                                <ZoomOut size={16} />
+                            </button>
+                            <span className="text-[10px] font-black text-slate-500 min-w-[36px] text-center font-mono">
+                                {Math.round(zoom * 100)}%
+                            </span>
+                            <button 
+                                onClick={() => setZoom(prev => Math.min(1.5, prev + 0.1))} 
+                                disabled={zoom >= 1.5}
+                                className="p-2 bg-white rounded-xl text-slate-500 hover:text-indigo-650 hover:bg-slate-50 transition-all disabled:opacity-40 disabled:hover:bg-white border border-slate-100"
+                                title="Zoom In"
+                            >
+                                <ZoomIn size={16} />
+                            </button>
+                            <div className="w-px h-4 bg-slate-200 mx-0.5" />
+                            <button 
+                                onClick={() => setZoom(1)}
+                                className="px-2.5 py-1.5 bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all"
+                                title="Reset Zoom"
+                            >
+                                Reset
+                            </button>
+                        </div>
+                    )}
+
                     {tree.length > 0 ? (
-                        <div className="flex items-start justify-center min-w-max p-8">
+                        <div 
+                            className="flex items-start justify-center min-w-max p-8"
+                            style={{ 
+                                transform: `scale(${zoom})`, 
+                                transformOrigin: 'top center', 
+                                transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)' 
+                            }}
+                        >
                             <div className="flex flex-col items-center">
                                 {tree.map(root => (
                                     <LevelTreeNode key={root.id} node={root} />

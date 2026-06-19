@@ -543,6 +543,29 @@ const Payroll = () => {
     const hasLwfRule = globalRules.some(r => !!r.is_active && r.rule_name.toLowerCase().includes('lwf'));
     const hasGratuityRule = globalRules.some(r => !!r.is_active && r.rule_name.toLowerCase().includes('gratuity'));
 
+    const pfRule = globalRules.find(r => !!r.is_active && (r.rule_name.toLowerCase().includes('pf') || r.rule_name.toLowerCase().includes('provident')));
+    const esiRule = globalRules.find(r => !!r.is_active && (r.rule_name.toLowerCase().includes('esic') || r.rule_name.toLowerCase().includes('esi') || r.rule_name.toLowerCase().includes('insurance')));
+
+    const pfEeRate = pfRule ? (parseFloat(pfRule.employee_percentage) / 100) : 0;
+    const pfErRate = pfRule ? (parseFloat(pfRule.employer_percentage) / 100) : 0;
+    const esiEeRate = esiRule ? (parseFloat(esiRule.employee_percentage) / 100) : 0;
+    const esiErRate = esiRule ? (parseFloat(esiRule.employer_percentage) / 100) : 0;
+
+    const isRuleApplicableLocal = (emp, rule, defaultCol) => {
+        if (!emp) return true;
+        if (emp.applicable_statutory_rules) {
+            try {
+                const ruleIds = typeof emp.applicable_statutory_rules === 'string'
+                    ? JSON.parse(emp.applicable_statutory_rules)
+                    : emp.applicable_statutory_rules;
+                if (Array.isArray(ruleIds)) {
+                    return ruleIds.includes(rule.id);
+                }
+            } catch (e) {}
+        }
+        return emp[defaultCol] !== undefined ? !!emp[defaultCol] : true;
+    };
+
     useEffect(() => {
         fetchControls();
         fetchEmployees();
@@ -966,34 +989,69 @@ const Payroll = () => {
     };
 
     const handleExportRegisterCSV = () => {
-        if (!filteredRegisterData || filteredRegisterData.length === 0) {
+        const targetData = registerData; // Export all employees for completeness
+        if (!targetData || targetData.length === 0) {
             alert("No data available to export.");
             return;
         }
-        const dataToExport = filteredRegisterData.map(reg => {
+
+        const activeRules = globalRules.filter(r => !!r.is_active);
+
+        const dataToExport = targetData.map(reg => {
             const row = {
                 employee_id_number: reg.employee_id_number,
                 name: `${reg.first_name || ''} ${reg.last_name || ''}`.trim(),
                 designation: reg.designation,
+                department: reg.department || reg.department_name || '',
+                location: reg.location || reg.office_location || '',
                 presents: reg.stats?.P || 0,
                 leaves: reg.stats?.L || 0,
                 absents: reg.stats?.A || 0,
                 weekoffs_holidays: (reg.stats?.OFF || 0) + (reg.stats?.H || 0),
-                base_salary: reg.base_salary || 0,
-                total_allowances: reg.total_allowances || 0,
+                base_salary: reg.full_base_salary !== undefined && reg.full_base_salary !== null ? reg.full_base_salary : (reg.base_salary || 0),
+                total_allowances: reg.full_total_allowances !== undefined && reg.full_total_allowances !== null ? reg.full_total_allowances : (reg.total_allowances || 0),
                 unpaid_leave_deduction: reg.unpaid_leave_deduction || 0,
                 late_mark_deduction: reg.late_mark_deduction || 0,
                 overtime_bonus: reg.overtime_bonus || 0,
-                manual_deduction_override: reg.manual_deduction_override || 0,
+                manual_deduction_override: reg.manual_deduction_override || 0
             };
 
-            if (hasPfRule) row.employee_pf = reg.employee_pf || 0;
-            if (hasEsiRule) row.employee_esic = reg.employee_esic || 0;
-            if (hasGratuityRule) row.gratuity_share = reg.gratuity_share || 0;
+            activeRules.forEach(rule => {
+                const breakdownVal = (() => {
+                    if (reg.statutory_rules_breakdown) {
+                        try {
+                            const breakdown = typeof reg.statutory_rules_breakdown === 'string'
+                                ? JSON.parse(reg.statutory_rules_breakdown)
+                                : reg.statutory_rules_breakdown;
+                            if (breakdown && typeof breakdown === 'object') {
+                                const item = breakdown[rule.id] || breakdown[rule.rule_name];
+                                if (item && item.employeeShare !== undefined) {
+                                    return parseFloat(item.employeeShare) || 0;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    
+                    const nameLower = rule.rule_name.toLowerCase();
+                    if (nameLower.includes('pf') || nameLower.includes('provident')) {
+                        return parseFloat(reg.employee_pf) || 0;
+                    }
+                    if (nameLower.includes('esic') || nameLower.includes('esi') || nameLower.includes('insurance')) {
+                        return parseFloat(reg.employee_esic) || 0;
+                    }
+                    if (nameLower.includes('gratuity')) {
+                        return parseFloat(reg.gratuity_share) || 0;
+                    }
+                    return 0;
+                })();
+
+                row[`rule_${rule.id}`] = breakdownVal;
+            });
 
             row.total_deductions = reg.total_deductions || 0;
             row.loan_emi_deduction = reg.loan_emi_deduction || 0;
             row.net_salary = reg.net_salary || 0;
+            row.status = reg.status || 'draft';
 
             return row;
         });
@@ -1002,6 +1060,8 @@ const Payroll = () => {
             employee_id_number: 'Employee ID',
             name: 'Employee Name',
             designation: 'Designation',
+            department: 'Department',
+            location: 'Location',
             presents: 'Presents (P)',
             leaves: 'Leaves (L)',
             absents: 'Absents (A)',
@@ -1011,16 +1071,17 @@ const Payroll = () => {
             unpaid_leave_deduction: 'Leaves Cut',
             late_mark_deduction: 'Late Penalty',
             overtime_bonus: 'Bonus / Incentives',
-            manual_deduction_override: 'Manual Deductions',
+            manual_deduction_override: 'Manual Deductions'
         };
 
-        if (hasPfRule) headers.employee_pf = 'EPF Share';
-        if (hasEsiRule) headers.employee_esic = 'ESIC Share';
-        if (hasGratuityRule) headers.gratuity_share = 'Gratuity Share';
+        activeRules.forEach(rule => {
+            headers[`rule_${rule.id}`] = rule.rule_name;
+        });
 
         headers.total_deductions = 'Other Deductions';
         headers.loan_emi_deduction = 'Loan EMI';
         headers.net_salary = 'Projected Net Salary';
+        headers.status = 'Status';
 
         exportToCSV(dataToExport, `Pay_Register_${selectedMonth.replace(' ', '_')}.csv`, headers);
     };
@@ -1207,8 +1268,8 @@ const Payroll = () => {
         let s = parseFloat(field === 'special' ? val : specialAllowanceInput) || 0;
         let m = parseFloat(field === 'medical' ? val : medicalAllowanceInput) || 0;
 
-        const isPfEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_pf : true;
-        const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
+        const isPfEnabled = pfRule ? isRuleApplicableLocal(selectedInputsEmployee, pfRule, 'include_pf') : true;
+        const isEsiEnabled = esiRule ? isRuleApplicableLocal(selectedInputsEmployee, esiRule, 'include_esi') : true;
 
         let computedEePf = employeePfInput;
         let computedErPf = employerPfInput;
@@ -1217,7 +1278,7 @@ const Payroll = () => {
 
         if (field === 'basic') {
             setBasicInput(val);
-            const computedPf = isPfEnabled ? ((parseFloat(val) || 0) * 0.12) : 0;
+            const computedPf = isPfEnabled ? ((parseFloat(val) || 0) * pfEeRate) : 0;
             const formattedPf = parseFloat(computedPf.toFixed(2));
             setEmployeePfInput(String(formattedPf));
             setEmployerPfInput(String(formattedPf));
@@ -1247,8 +1308,8 @@ const Payroll = () => {
         setGrossInput(String(newGross));
 
         if (['basic', 'hra', 'special', 'medical'].includes(field)) {
-            const computedEeEsicVal = isEsiEnabled ? (newGross * 0.0075) : 0;
-            const computedErEsicVal = isEsiEnabled ? (newGross * 0.0325) : 0;
+            const computedEeEsicVal = isEsiEnabled ? (newGross * esiEeRate) : 0;
+            const computedErEsicVal = isEsiEnabled ? (newGross * esiErRate) : 0;
             const formattedEeEsic = parseFloat(computedEeEsicVal.toFixed(2));
             const formattedErEsic = parseFloat(computedErEsicVal.toFixed(2));
             setEmployeeEsicInput(String(formattedEeEsic));
@@ -1318,8 +1379,8 @@ const Payroll = () => {
             setInputsHistory(res || []);
 
             const emp = empObject || selectedInputsEmployee;
-            const isPfEnabled = emp ? !!emp.include_pf : true;
-            const isEsiEnabled = emp ? !!emp.include_esi : true;
+            const isPfEnabled = pfRule ? isRuleApplicableLocal(emp, pfRule, 'include_pf') : true;
+            const isEsiEnabled = esiRule ? isRuleApplicableLocal(emp, esiRule, 'include_esi') : true;
 
             if (res && res.length > 0) {
                 // Select the first (latest) revision by default
@@ -2159,18 +2220,6 @@ const Payroll = () => {
                             <div className="flex items-center gap-2">
                                 <button onClick={() => setShowPayrollGuide(true)} className="p-2.5 bg-white hover:bg-indigo-50 border border-indigo-100 rounded-xl text-[#4361ee] shadow-sm transition-all active:scale-95" title="Payroll Process Guide"><Info size={16} /></button>
                                 <button
-                                    onClick={handleSendBulkEmail}
-                                    disabled={sendingEmails}
-                                    className="px-6 py-2.5 bg-white border border-[#4361ee] hover:bg-indigo-50 text-[#4361ee] rounded-xl font-black text-[10px] uppercase tracking-widest shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
-                                >
-                                    {sendingEmails ? (
-                                        <RefreshCw size={13} className="animate-spin text-[#4361ee]" />
-                                    ) : (
-                                        <Mail size={13} />
-                                    )}
-                                    {sendingEmails ? 'Mailing...' : 'Bulk Email Payslips'}
-                                </button>
-                                <button
                                     onClick={handleProcessPayroll}
                                     disabled={controls.payroll_locked || isProcessing}
                                     className={`px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md transition-all ${controls.payroll_locked
@@ -2624,9 +2673,9 @@ const Payroll = () => {
                                             <th className="px-3 py-3 text-orange-600 text-[9px] font-black uppercase tracking-widest">Late Penalty</th>
                                             <th className="px-3 py-3 text-emerald-600 text-[9px] font-black uppercase tracking-widest min-w-[130px]">Bonus / Incentives</th>
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest min-w-[130px]">Manual Deductions</th>
-                                            {hasPfRule && <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">EPF Share</th>}
-                                            {hasEsiRule && <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">ESIC Share</th>}
-                                            {hasGratuityRule && <th className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">Gratuity Share</th>}
+                                            {globalRules.filter(r => !!r.is_active).map(rule => (
+                                                <th key={rule.id} className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">{rule.rule_name}</th>
+                                            ))}
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Other Deductions</th>
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Loan EMI</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-[#4361ee] uppercase tracking-widest bg-indigo-50/10">Projected Net</th>
@@ -2675,22 +2724,40 @@ const Payroll = () => {
                                                                 if (parts.length > 2) {
                                                                     rawVal = parts[0] + '.' + parts.slice(1).join('');
                                                                 }
-                                                                const val = rawVal === '' ? '' : parseFloat(rawVal) || 0;
+                                                                const val = rawVal === '' ? 0 : parseFloat(rawVal) || 0;
 
                                                                 setRegisterData(prev => prev.map(item => {
                                                                     if (item.employee_id === reg.employee_id) {
-                                                                        const numBonus = val === '' ? 0 : val;
+                                                                        const numBonus = val;
                                                                         const manualDeduct = parseFloat(item.manual_deduction_override) || 0;
                                                                         const base = parseFloat(item.base_salary) || 0;
                                                                         const allowances = parseFloat(item.total_allowances) || 0;
                                                                         const deductions = parseFloat(item.total_deductions) || 0;
                                                                         const late = parseFloat(item.late_mark_deduction) || 0;
-                                                                        const pf = hasPfRule ? (parseFloat(item.employee_pf) || 0) : 0;
-                                                                        const esic = hasEsiRule ? (parseFloat(item.employee_esic) || 0) : 0;
-                                                                        const gratuity = hasGratuityRule ? (parseFloat(item.gratuity_share) || 0) : 0;
                                                                         const loan = parseFloat(item.loan_emi_deduction) || 0;
 
-                                                                        const net = base + allowances - deductions - late - pf - esic - gratuity - loan - manualDeduct + numBonus;
+                                                                        let statutoryDeductionsTotal = 0;
+                                                                        if (item.statutory_rules_breakdown) {
+                                                                            try {
+                                                                                const breakdown = typeof item.statutory_rules_breakdown === 'string'
+                                                                                    ? JSON.parse(item.statutory_rules_breakdown)
+                                                                                    : item.statutory_rules_breakdown;
+                                                                                if (breakdown && typeof breakdown === 'object') {
+                                                                                    Object.values(breakdown).forEach(bRule => {
+                                                                                        if (bRule && bRule.employeeShare !== undefined) {
+                                                                                            statutoryDeductionsTotal += parseFloat(bRule.employeeShare) || 0;
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            } catch (e) {}
+                                                                        } else {
+                                                                            const pf = hasPfRule ? (parseFloat(item.employee_pf) || 0) : 0;
+                                                                            const esic = hasEsiRule ? (parseFloat(item.employee_esic) || 0) : 0;
+                                                                            const gratuity = hasGratuityRule ? (parseFloat(item.gratuity_share) || 0) : 0;
+                                                                            statutoryDeductionsTotal = pf + esic + gratuity;
+                                                                        }
+
+                                                                        const net = base + allowances - deductions - late - statutoryDeductionsTotal - loan - manualDeduct + numBonus;
                                                                         const newNet = Math.max(0, net).toFixed(2);
                                                                         return { ...item, overtime_bonus: val, net_salary: newNet };
                                                                     }
@@ -2749,12 +2816,30 @@ const Payroll = () => {
                                                                         const allowances = parseFloat(item.total_allowances) || 0;
                                                                         const deductions = parseFloat(item.total_deductions) || 0;
                                                                         const late = parseFloat(item.late_mark_deduction) || 0;
-                                                                        const pf = hasPfRule ? (parseFloat(item.employee_pf) || 0) : 0;
-                                                                        const esic = hasEsiRule ? (parseFloat(item.employee_esic) || 0) : 0;
-                                                                        const gratuity = hasGratuityRule ? (parseFloat(item.gratuity_share) || 0) : 0;
                                                                         const loan = parseFloat(item.loan_emi_deduction) || 0;
 
-                                                                        const net = base + allowances - deductions - late - pf - esic - gratuity - loan - numDeduct + bonus;
+                                                                        let statutoryDeductionsTotal = 0;
+                                                                        if (item.statutory_rules_breakdown) {
+                                                                            try {
+                                                                                const breakdown = typeof item.statutory_rules_breakdown === 'string'
+                                                                                    ? JSON.parse(item.statutory_rules_breakdown)
+                                                                                    : item.statutory_rules_breakdown;
+                                                                                if (breakdown && typeof breakdown === 'object') {
+                                                                                    Object.values(breakdown).forEach(bRule => {
+                                                                                        if (bRule && bRule.employeeShare !== undefined) {
+                                                                                            statutoryDeductionsTotal += parseFloat(bRule.employeeShare) || 0;
+                                                                                        }
+                                                                                    });
+                                                                                }
+                                                                            } catch (e) {}
+                                                                        } else {
+                                                                            const pf = hasPfRule ? (parseFloat(item.employee_pf) || 0) : 0;
+                                                                            const esic = hasEsiRule ? (parseFloat(item.employee_esic) || 0) : 0;
+                                                                            const gratuity = hasGratuityRule ? (parseFloat(item.gratuity_share) || 0) : 0;
+                                                                            statutoryDeductionsTotal = pf + esic + gratuity;
+                                                                        }
+
+                                                                        const net = base + allowances - deductions - late - statutoryDeductionsTotal - loan - numDeduct + bonus;
                                                                         const newNet = Math.max(0, net).toFixed(2);
                                                                         return { ...item, manual_deduction_override: val, net_salary: newNet };
                                                                     }
@@ -2787,21 +2872,42 @@ const Payroll = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                {hasPfRule && (
-                                                    <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
-                                                        {reg.employee_pf > 0 ? `-₹${Number(reg.employee_pf).toFixed(2)}` : '0.00'}
-                                                    </td>
-                                                )}
-                                                {hasEsiRule && (
-                                                    <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
-                                                        {reg.employee_esic > 0 ? `-₹${Number(reg.employee_esic).toFixed(2)}` : '0.00'}
-                                                    </td>
-                                                )}
-                                                {hasGratuityRule && (
-                                                    <td className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
-                                                        {reg.gratuity_share > 0 ? `-₹${Number(reg.gratuity_share).toFixed(2)}` : '0.00'}
-                                                    </td>
-                                                )}
+                                                {globalRules.filter(r => !!r.is_active).map(rule => {
+                                                    const breakdownVal = (() => {
+                                                        if (reg.statutory_rules_breakdown) {
+                                                            try {
+                                                                const breakdown = typeof reg.statutory_rules_breakdown === 'string'
+                                                                    ? JSON.parse(reg.statutory_rules_breakdown)
+                                                                    : reg.statutory_rules_breakdown;
+                                                                if (breakdown && typeof breakdown === 'object') {
+                                                                    const item = breakdown[rule.id] || breakdown[rule.rule_name];
+                                                                    if (item && item.employeeShare !== undefined) {
+                                                                        return parseFloat(item.employeeShare) || 0;
+                                                                    }
+                                                                }
+                                                            } catch (e) {}
+                                                        }
+                                                        
+                                                        // Fallback to legacy columns for backward compatibility
+                                                        const nameLower = rule.rule_name.toLowerCase();
+                                                        if (nameLower.includes('pf') || nameLower.includes('provident')) {
+                                                            return parseFloat(reg.employee_pf) || 0;
+                                                        }
+                                                        if (nameLower.includes('esic') || nameLower.includes('esi') || nameLower.includes('insurance')) {
+                                                            return parseFloat(reg.employee_esic) || 0;
+                                                        }
+                                                        if (nameLower.includes('gratuity')) {
+                                                            return parseFloat(reg.gratuity_share) || 0;
+                                                        }
+                                                        return 0;
+                                                    })();
+
+                                                    return (
+                                                        <td key={rule.id} className="px-3 py-3.5 text-xs font-bold text-indigo-500/90">
+                                                            {breakdownVal > 0 ? `-₹${Number(breakdownVal).toFixed(2)}` : '0.00'}
+                                                        </td>
+                                                    );
+                                                })}
                                                 <td 
                                                     onClick={() => {
                                                         if (reg.other_deductions_breakdown && reg.other_deductions_breakdown.length > 0) {
@@ -2998,8 +3104,8 @@ const Payroll = () => {
                                                                 onClick={() => {
                                                                     setIsAddingNewRevision(true);
                                                                     setPercentInputs({});
-                                                                    const isPfEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_pf : true;
-                                                                    const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
+                                                                    const isPfEnabled = pfRule ? isRuleApplicableLocal(selectedInputsEmployee, pfRule, 'include_pf') : true;
+                                                                    const isEsiEnabled = esiRule ? isRuleApplicableLocal(selectedInputsEmployee, esiRule, 'include_esi') : true;
 
                                                                     if (selectedRevision) {
                                                                         const prevGross = parseFloat(selectedRevision.gross_salary) || 0;
@@ -3012,13 +3118,13 @@ const Payroll = () => {
                                                                         
                                                                         const epfVal = parseFloat(selectedRevision.employer_pf) || 0;
                                                                         const eePfVal = parseFloat(selectedRevision.employee_pf) || 0;
-                                                                        setEmployerPfInput(isPfEnabled ? (epfVal > 0 ? String(epfVal) : String(parseFloat((prevBasic * 0.12).toFixed(2)))) : '0');
-                                                                        setEmployeePfInput(isPfEnabled ? (eePfVal > 0 ? String(eePfVal) : String(parseFloat((prevBasic * 0.12).toFixed(2)))) : '0');
+                                                                        setEmployerPfInput(isPfEnabled ? (epfVal > 0 ? String(epfVal) : String(parseFloat((prevBasic * pfErRate).toFixed(2)))) : '0');
+                                                                        setEmployeePfInput(isPfEnabled ? (eePfVal > 0 ? String(eePfVal) : String(parseFloat((prevBasic * pfEeRate).toFixed(2)))) : '0');
 
                                                                         const erEsiVal = parseFloat(selectedRevision.employer_esic) || 0;
                                                                         const eeEsiVal = parseFloat(selectedRevision.employee_esic) || 0;
-                                                                        setEmployerEsicInput(isEsiEnabled ? (erEsiVal > 0 ? String(erEsiVal) : String(parseFloat((prevGross * 0.0325).toFixed(2)))) : '0');
-                                                                        setEmployeeEsicInput(isEsiEnabled ? (eeEsiVal > 0 ? String(eeEsiVal) : String(parseFloat((prevGross * 0.0075).toFixed(2)))) : '0');
+                                                                        setEmployerEsicInput(isEsiEnabled ? (erEsiVal > 0 ? String(erEsiVal) : String(parseFloat((prevGross * esiErRate).toFixed(2)))) : '0');
+                                                                        setEmployeeEsicInput(isEsiEnabled ? (eeEsiVal > 0 ? String(eeEsiVal) : String(parseFloat((prevGross * esiEeRate).toFixed(2)))) : '0');
                                                                     } else {
                                                                         setGrossInput('');
                                                                         setBasicInput('');
@@ -3047,31 +3153,27 @@ const Payroll = () => {
                                                                     disabled={controls.inputs_locked}
                                                                     onClick={() => {
                                                                         setIsRevisionEditing(true);
-                                                                        setPercentInputs({});
-                                                                        const isPfEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_pf : true;
-                                                                        const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
-
+                                                                        const isPfEnabled = pfRule ? isRuleApplicableLocal(selectedInputsEmployee, pfRule, 'include_pf') : true;
+                                                                        const isEsiEnabled = esiRule ? isRuleApplicableLocal(selectedInputsEmployee, esiRule, 'include_esi') : true;
                                                                         const basicVal = parseFloat(basicInput) || 0;
                                                                         const grossVal = parseFloat(grossInput) || 0;
-
                                                                         if (isPfEnabled) {
                                                                             if (!employerPfInput || parseFloat(employerPfInput) === 0) {
-                                                                                setEmployerPfInput(String(parseFloat((basicVal * 0.12).toFixed(2))));
+                                                                                setEmployerPfInput(String(parseFloat((basicVal * pfErRate).toFixed(2))));
                                                                             }
                                                                             if (!employeePfInput || parseFloat(employeePfInput) === 0) {
-                                                                                setEmployeePfInput(String(parseFloat((basicVal * 0.12).toFixed(2))));
+                                                                                setEmployeePfInput(String(parseFloat((basicVal * pfEeRate).toFixed(2))));
                                                                             }
                                                                         } else {
                                                                             setEmployerPfInput('0');
                                                                             setEmployeePfInput('0');
                                                                         }
-
                                                                         if (isEsiEnabled) {
                                                                             if (!employerEsicInput || parseFloat(employerEsicInput) === 0) {
-                                                                                setEmployerEsicInput(String(parseFloat((grossVal * 0.0325).toFixed(2))));
+                                                                                setEmployerEsicInput(String(parseFloat((grossVal * esiErRate).toFixed(2))));
                                                                             }
                                                                             if (!employeeEsicInput || parseFloat(employeeEsicInput) === 0) {
-                                                                                setEmployeeEsicInput(String(parseFloat((grossVal * 0.0075).toFixed(2))));
+                                                                                setEmployeeEsicInput(String(parseFloat((grossVal * esiEeRate).toFixed(2))));
                                                                             }
                                                                         } else {
                                                                             setEmployerEsicInput('0');
@@ -3127,75 +3229,107 @@ const Payroll = () => {
                                             <span className="text-[9.5px] text-slate-400 font-semibold block leading-snug">Toggle whether EPF, ESIC, LWF, and Gratuity auto-calculation and deductions are active for this employee's payroll.</span>
                                         </div>
                                         <div className="flex flex-wrap md:flex-nowrap gap-3 items-center flex-shrink-0">
-                                            {[
-                                                { label: 'EPF (Provident Fund)', name: 'include_pf', value: !!selectedInputsEmployee.include_pf, show: hasPfRule },
-                                                { label: 'ESIC (Health Ins.)', name: 'include_esi', value: !!selectedInputsEmployee.include_esi, show: hasEsiRule },
-                                                { label: 'LWF (Labour Welfare)', name: 'include_lwf', value: !!selectedInputsEmployee.include_lwf, show: hasLwfRule },
-                                                { label: 'Gratuity', name: 'include_gratuity', value: !!selectedInputsEmployee.include_gratuity, show: hasGratuityRule }
-                                            ].filter(opt => opt.show).map(opt => (
-                                                <label key={opt.name} className="flex items-center gap-2.5 cursor-pointer bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm hover:border-[#4361ee]/40 transition-all select-none whitespace-nowrap">
-                                                    <input 
-                                                        type="checkbox"
-                                                        disabled={controls.inputs_locked}
-                                                        checked={opt.value}
-                                                        onChange={async (e) => {
-                                                            if (controls.inputs_locked) return;
-                                                            const newValue = e.target.checked;
-                                                            try {
-                                                                // Call PATCH endpoint to update database setting
-                                                                await api.patch(`/employees/${selectedInputsEmployee.id}/statutory-settings`, {
-                                                                    [opt.name]: newValue
-                                                                });
-                                                                
-                                                                // Update local employee states in selectedInputsEmployee and employees array
-                                                                const updatedEmployee = { ...selectedInputsEmployee, [opt.name]: newValue ? 1 : 0 };
-                                                                setSelectedInputsEmployee(updatedEmployee);
-                                                                setEmployees(prev => prev.map(emp => emp.id === selectedInputsEmployee.id ? updatedEmployee : emp));
-                                                                
-                                                                // If in edit / add revision mode, trigger auto-recalculation dynamically!
-                                                                if (isAddingNewRevision || isRevisionEditing) {
-                                                                    // Let's re-run the calculation with the new statutory settings using current values
-                                                                    const gross = parseFloat(grossInput) || 0;
-                                                                    const basic = parseFloat(basicInput) || 0;
-                                                                    const isPf = opt.name === 'include_pf' ? newValue : !!selectedInputsEmployee.include_pf;
-                                                                    const isEsi = opt.name === 'include_esi' ? newValue : !!selectedInputsEmployee.include_esi;
-                                                                    
-                                                                    const eePf = isPf ? (basic * 0.12) : 0;
-                                                                    const eeEsic = isEsi ? (gross * 0.0075) : 0;
-                                                                    const erPf = isPf ? (basic * 0.12) : 0;
-                                                                    const erEsic = isEsi ? (gross * 0.0325) : 0;
-                                                                    
-                                                                    setEmployeePfInput(String(parseFloat(eePf.toFixed(2))));
-                                                                    setEmployeeEsicInput(String(parseFloat(eeEsic.toFixed(2))));
-                                                                    setEmployerPfInput(String(parseFloat(erPf.toFixed(2))));
-                                                                    setEmployerEsicInput(String(parseFloat(erEsic.toFixed(2))));
-                                                                } else if (selectedRevision) {
-                                                                    // If viewing a locked revision, we should update the inputs on-screen display values
-                                                                    const isPf = opt.name === 'include_pf' ? newValue : !!selectedInputsEmployee.include_pf;
-                                                                    const isEsi = opt.name === 'include_esi' ? newValue : !!selectedInputsEmployee.include_esi;
-                                                                    
-                                                                    const basicVal = parseFloat(selectedRevision.basic) || 0;
-                                                                    const grossVal = parseFloat(selectedRevision.gross_salary) || 0;
-                                                                    
-                                                                    const epfVal = parseFloat(selectedRevision.employer_pf) || 0;
-                                                                    const eePfVal = parseFloat(selectedRevision.employee_pf) || 0;
-                                                                    setEmployerPfInput(isPf ? (epfVal > 0 ? String(epfVal) : String(parseFloat((basicVal * 0.12).toFixed(2)))) : '0');
-                                                                    setEmployeePfInput(isPf ? (eePfVal > 0 ? String(eePfVal) : String(parseFloat((basicVal * 0.12).toFixed(2)))) : '0');
+                                            {globalRules.filter(r => !!r.is_active).map(rule => {
+                                                const nameLower = rule.rule_name.toLowerCase();
+                                                let keyName = '';
+                                                if (nameLower.includes('pf') || nameLower.includes('provident')) keyName = 'include_pf';
+                                                else if (nameLower.includes('esic') || nameLower.includes('esi') || nameLower.includes('insurance')) keyName = 'include_esi';
+                                                else if (nameLower.includes('lwf')) keyName = 'include_lwf';
+                                                else if (nameLower.includes('gratuity')) keyName = 'include_gratuity';
 
-                                                                    const erEsiVal = parseFloat(selectedRevision.employer_esic) || 0;
-                                                                    const eeEsiVal = parseFloat(selectedRevision.employee_esic) || 0;
-                                                                    setEmployerEsicInput(isEsi ? (erEsiVal > 0 ? String(erEsiVal) : String(parseFloat((grossVal * 0.0325).toFixed(2)))) : '0');
-                                                                    setEmployeeEsicInput(isEsi ? (eeEsiVal > 0 ? String(eeEsiVal) : String(parseFloat((grossVal * 0.0075).toFixed(2)))) : '0');
+                                                const isChecked = isRuleApplicableLocal(selectedInputsEmployee, rule, keyName);
+
+                                                return (
+                                                    <label key={rule.id} className="flex items-center gap-2.5 cursor-pointer bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm hover:border-[#4361ee]/40 transition-all select-none whitespace-nowrap">
+                                                        <input 
+                                                            type="checkbox"
+                                                            disabled={controls.inputs_locked}
+                                                            checked={isChecked}
+                                                            onChange={async (e) => {
+                                                                if (controls.inputs_locked) return;
+                                                                const newValue = e.target.checked;
+                                                                try {
+                                                                    // Sync applicable_statutory_rules array
+                                                                    let appRules = selectedInputsEmployee.applicable_statutory_rules 
+                                                                        ? (typeof selectedInputsEmployee.applicable_statutory_rules === 'string' 
+                                                                            ? JSON.parse(selectedInputsEmployee.applicable_statutory_rules) 
+                                                                            : [...selectedInputsEmployee.applicable_statutory_rules]) 
+                                                                        : [];
+                                                                    if (!Array.isArray(appRules)) appRules = [];
+
+                                                                    if (newValue) {
+                                                                        if (!appRules.includes(rule.id)) appRules.push(rule.id);
+                                                                    } else {
+                                                                        appRules = appRules.filter(id => id !== rule.id);
+                                                                    }
+
+                                                                    // Prepare payload
+                                                                    const patchPayload = {
+                                                                        applicable_statutory_rules: appRules
+                                                                    };
+                                                                    if (keyName) {
+                                                                        patchPayload[keyName] = newValue;
+                                                                    }
+
+                                                                    // Call PATCH endpoint to update database setting
+                                                                    await api.patch(`/employees/${selectedInputsEmployee.id}/statutory-settings`, patchPayload);
+                                                                    
+                                                                    // Update local employee states in selectedInputsEmployee and employees array
+                                                                    const updatedEmployee = { 
+                                                                        ...selectedInputsEmployee, 
+                                                                        applicable_statutory_rules: appRules
+                                                                    };
+                                                                    if (keyName) {
+                                                                        updatedEmployee[keyName] = newValue ? 1 : 0;
+                                                                    }
+                                                                    setSelectedInputsEmployee(updatedEmployee);
+                                                                    setEmployees(prev => prev.map(emp => emp.id === selectedInputsEmployee.id ? updatedEmployee : emp));
+                                                                    
+                                                                    // If in edit / add revision mode, trigger auto-recalculation dynamically!
+                                                                    if (isAddingNewRevision || isRevisionEditing) {
+                                                                        const gross = parseFloat(grossInput) || 0;
+                                                                        const basic = parseFloat(basicInput) || 0;
+                                                                        
+                                                                        const isPf = pfRule ? isRuleApplicableLocal(updatedEmployee, pfRule, 'include_pf') : false;
+                                                                        const isEsi = esiRule ? isRuleApplicableLocal(updatedEmployee, esiRule, 'include_esi') : false;
+                                                                        
+                                                                        const eePf = isPf ? (basic * pfEeRate) : 0;
+                                                                        const eeEsic = isEsi ? (gross * esiEeRate) : 0;
+                                                                        const erPf = isPf ? (basic * pfErRate) : 0;
+                                                                        const erEsic = isEsi ? (gross * esiErRate) : 0;
+                                                                        
+                                                                        setEmployeePfInput(String(parseFloat(eePf.toFixed(2))));
+                                                                        setEmployeeEsicInput(String(parseFloat(eeEsic.toFixed(2))));
+                                                                        setEmployerPfInput(String(parseFloat(erPf.toFixed(2))));
+                                                                        setEmployerEsicInput(String(parseFloat(erEsic.toFixed(2))));
+                                                                    } else if (selectedRevision) {
+                                                                        // If viewing a locked revision, update the inputs on-screen display values
+                                                                        const isPf = pfRule ? isRuleApplicableLocal(updatedEmployee, pfRule, 'include_pf') : false;
+                                                                        const isEsi = esiRule ? isRuleApplicableLocal(updatedEmployee, esiRule, 'include_esi') : false;
+                                                                        
+                                                                        const basicVal = parseFloat(selectedRevision.basic) || 0;
+                                                                        const grossVal = parseFloat(selectedRevision.gross_salary) || 0;
+                                                                        
+                                                                        const epfVal = parseFloat(selectedRevision.employer_pf) || 0;
+                                                                        const eePfVal = parseFloat(selectedRevision.employee_pf) || 0;
+                                                                        setEmployerPfInput(isPf ? (epfVal > 0 ? String(epfVal) : String(parseFloat((basicVal * pfErRate).toFixed(2)))) : '0');
+                                                                        setEmployeePfInput(isPf ? (eePfVal > 0 ? String(eePfVal) : String(parseFloat((basicVal * pfEeRate).toFixed(2)))) : '0');
+
+                                                                        const erEsiVal = parseFloat(selectedRevision.employer_esic) || 0;
+                                                                        const eeEsiVal = parseFloat(selectedRevision.employee_esic) || 0;
+                                                                        setEmployerEsicInput(isEsi ? (erEsiVal > 0 ? String(erEsiVal) : String(parseFloat((grossVal * esiErRate).toFixed(2)))) : '0');
+                                                                        setEmployeeEsicInput(isEsi ? (eeEsiVal > 0 ? String(eeEsiVal) : String(parseFloat((grossVal * esiEeRate).toFixed(2)))) : '0');
+                                                                    }
+                                                                } catch (err) {
+                                                                    alert(err.response?.data?.message || 'Failed to update statutory settings');
                                                                 }
-                                                            } catch (err) {
-                                                                alert(err.response?.data?.message || 'Failed to update statutory settings');
-                                                            }
-                                                        }}
-                                                        className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 rounded border-slate-300 disabled:opacity-50"
-                                                    />
-                                                    <span className="text-[9px] font-black uppercase text-slate-600">{opt.label}</span>
-                                                </label>
-                                            ))}
+                                                            }}
+                                                            className="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 rounded border-slate-300 disabled:opacity-50"
+                                                        />
+                                                        <span className="text-[9px] font-black uppercase text-slate-600">{rule.rule_name}</span>
+                                                    </label>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
@@ -3309,13 +3443,13 @@ const Payroll = () => {
                                                                     const special = 0;
                                                                     const medical = 0;
 
-                                                                    const isPfEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_pf : true;
-                                                                    const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
+                                                                    const isPfEnabled = pfRule ? isRuleApplicableLocal(selectedInputsEmployee, pfRule, 'include_pf') : true;
+                                                                    const isEsiEnabled = esiRule ? isRuleApplicableLocal(selectedInputsEmployee, esiRule, 'include_esi') : true;
 
-                                                                    const eePf = isPfEnabled ? (basic * 0.12) : 0;
-                                                                    const eeEsic = isEsiEnabled ? (gross * 0.0075) : 0;
-                                                                    const erPf = isPfEnabled ? (basic * 0.12) : 0;
-                                                                    const erEsic = isEsiEnabled ? (gross * 0.0325) : 0;
+                                                                    const eePf = isPfEnabled ? (basic * pfEeRate) : 0;
+                                                                    const eeEsic = isEsiEnabled ? (gross * esiEeRate) : 0;
+                                                                    const erPf = isPfEnabled ? (basic * pfErRate) : 0;
+                                                                    const erEsic = isEsiEnabled ? (gross * esiErRate) : 0;
 
                                                                     const formattedBasic = parseFloat(basic.toFixed(2));
                                                                     const formattedHra = parseFloat(hra.toFixed(2));
@@ -3379,17 +3513,21 @@ const Payroll = () => {
                                                                     { name: 'FULL HRA (40%)', prev: hraPrev, rev: hraRev, field: 'hra', valInput: hraInput },
                                                                     { name: 'FULL SPECIAL ALLOWANCE', prev: specialPrev, rev: specialRev, field: 'special', valInput: specialAllowanceInput },
                                                                     { name: 'FULL MEDICAL ALLOWANCE', prev: medicalPrev, rev: medicalRev, field: 'medical', valInput: medicalAllowanceInput },
-                                                                    { name: 'FULL EMPLOYER PF (12%)', prev: empPfPrev, rev: empPfRev, field: 'employer_pf', valInput: employerPfInput },
-                                                                    { name: 'FULL EMPLOYER ESIC (3.25%)', prev: empEsicPrev, rev: empEsicRev, field: 'employer_esic', valInput: employerEsicInput },
-                                                                    { name: 'EMPLOYEE PF (12%)', prev: eePfPrev, rev: eePfRev, field: 'employee_pf', valInput: employeePfInput },
-                                                                    { name: 'EMPLOYEE ESIC (0.75%)', prev: eeEsicPrev, rev: eeEsicRev, field: 'employee_esic', valInput: employeeEsicInput }
+                                                                    ...(hasPfRule ? [
+                                                                        { name: `FULL EMPLOYER PF (${(pfErRate * 100).toFixed(1).replace(/\.0$/, '')}%)`, prev: empPfPrev, rev: empPfRev, field: 'employer_pf', valInput: employerPfInput },
+                                                                        { name: `EMPLOYEE PF (${(pfEeRate * 100).toFixed(1).replace(/\.0$/, '')}%)`, prev: eePfPrev, rev: eePfRev, field: 'employee_pf', valInput: employeePfInput }
+                                                                    ] : []),
+                                                                    ...(hasEsiRule ? [
+                                                                        { name: `FULL EMPLOYER ESIC (${(esiErRate * 100).toFixed(2).replace(/\.00$/, '')}%)`, prev: empEsicPrev, rev: empEsicRev, field: 'employer_esic', valInput: employerEsicInput },
+                                                                        { name: `EMPLOYEE ESIC (${(esiEeRate * 100).toFixed(2).replace(/\.00$/, '')}%)`, prev: eeEsicPrev, rev: eeEsicRev, field: 'employee_esic', valInput: employeeEsicInput }
+                                                                    ] : [])
                                                                 ];
                                                                 return items.map((row, idx) => {
                                                                     const diffPct = calculateRevisionPercent(row.prev, row.rev);
                                                                     const isPositive = parseFloat(diffPct) > 0;
                                                                     const isNegative = parseFloat(diffPct) < 0;
-                                                                    const isPfEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_pf : true;
-                                                                    const isEsiEnabled = selectedInputsEmployee ? !!selectedInputsEmployee.include_esi : true;
+                                                                    const isPfEnabled = pfRule ? isRuleApplicableLocal(selectedInputsEmployee, pfRule, 'include_pf') : true;
+                                                                    const isEsiEnabled = esiRule ? isRuleApplicableLocal(selectedInputsEmployee, esiRule, 'include_esi') : true;
                                                                     const isItemDisabled = (row.field.includes('pf') && !isPfEnabled) || (row.field.includes('esic') && !isEsiEnabled);
 
                                                                     return (

@@ -199,10 +199,48 @@ router.post('/salary-revision', async (req, res) => {
         const finalMedical = medical_allowance !== undefined && medical_allowance !== null ? parseFloat(medical_allowance) : 0;
 
         const emp = await db('employees').where({ id: employee_id }).first();
-        const finalEmployeePf = (emp && !emp.include_pf) ? 0 : (employee_pf !== undefined && employee_pf !== null ? parseFloat(employee_pf) : finalBasic * 0.12);
-        const finalEmployeeEsic = (emp && !emp.include_esi) ? 0 : (employee_esic !== undefined && employee_esic !== null ? parseFloat(employee_esic) : gross * 0.0325);
-        const finalEmployerPf = (emp && !emp.include_pf) ? 0 : (employer_pf !== undefined && employer_pf !== null ? parseFloat(employer_pf) : finalBasic * 0.12);
-        const finalEmployerEsic = (emp && !emp.include_esi) ? 0 : (employer_esic !== undefined && employer_esic !== null ? parseFloat(employer_esic) : gross * 0.0075);
+        const globalRules = await db('global_payroll_rules').where({ company_id: req.user.company_id || req.company_id, is_active: true });
+        
+        const pfRule = globalRules.find(r => r.rule_name.toLowerCase().includes('pf') || r.rule_name.toLowerCase().includes('provident'));
+        const esiRule = globalRules.find(r => r.rule_name.toLowerCase().includes('esic') || r.rule_name.toLowerCase().includes('esi') || r.rule_name.toLowerCase().includes('insurance'));
+
+        const getShareAmount = (rule, isEmployer, basic, gross) => {
+            if (!rule) return 0;
+            const rate = isEmployer ? parseFloat(rule.employer_percentage) : parseFloat(rule.employee_percentage);
+            if (rule.base_on === 'flat_amount') {
+                return rate;
+            }
+            const base = rule.base_on === 'gross_salary' ? gross : basic;
+            return parseFloat((base * (rate / 100)).toFixed(2));
+        };
+
+        const isRuleApplicableLocal = (emp, rule, defaultCol) => {
+            if (!emp) return true;
+            if (emp.applicable_statutory_rules) {
+                try {
+                    const ruleIds = typeof emp.applicable_statutory_rules === 'string'
+                        ? JSON.parse(emp.applicable_statutory_rules)
+                        : emp.applicable_statutory_rules;
+                    if (Array.isArray(ruleIds)) {
+                        return ruleIds.includes(rule.id);
+                    }
+                } catch (e) {}
+            }
+            return emp[defaultCol] !== undefined ? !!emp[defaultCol] : true;
+        };
+
+        const isPfApp = pfRule ? isRuleApplicableLocal(emp, pfRule, 'include_pf') : true;
+        const isEsiApp = esiRule ? isRuleApplicableLocal(emp, esiRule, 'include_esi') : true;
+
+        const defaultEePf = isPfApp ? getShareAmount(pfRule, false, finalBasic, gross) : 0;
+        const defaultErPf = isPfApp ? getShareAmount(pfRule, true, finalBasic, gross) : 0;
+        const defaultEeEsic = isEsiApp ? getShareAmount(esiRule, false, finalBasic, gross) : 0;
+        const defaultErEsic = isEsiApp ? getShareAmount(esiRule, true, finalBasic, gross) : 0;
+
+        const finalEmployeePf = (employee_pf !== undefined && employee_pf !== null) ? parseFloat(employee_pf) : defaultEePf;
+        const finalEmployeeEsic = (employee_esic !== undefined && employee_esic !== null) ? parseFloat(employee_esic) : defaultEeEsic;
+        const finalEmployerPf = (employer_pf !== undefined && employer_pf !== null) ? parseFloat(employer_pf) : defaultErPf;
+        const finalEmployerEsic = (employer_esic !== undefined && employer_esic !== null) ? parseFloat(employer_esic) : defaultErEsic;
 
         const finalNetTakeHome = net_take_home !== undefined && net_take_home !== null ? parseFloat(net_take_home) : gross - finalEmployeePf - finalEmployeeEsic;
         const finalMonthlyCtc = monthly_ctc !== undefined && monthly_ctc !== null ? parseFloat(monthly_ctc) : gross + finalEmployerPf + finalEmployerEsic;
@@ -302,10 +340,49 @@ router.put('/salary-revision/:id', async (req, res) => {
 
         const revision = await db('salary_structures').where({ id: req.params.id }).first();
         const emp = revision ? await db('employees').where({ id: revision.employee_id }).first() : null;
-        const finalEmployeePf = (emp && !emp.include_pf) ? 0 : (employee_pf !== undefined && employee_pf !== null ? parseFloat(employee_pf) : finalBasic * 0.12);
-        const finalEmployeeEsic = (emp && !emp.include_esi) ? 0 : (employee_esic !== undefined && employee_esic !== null ? parseFloat(employee_esic) : gross * 0.0325);
-        const finalEmployerPf = (emp && !emp.include_pf) ? 0 : (employer_pf !== undefined && employer_pf !== null ? parseFloat(employer_pf) : finalBasic * 0.12);
-        const finalEmployerEsic = (emp && !emp.include_esi) ? 0 : (employer_esic !== undefined && employer_esic !== null ? parseFloat(employer_esic) : gross * 0.0075);
+        
+        const globalRules = await db('global_payroll_rules').where({ company_id: req.user.company_id || (emp ? emp.company_id : 2), is_active: true });
+        
+        const pfRule = globalRules.find(r => r.rule_name.toLowerCase().includes('pf') || r.rule_name.toLowerCase().includes('provident'));
+        const esiRule = globalRules.find(r => r.rule_name.toLowerCase().includes('esic') || r.rule_name.toLowerCase().includes('esi') || r.rule_name.toLowerCase().includes('insurance'));
+
+        const getShareAmount = (rule, isEmployer, basic, gross) => {
+            if (!rule) return 0;
+            const rate = isEmployer ? parseFloat(rule.employer_percentage) : parseFloat(rule.employee_percentage);
+            if (rule.base_on === 'flat_amount') {
+                return rate;
+            }
+            const base = rule.base_on === 'gross_salary' ? gross : basic;
+            return parseFloat((base * (rate / 100)).toFixed(2));
+        };
+
+        const isRuleApplicableLocal = (emp, rule, defaultCol) => {
+            if (!emp) return true;
+            if (emp.applicable_statutory_rules) {
+                try {
+                    const ruleIds = typeof emp.applicable_statutory_rules === 'string'
+                        ? JSON.parse(emp.applicable_statutory_rules)
+                        : emp.applicable_statutory_rules;
+                    if (Array.isArray(ruleIds)) {
+                        return ruleIds.includes(rule.id);
+                    }
+                } catch (e) {}
+            }
+            return emp[defaultCol] !== undefined ? !!emp[defaultCol] : true;
+        };
+
+        const isPfApp = pfRule ? isRuleApplicableLocal(emp, pfRule, 'include_pf') : true;
+        const isEsiApp = esiRule ? isRuleApplicableLocal(emp, esiRule, 'include_esi') : true;
+
+        const defaultEePf = isPfApp ? getShareAmount(pfRule, false, finalBasic, gross) : 0;
+        const defaultErPf = isPfApp ? getShareAmount(pfRule, true, finalBasic, gross) : 0;
+        const defaultEeEsic = isEsiApp ? getShareAmount(esiRule, false, finalBasic, gross) : 0;
+        const defaultErEsic = isEsiApp ? getShareAmount(esiRule, true, finalBasic, gross) : 0;
+
+        const finalEmployeePf = (employee_pf !== undefined && employee_pf !== null) ? parseFloat(employee_pf) : defaultEePf;
+        const finalEmployeeEsic = (employee_esic !== undefined && employee_esic !== null) ? parseFloat(employee_esic) : defaultEeEsic;
+        const finalEmployerPf = (employer_pf !== undefined && employer_pf !== null) ? parseFloat(employer_pf) : defaultErPf;
+        const finalEmployerEsic = (employer_esic !== undefined && employer_esic !== null) ? parseFloat(employer_esic) : defaultErEsic;
 
         const finalNetTakeHome = net_take_home !== undefined && net_take_home !== null ? parseFloat(net_take_home) : gross - finalEmployeePf - finalEmployeeEsic;
         const finalMonthlyCtc = monthly_ctc !== undefined && monthly_ctc !== null ? parseFloat(monthly_ctc) : gross + finalEmployerPf + finalEmployerEsic;

@@ -333,7 +333,7 @@ const Overview = () => {
                                         ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 scale-105' 
                                         : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
                                 }`}
-                                title="Show Rules / नियम देखें"
+                                title="Show Rules"
                             >
                                 <Info size={14} className={showRules ? 'animate-pulse' : ''} />
                             </button>
@@ -372,7 +372,7 @@ const Overview = () => {
                                 <div className="space-y-2 max-w-4xl">
                                     <div className="flex items-center gap-2 text-indigo-700 font-black text-xs uppercase tracking-wider">
                                         <Info size={16} className="text-indigo-600 animate-bounce" />
-                                        Attendance & Punching Guidelines / हाजिरी एवं पंचिंग के नियम
+                                        Attendance & Punching Guidelines
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight leading-snug">
                                         How does the Attendance flow work?
@@ -380,29 +380,26 @@ const Overview = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 pt-3 border-t border-slate-200/50">
                                         <div>
                                             <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                Direct Present / सीधी हाजिरी
+                                                Direct Present
                                             </span>
                                             <p className="text-slate-500 text-xs font-bold mt-1.5 leading-relaxed">
                                                 On-time biometric check-ins are automatically marked <span className="text-slate-800 font-extrabold">Present</span>. No manager approval is needed.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(समय पर पंच करने पर सीधी हाजिरी मार्क होती है, कोई अनुमति की आवश्यकता नहीं है।)</span>
                                             </p>
                                         </div>
                                         <div>
                                             <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                Regularization / सुधार अनुरोध
+                                                Regularization
                                             </span>
                                             <p className="text-slate-500 text-xs font-bold mt-1.5 leading-relaxed">
                                                 Late arrivals, early departures, or missed punches trigger a regularization request for the manager's review.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(लेट आने, जल्दी जाने, या पंच छूटने पर अप्रूवल रिक्वेस्ट भेजी जाती है।)</span>
                                             </p>
                                         </div>
                                         <div>
                                             <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                Half-Day Calc & Early Out / हाफ-डे और अर्ली आउट
+                                                Half-Day Calc & Early Out
                                             </span>
                                             <p className="text-slate-500 text-xs font-bold mt-1.5 leading-relaxed">
                                                 Working hours under half-day limit auto-mark <span className="text-slate-800 font-extrabold">Absent</span> (early checkouts here do not create early-out requests). Early-out approval requests are only generated if punching out after completing half-day hours but before full shift.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(हाफ-डे पूरा करने से पहले पंच-आउट करने पर कोई अर्ली-आउट रिक्वेस्ट जनरेट नहीं होगी (वह Absent गिना जायेगा)। रिक्वेस्ट केवल हाफ-डे पूरा करने के बाद ही जनरेट होगी।)</span>
                                             </p>
                                         </div>
                                     </div>

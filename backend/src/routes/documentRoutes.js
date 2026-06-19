@@ -40,7 +40,7 @@ router.post('/batch-move', async (req, res) => {
             .update({
                 batch_id: targetBatchId,
                 batch_name: targetBatchName || 'Bulk Selection',
-                batch_date: new Date().toISOString().split('T')[0]
+                batch_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' })
             });
 
         res.json({ 

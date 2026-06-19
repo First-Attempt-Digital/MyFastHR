@@ -35,6 +35,36 @@ const convertNumberToWords = (num) => {
     return numToWords(parsed) + ' Rupees Only';
 };
 
+const isRuleApplicable = (emp, rule) => {
+    if (!emp) return true;
+    if (emp.applicable_statutory_rules) {
+        try {
+            const ruleIds = typeof emp.applicable_statutory_rules === 'string'
+                ? JSON.parse(emp.applicable_statutory_rules)
+                : emp.applicable_statutory_rules;
+            if (Array.isArray(ruleIds)) {
+                return ruleIds.includes(rule.id);
+            }
+        } catch (e) {
+            // fallback
+        }
+    }
+    const name = rule.rule_name.toLowerCase();
+    if (name.includes('pf') || name.includes('provident')) {
+        return !!emp.include_pf;
+    }
+    if (name.includes('esic') || name.includes('esi') || name.includes('insurance')) {
+        return !!emp.include_esi;
+    }
+    if (name.includes('lwf')) {
+        return !!emp.include_lwf;
+    }
+    if (name.includes('gratuity')) {
+        return !!emp.include_gratuity;
+    }
+    return true; // default to true for other rules if not configured
+};
+
 class PayrollService {
     resolveActiveTenure(joiningDateStr, resignationDateStr, month, year) {
         const daysInMonth = new Date(year, month, 0).getDate();
@@ -45,10 +75,7 @@ class PayrollService {
             if (!dateVal) return null;
             const d = new Date(dateVal);
             if (isNaN(d.getTime())) return null;
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
+            return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         };
 
         if (joiningDateStr) {
@@ -143,11 +170,6 @@ class PayrollService {
             ? unpaidLeaveDays * dailyGross 
             : parseFloat(activeRevision.gross_salary) - earnedGross;
 
-        const includePf = emp ? !!emp.include_pf : true;
-        const includeEsi = emp ? !!emp.include_esi : true;
-        const includeLwf = emp ? !!emp.include_lwf : true;
-        const includeGratuity = emp ? !!emp.include_gratuity : true;
-
         let employeePf = 0;
         let employerPf = 0;
         let employeeEsic = 0;
@@ -161,16 +183,7 @@ class PayrollService {
                 const ruleNameLower = rule.rule_name.toLowerCase();
 
                 // Respect employee's onboarding statutory choices
-                if ((ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) && !includePf) {
-                    continue;
-                }
-                if ((ruleNameLower.includes('esic') || ruleNameLower.includes('insurance')) && !includeEsi) {
-                    continue;
-                }
-                if (ruleNameLower.includes('lwf') && !includeLwf) {
-                    continue;
-                }
-                if (ruleNameLower.includes('gratuity') && !includeGratuity) {
+                if (!isRuleApplicable(emp, rule)) {
                     continue;
                 }
 
@@ -426,16 +439,7 @@ class PayrollService {
                 const ruleNameLower = rule.rule_name.toLowerCase();
 
                 // Respect employee's onboarding statutory choices
-                if ((ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) && !emp.include_pf) {
-                    continue;
-                }
-                if ((ruleNameLower.includes('esic') || ruleNameLower.includes('insurance')) && !emp.include_esi) {
-                    continue;
-                }
-                if (ruleNameLower.includes('lwf') && !emp.include_lwf) {
-                    continue;
-                }
-                if (ruleNameLower.includes('gratuity') && !emp.include_gratuity) {
+                if (!isRuleApplicable(emp, rule)) {
                     continue;
                 }
 
@@ -528,79 +532,137 @@ class PayrollService {
         const results = [];
 
         for (const empRecord of matrix) {
-            // --- DYNAMIC OVERTIME BONUSES / MANUAL ADJUSTMENTS ---
-            const existingPayroll = await db('payrolls')
-                .where({ employee_id: empRecord.id, month, year })
-                .first();
-            const otBonus = existingPayroll ? parseFloat(existingPayroll.overtime_bonus || 0) : 0;
-            const manDeduction = existingPayroll ? parseFloat(existingPayroll.manual_deduction_override || 0) : 0;
-            
-            // --- DETECT ACTIVE LOANS & EMIs ---
-            const activeLoans = await db('loans')
-                .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
-            
-            let loanEmi = 0;
-            for (const loan of activeLoans) {
-                let thisEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
-                if (approvedLoanIds) {
-                    const match = approvedLoanIds.find(item => {
-                        if (item && typeof item === 'object') {
-                            return item.id === loan.id || item.loanId === loan.id;
+            await db.transaction(async (trx) => {
+                // --- DYNAMIC OVERTIME BONUSES / MANUAL ADJUSTMENTS ---
+                const existingPayroll = await trx('payrolls')
+                    .where({ employee_id: empRecord.id, month, year })
+                    .first();
+                const otBonus = existingPayroll ? parseFloat(existingPayroll.overtime_bonus || 0) : 0;
+                const manDeduction = existingPayroll ? parseFloat(existingPayroll.manual_deduction_override || 0) : 0;
+                
+                // Revert previous loan deductions for this month/year if they exist
+                if (existingPayroll) {
+                    const repayments = await trx('loan_repayments')
+                        .where({ payroll_id: existingPayroll.id });
+                    for (const repay of repayments) {
+                        const loan = await trx('loans').where({ id: repay.loan_id }).first();
+                        if (loan) {
+                            const newBal = parseFloat(loan.remaining_balance) + parseFloat(repay.amount_paid);
+                            await trx('loans').where({ id: loan.id }).update({
+                                remaining_balance: newBal,
+                                status: 'active'
+                            });
                         }
-                        return item === loan.id;
-                    });
-                    
-                    if (match !== undefined) {
-                        if (match && typeof match === 'object' && match.amount !== undefined) {
-                            thisEmi = Math.min(parseFloat(match.amount), parseFloat(loan.remaining_balance));
+                    }
+                    await trx('loan_repayments').where({ payroll_id: existingPayroll.id }).del();
+                }
+
+                // --- DETECT ACTIVE LOANS & EMIs (fetch AFTER reverting to get fresh balances) ---
+                const activeLoans = await trx('loans')
+                    .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
+                
+                let loanEmi = 0;
+                const deductionsToApply = [];
+                for (const loan of activeLoans) {
+                    let thisEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+                    if (approvedLoanIds) {
+                        const match = approvedLoanIds.find(item => {
+                            if (item && typeof item === 'object') {
+                                return item.id === loan.id || item.loanId === loan.id;
+                            }
+                            return item === loan.id;
+                        });
+                        
+                        if (match !== undefined) {
+                            if (match && typeof match === 'object' && match.amount !== undefined) {
+                                thisEmi = Math.min(parseFloat(match.amount), parseFloat(loan.remaining_balance));
+                            }
+                        } else {
+                            thisEmi = 0; // Skip if not in approved list when list is provided
                         }
-                    } else {
-                        thisEmi = 0; // Skip if not in approved list when list is provided
+                    }
+                    if (thisEmi > 0) {
+                        loanEmi += thisEmi;
+                        deductionsToApply.push({
+                            loanId: loan.id,
+                            amount: thisEmi,
+                            remaining_balance: parseFloat(loan.remaining_balance)
+                        });
                     }
                 }
-                loanEmi += thisEmi;
-            }
 
-            const comp = await this.calculateSingleEmployeePayrollComponents(
-                empRecord.id,
-                companyId,
-                month,
-                year,
-                empRecord,
-                otBonus,
-                manDeduction,
-                loanEmi
-            );
+                const comp = await this.calculateSingleEmployeePayrollComponents(
+                    empRecord.id,
+                    companyId,
+                    month,
+                    year,
+                    empRecord,
+                    otBonus,
+                    manDeduction,
+                    loanEmi
+                );
 
-            if (!comp) continue;
+                if (comp) {
+                    const payrollEntry = {
+                        employee_id: empRecord.id,
+                        company_id: companyId,
+                        month,
+                        year,
+                        base_salary: comp.base_salary,
+                        total_allowances: comp.total_allowances,
+                        total_deductions: comp.total_deductions,
+                        unpaid_leave_deduction: parseFloat(comp.unpaid_leave_deduction).toFixed(2),
+                        unpaid_leave_days: comp.unpaidLeaveDays,
+                        late_mark_deduction: parseFloat(comp.late_mark_deduction).toFixed(2),
+                        late_marks_count: comp.stats.L,
+                        overtime_bonus: otBonus.toFixed(2),
+                        manual_deduction_override: manDeduction.toFixed(2),
+                        loan_emi_deduction: parseFloat(comp.loan_emi_deduction).toFixed(2),
+                        employee_pf: parseFloat(comp.employee_pf).toFixed(2),
+                        employer_pf: parseFloat(comp.employer_pf).toFixed(2),
+                        employee_esic: parseFloat(comp.employee_esic).toFixed(2),
+                        employer_esic: parseFloat(comp.employer_esic).toFixed(2),
+                        statutory_rules_breakdown: JSON.stringify(comp.statutory_rules_breakdown),
+                        net_salary: parseFloat(comp.net_salary).toFixed(2),
+                        status: 'generated',
+                        processed_at: trx.fn.now()
+                    };
 
-            const payrollEntry = {
-                employee_id: empRecord.id,
-                company_id: companyId,
-                month,
-                year,
-                base_salary: comp.base_salary,
-                total_allowances: comp.total_allowances,
-                total_deductions: comp.total_deductions,
-                unpaid_leave_deduction: parseFloat(comp.unpaid_leave_deduction).toFixed(2),
-                unpaid_leave_days: comp.unpaidLeaveDays,
-                late_mark_deduction: parseFloat(comp.late_mark_deduction).toFixed(2),
-                late_marks_count: comp.stats.L,
-                overtime_bonus: otBonus.toFixed(2),
-                manual_deduction_override: manDeduction.toFixed(2),
-                loan_emi_deduction: parseFloat(comp.loan_emi_deduction).toFixed(2),
-                employee_pf: parseFloat(comp.employee_pf).toFixed(2),
-                employer_pf: parseFloat(comp.employer_pf).toFixed(2),
-                employee_esic: parseFloat(comp.employee_esic).toFixed(2),
-                employer_esic: parseFloat(comp.employer_esic).toFixed(2),
-                statutory_rules_breakdown: JSON.stringify(comp.statutory_rules_breakdown),
-                net_salary: parseFloat(comp.net_salary).toFixed(2),
-                status: 'generated',
-                processed_at: db.fn.now()
-            };
+                    await trx('payrolls')
+                        .insert(payrollEntry)
+                        .onConflict(['employee_id', 'month', 'year'])
+                        .merge();
 
-            await payrollRepository.savePayroll(payrollEntry);
-            results.push({ ...payrollEntry, processed_at: new Date() });
+                    // Retrieve saved payroll record ID
+                    const savedPayroll = await trx('payrolls')
+                        .where({ employee_id: empRecord.id, month, year })
+                        .first();
+
+                    if (savedPayroll) {
+                        for (const item of deductionsToApply) {
+                            const newBalance = Math.max(0, item.remaining_balance - item.amount);
+                            const newStatus = newBalance === 0 ? 'completed' : 'active';
+                            
+                            await trx('loans').where({ id: item.loanId }).update({
+                                remaining_balance: newBalance,
+                                status: newStatus
+                            });
+
+                            await trx('loan_repayments').insert({
+                                company_id: companyId,
+                                loan_id: item.loanId,
+                                amount_paid: item.amount,
+                                payment_method: 'payroll',
+                                payment_date: trx.fn.now(),
+                                payroll_id: savedPayroll.id,
+                                notes: `Auto-EMI deducted via payroll for ${month}/${year}`
+                            });
+                        }
+                    }
+
+                    results.push({ ...payrollEntry, processed_at: new Date() });
+                }
+            });
         }
 
         // Notify Admin
@@ -697,6 +759,7 @@ class PayrollService {
                 overtime_bonus: otBonus,
                 manual_deduction_override: manDeduction,
                 loan_emi_deduction: comp.loan_emi_deduction,
+                statutory_rules_breakdown: comp.statutory_rules_breakdown,
                 net_salary: saved ? saved.net_salary : parseFloat(comp.net_salary).toFixed(2),
                 status: saved ? saved.status : 'draft'
             });
@@ -740,36 +803,43 @@ class PayrollService {
 
         // Deduct EMI from outstanding loan balance if transitioning to 'paid'
         if (updateData.status === 'paid' && existing.status !== 'paid') {
-            const activeLoans = await db('loans')
-                .where({ employee_id: existing.employee_id, company_id: companyId, status: 'active' })
-                .orderBy('id', 'asc');
-            
-            let remainingCuts = parseFloat(existing.loan_emi_deduction || 0);
-            for (const loan of activeLoans) {
-                if (remainingCuts <= 0) break;
+            // Check if loan repayment has already been logged for this payroll
+            const alreadyDeducted = await db('loan_repayments')
+                .where({ payroll_id: existing.id })
+                .first();
+
+            if (!alreadyDeducted) {
+                const activeLoans = await db('loans')
+                    .where({ employee_id: existing.employee_id, company_id: companyId, status: 'active' })
+                    .orderBy('id', 'asc');
                 
-                const expectedEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
-                const deductedAmount = Math.min(expectedEmi, remainingCuts);
-                if (deductedAmount > 0) {
-                    const newBalance = Math.max(0, parseFloat(loan.remaining_balance) - deductedAmount);
-                    const newStatus = newBalance === 0 ? 'completed' : 'active';
-                    await db('loans').where({ id: loan.id }).update({
-                        remaining_balance: newBalance,
-                        status: newStatus
-                    });
+                let remainingCuts = parseFloat(existing.loan_emi_deduction || 0);
+                for (const loan of activeLoans) {
+                    if (remainingCuts <= 0) break;
+                    
+                    const expectedEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+                    const deductedAmount = Math.min(expectedEmi, remainingCuts);
+                    if (deductedAmount > 0) {
+                        const newBalance = Math.max(0, parseFloat(loan.remaining_balance) - deductedAmount);
+                        const newStatus = newBalance === 0 ? 'completed' : 'active';
+                        await db('loans').where({ id: loan.id }).update({
+                            remaining_balance: newBalance,
+                            status: newStatus
+                        });
 
-                    // Log the payroll repayment transaction
-                    await db('loan_repayments').insert({
-                        company_id: companyId,
-                        loan_id: loan.id,
-                        amount_paid: deductedAmount,
-                        payment_method: 'payroll',
-                        payment_date: db.fn.now(),
-                        payroll_id: existing.id,
-                        notes: `Auto-EMI deducted via payroll for ${existing.month}/${existing.year}`
-                    });
+                        // Log the payroll repayment transaction
+                        await db('loan_repayments').insert({
+                            company_id: companyId,
+                            loan_id: loan.id,
+                            amount_paid: deductedAmount,
+                            payment_method: 'payroll',
+                            payment_date: db.fn.now(),
+                            payroll_id: existing.id,
+                            notes: `Auto-EMI deducted via payroll for ${existing.month}/${existing.year}`
+                        });
 
-                    remainingCuts -= deductedAmount;
+                        remainingCuts -= deductedAmount;
+                    }
                 }
             }
         }

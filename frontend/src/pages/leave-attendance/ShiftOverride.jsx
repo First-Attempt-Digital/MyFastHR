@@ -76,9 +76,9 @@ const ShiftManagement = () => {
     // Delete Protection States
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteTargetId, setDeleteTargetId] = useState(null);
-    const [showUnassignedModal, setShowUnassignedModal] = useState(false);
+    const [selectedAssignmentStatus, setSelectedAssignmentStatus] = useState('all');
     const [overrideConfig, setOverrideConfig] = useState({
-        from_date: new Date().toISOString().split('T')[0],
+        from_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }),
         to_date: ''
     });
 
@@ -157,7 +157,7 @@ const ShiftManagement = () => {
         end_time: '',
         grace_period: '',
         grace_count_limit: '',
-        from_date: '',
+        from_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }),
         to_date: '',
         is_night_shift: false,
         is_flexi: false,
@@ -247,7 +247,7 @@ const ShiftManagement = () => {
             end_time: shift.end_time || '18:00',
             grace_period: shift.grace_period !== undefined ? shift.grace_period : 15,
             grace_count_limit: shift.grace_count_limit !== undefined ? shift.grace_count_limit : 3,
-            from_date: new Date().toISOString().split('T')[0],
+            from_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }),
             to_date: '',
             is_night_shift: !!shift.is_night_shift,
             is_flexi: !!shift.is_flexi,
@@ -336,7 +336,7 @@ const ShiftManagement = () => {
                 end_time: '',
                 grace_period: '',
                 grace_count_limit: '',
-                from_date: '',
+                from_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }),
                 to_date: '',
                 is_night_shift: false,
                 is_flexi: false,
@@ -395,9 +395,14 @@ const ShiftManagement = () => {
             const matchesOutlet = matchText(emp.office_location, selectedOutlet);
             const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
             const matchesDesignation = matchText(emp.designation, selectedDesignation);
-            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation;
+            const matchesAssignment = selectedAssignmentStatus === 'all'
+                ? true
+                : selectedAssignmentStatus === 'assigned'
+                    ? !!emp.assigned_shift
+                    : !emp.assigned_shift;
+            return matchesSearch && matchesOutlet && matchesDept && matchesDesignation && matchesAssignment;
         });
-    }, [employees, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [employees, searchQuery, selectedOutlet, selectedDept, selectedDesignation, selectedAssignmentStatus]);
 
     const handleExport = () => {
         if (!filteredEmployees || filteredEmployees.length === 0) {
@@ -431,30 +436,6 @@ const ShiftManagement = () => {
                     <div>
                         <h1 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
                             Shift Management
-                            <div className="relative group">
-                                <button
-                                    onClick={() => setShowRules(!showRules)}
-                                    className={`p-1.5 rounded-lg border transition-all ${showRules
-                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100 scale-105'
-                                            : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'
-                                        }`}
-                                >
-                                    <Info size={12} className={showRules ? 'animate-pulse' : ''} />
-                                </button>
-                                <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-80 p-3 bg-slate-900 text-white text-[9px] rounded-xl shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity font-medium normal-case leading-relaxed z-50 text-left">
-                                    <span className="block font-black text-indigo-400 mb-1 text-center">
-                                        {showRules ? 'Hide Shift Guidelines / नियम छुपाएं' : 'Show Shift Guidelines / नियम देखें'}
-                                    </span>
-                                    <div className="space-y-1.5 mt-1.5 border-t border-slate-800 pt-1.5 text-slate-300">
-                                        <div>
-                                            <strong className="text-white">EN:</strong> Toggle shift policy guidelines. In-time check-ins inside grace period mark Present; later check-ins trigger Late In. Less than Half Day hours = Absent. First punch within last 2 hours of shift = NC (Zero Check-In).
-                                        </div>
-                                        <div className="border-t border-slate-800/60 pt-1.5 mt-1.5">
-                                            <strong className="text-white">HI:</strong> शिफ्ट पॉलिसी दिशानिर्देश देखें/छिपाएं। ग्रेस पीरियड में चेक-इन करने पर प्रेजेंट मार्क होगा, बाद में लेट इन। हाफ-डे से कम काम करने पर Absent। शिफ्ट खत्म होने के आखिरी 2 घंटे में सीधे पहला पंच करने पर NC (Zero Check-In) मार्क होगा।
-                                        </div>
-                                    </div>
-                                </span>
-                            </div>
                         </h1>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Shift Guidelines & Assignments</p>
                     </div>
@@ -478,7 +459,7 @@ const ShiftManagement = () => {
                                         end_time: '',
                                         grace_period: '',
                                         grace_count_limit: '',
-                                        from_date: '',
+                                        from_date: new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }),
                                         to_date: '',
                                         is_night_shift: false,
                                         is_flexi: false,
@@ -526,24 +507,20 @@ const ShiftManagement = () => {
                     {/* Stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {[
-                            { label: 'Total Staff', value: employees.length, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                            { label: 'Active Shifts', value: shifts.length, icon: Clock, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                            { label: 'Assigned', value: employees.filter(e => e.assigned_shift).length, icon: UserCheck, color: 'text-amber-600', bg: 'bg-amber-50' },
-                            { label: 'Unassigned', value: employees.filter(e => !e.assigned_shift).length, icon: Info, color: 'text-rose-600', bg: 'bg-rose-50', clickable: true }
+                            { label: 'Total Staff', value: filteredEmployees.length, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                            { 
+                                label: 'Active Shifts', 
+                                value: (selectedOutlet !== 'all' || selectedDept !== 'all' || selectedDesignation !== 'all' || selectedAssignmentStatus !== 'all' || searchQuery.trim() !== '') 
+                                    ? new Set(filteredEmployees.map(e => e.assigned_shift).filter(Boolean)).size 
+                                    : shifts.length, 
+                                icon: Clock, 
+                                color: 'text-emerald-600', 
+                                bg: 'bg-emerald-50' 
+                            },
+                            { label: 'Assigned', value: filteredEmployees.filter(e => e.assigned_shift).length, icon: UserCheck, color: 'text-amber-600', bg: 'bg-amber-50' },
+                            { label: 'Unassigned', value: filteredEmployees.filter(e => !e.assigned_shift).length, icon: Info, color: 'text-rose-600', bg: 'bg-rose-50' }
                         ].map((stat, i) => (
-                            <div 
-                                key={i} 
-                                onClick={() => {
-                                    if (stat.clickable) {
-                                        setShowUnassignedModal(true);
-                                    }
-                                }}
-                                className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3 ${
-                                    stat.clickable 
-                                        ? 'cursor-pointer hover:border-rose-250 hover:border-rose-200 hover:shadow-md transition-all active:scale-[0.98]' 
-                                        : ''
-                                }`}
-                            >
+                            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
                                 <div className={`w-8 h-8 rounded-lg ${stat.bg} ${stat.color} flex items-center justify-center`}>
                                     <stat.icon size={16} />
                                 </div>
@@ -568,34 +545,31 @@ const ShiftManagement = () => {
                                 <div className="bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent border border-indigo-100 rounded-3xl p-5 shadow-sm">
                                     <div className="flex items-center gap-2 text-indigo-700 font-black text-xs uppercase tracking-wider mb-2">
                                         <Clock size={16} className="text-indigo-600" />
-                                        Shift rules & calculation logic / शिफ्ट नियम एवं कैलकुलेशन लॉजिक
+                                        Shift rules & calculation logic
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-600 mt-2">
                                         <div>
                                             <h4 className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                                                ⏱️ Punch Timing & Grace Rules (पंचिंग टाइमिंग और लेट नियम)
+                                                ⏱️ Punch Timing & Grace Rules
                                             </h4>
                                             <p className="text-slate-500 leading-relaxed font-bold">
                                                 Employees checking in inside the <span className="text-slate-700 font-extrabold">Grace Period</span> (e.g. 15 mins) are marked Present directly. Punching after the grace limit triggers a <span className="text-indigo-600 bg-indigo-50 px-1 rounded font-extrabold">Late Mark</span> which requires manager regularization.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(ग्रेस पीरियड (जैसे 15 मिनट) के भीतर आने पर प्रेजेंट मार्क किया जाएगा। लेट आने पर लेट मार्क लगेगा, जिसे मैनेजर द्वारा नियमित (regularize) करना होगा।)</span>
                                             </p>
                                         </div>
                                         <div>
                                             <h4 className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                                                ⚙️ Worked Hours Calculations & Early Out (हाफ-डे एवं अर्ली आउट नियम)
+                                                ⚙️ Worked Hours Calculations & Early Out
                                             </h4>
                                             <p className="text-slate-500 leading-relaxed font-bold">
                                                 Calculated automatically: Under <span className="text-rose-600 bg-rose-50 px-1 rounded font-extrabold">Half Day Minimum Hours</span> = Absent (checkouts before this do not trigger early-out approval requests). Early-out requests are only generated if punching out after completing half-day hours but before full shift.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(हाफ-डे से कम समय काम करने पर Absent मार्क किया जाएगा और कोई रिक्वेस्ट जनरेट नहीं होगी। हाफ-डे का समय पूरा होने के बाद और शिफ्ट खत्म होने से पहले जाने पर ही अर्ली-आउट रिक्वेस्ट जनरेट होगी।)</span>
                                             </p>
                                         </div>
                                         <div>
                                             <h4 className="font-extrabold text-slate-700 uppercase tracking-wider text-[10px] mb-1">
-                                                🚨 Zero Check-In Checkout Attempt (ज़ीरो चेक-इन चेकआउट प्रयास)
+                                                🚨 Zero Check-In Checkout Attempt
                                             </h4>
                                             <p className="text-slate-500 leading-relaxed font-bold">
                                                 If an employee punches for the first time within 2 hours of shift end or later, it is marked as <span className="text-rose-600 bg-rose-50 px-1 rounded font-extrabold">NC (Checkout Attempt - Zero Check-In)</span> instead of a late check-in.
-                                                <span className="block text-[11px] text-slate-400 font-normal mt-0.5">(यदि कोई कर्मचारी बिना सुबह के पंच (Check-in) के सीधे शिफ्ट खत्म होने के अंतिम 2 घंटे या उसके बाद पहला पंच करता है, तो इसे लेट चेक-इन के बजाय NC (Checkout Attempt - Zero Check-In) मार्क किया जाता है।)</span>
                                             </p>
                                         </div>
                                     </div>
@@ -681,8 +655,20 @@ const ShiftManagement = () => {
                         <div className="lg:col-span-8">
                             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                                 <div className="p-4 border-b border-slate-50 flex items-center justify-between flex-wrap gap-2">
-                                    <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Personnel Status</h3>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Personnel Status</h3>
+                                        <div className="relative">
+                                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Quick filter..."
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                className="bg-slate-50 border border-slate-100 rounded-lg pl-8 pr-3 py-1.5 text-[10px] font-bold outline-none focus:border-indigo-300 w-48"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 flex-wrap">
                                         <button
                                             type="button"
                                             onClick={handleExport}
@@ -723,16 +709,15 @@ const ShiftManagement = () => {
                                                 </option>
                                             ))}
                                         </select>
-                                        <div className="relative">
-                                            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            <input
-                                                type="text"
-                                                placeholder="Quick filter..."
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                                className="bg-slate-50 border border-slate-100 rounded-lg pl-8 pr-3 py-1.5 text-[10px] font-bold outline-none focus:border-indigo-300 w-48"
-                                            />
-                                        </div>
+                                        <select
+                                            value={selectedAssignmentStatus}
+                                            onChange={(e) => setSelectedAssignmentStatus(e.target.value)}
+                                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                        >
+                                            <option value="all">All Status</option>
+                                            <option value="assigned">Assigned</option>
+                                            <option value="unassigned">Unassigned</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
@@ -759,19 +744,34 @@ const ShiftManagement = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-5 py-3">
-                                                        {emp.assigned_shift ? (
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[10px] font-black text-slate-600 uppercase leading-none">{emp.assigned_shift}</span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-[9px] font-bold text-slate-300 uppercase italic">Unassigned</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-5 py-3 text-right">
-                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter ${emp.assigned_shift ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'
-                                                            }`}>
-                                                            {emp.assigned_shift ? 'Active' : 'Inactive'}
-                                                        </span>
+                                                         {emp.assigned_shift ? (
+                                                             <div className="flex flex-col gap-0.5">
+                                                                 <span className="text-[10px] font-black text-slate-600 uppercase leading-none">{emp.assigned_shift}</span>
+                                                                 <span className="text-[8px] font-bold text-slate-400 normal-case">
+                                                                     {emp.assigned_from_date ? `Valid: ${emp.assigned_from_date}` : ''}
+                                                                     {emp.assigned_to_date ? ` to ${emp.assigned_to_date}` : ' onwards'}
+                                                                 </span>
+                                                             </div>
+                                                         ) : (
+                                                             <span className="text-[9px] font-bold text-slate-300 uppercase italic">Unassigned</span>
+                                                         )}
+                                                         {emp.upcoming_shift && (
+                                                             <div className="flex flex-col gap-0.5 mt-1 border-t border-slate-100 pt-1">
+                                                                 <span className="text-[8px] font-black text-indigo-650 text-indigo-600 uppercase leading-none">Upcoming: {emp.upcoming_shift}</span>
+                                                                 <span className="text-[7.5px] font-bold text-indigo-400 normal-case">
+                                                                     Starts: {emp.upcoming_from_date}
+                                                                     {emp.upcoming_to_date ? ` to ${emp.upcoming_to_date}` : ''}
+                                                                 </span>
+                                                             </div>
+                                                         )}
+                                                     </td>
+                                                     <td className="px-5 py-3 text-right">
+                                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter ${
+                                                             emp.assigned_shift ? 'bg-emerald-50 text-emerald-600' :
+                                                             emp.upcoming_shift ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'
+                                                         }`}>
+                                                             {emp.assigned_shift ? 'Active' : emp.upcoming_shift ? 'Upcoming' : 'Inactive'}
+                                                         </span>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1233,6 +1233,9 @@ const ShiftManagement = () => {
                                             <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Valid To</label>
                                             <input type="date" value={shiftConfig.to_date} onChange={(e) => setShiftConfig({ ...shiftConfig, to_date: e.target.value })} className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-4 text-xs font-bold text-slate-700 outline-none" />
                                         </div>
+                                        <div className="col-span-2 text-[8px] text-amber-600 font-extrabold uppercase bg-amber-50 p-2 rounded border border-amber-100/50 leading-tight">
+                                            ⚠️ Note: Validity dates are only applied if you select employees at the bottom to assign them. They are not stored as properties of the shift protocol template itself.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1289,6 +1292,15 @@ const ShiftManagement = () => {
                                             </option>
                                         ))}
                                     </select>
+                                    <select
+                                        value={selectedAssignmentStatus}
+                                        onChange={(e) => setSelectedAssignmentStatus(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-indigo-300 shadow-sm"
+                                    >
+                                        <option value="all">All Status</option>
+                                        <option value="assigned">Assigned Staff</option>
+                                        <option value="unassigned">Unassigned Staff</option>
+                                    </select>
                                     <div className="relative">
                                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                         <input
@@ -1328,9 +1340,20 @@ const ShiftManagement = () => {
                                                     </>
                                                 )}
                                             </p>
-                                            <p className={`text-[7.5px] font-black uppercase tracking-wider truncate ${selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-indigo-600'}`}>
-                                                {emp.assigned_shift || 'Available'}
-                                            </p>
+                                            <div className="text-[7.5px] font-black uppercase tracking-wider truncate leading-tight">
+                                                {emp.assigned_shift ? (
+                                                    <span className={selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-indigo-600'}>
+                                                        {emp.assigned_shift} ({emp.assigned_from_date}{emp.assigned_to_date ? ` to ${emp.assigned_to_date}` : ''})
+                                                    </span>
+                                                ) : (
+                                                    <span className={selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-slate-400'}>Available</span>
+                                                )}
+                                                {emp.upcoming_shift && (
+                                                    <div className={selectedEmployees.some(e => e.id === emp.id) ? 'text-indigo-200' : 'text-indigo-500'}>
+                                                        Upcoming: {emp.upcoming_shift} ({emp.upcoming_from_date})
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                         {selectedEmployees.some(e => e.id === emp.id) && <CheckCircle size={14} className="text-white shrink-0" />}
                                     </div>
@@ -1430,6 +1453,15 @@ const ShiftManagement = () => {
                                             </option>
                                         ))}
                                     </select>
+                                    <select
+                                        value={selectedAssignmentStatus}
+                                        onChange={(e) => setSelectedAssignmentStatus(e.target.value)}
+                                        className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-300"
+                                    >
+                                        <option value="all">All Status</option>
+                                        <option value="assigned">Assigned Staff</option>
+                                        <option value="unassigned">Unassigned Staff</option>
+                                    </select>
                                     <div className="relative">
                                         <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                         <input
@@ -1472,9 +1504,20 @@ const ShiftManagement = () => {
                                                             </>
                                                         )}
                                                     </p>
-                                                    <p className={`text-[7.5px] font-black uppercase tracking-wider mt-0.5 ${selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-indigo-600'}`}>
-                                                        Current: {emp.assigned_shift || 'None'}
-                                                    </p>
+                                                    <div className="text-[7.5px] font-black uppercase tracking-wider mt-0.5 leading-tight">
+                                                        {emp.assigned_shift ? (
+                                                            <span className={selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-indigo-600'}>
+                                                                Current: {emp.assigned_shift} ({emp.assigned_from_date}{emp.assigned_to_date ? ` to ${emp.assigned_to_date}` : ''})
+                                                            </span>
+                                                        ) : (
+                                                            <span className={selectedEmployees.some(e => e.id === emp.id) ? 'text-white' : 'text-slate-400'}>Current: None</span>
+                                                        )}
+                                                        {emp.upcoming_shift && (
+                                                            <div className={selectedEmployees.some(e => e.id === emp.id) ? 'text-slate-300' : 'text-indigo-500 font-extrabold'}>
+                                                                Upcoming: {emp.upcoming_shift} ({emp.upcoming_from_date})
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                             {selectedEmployees.some(e => e.id === emp.id) && <CheckCircle size={14} className="text-white" />}
@@ -1588,84 +1631,6 @@ const ShiftManagement = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            {/* Unassigned Employees Modal */}
-            <AnimatePresence>
-                {showUnassignedModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-                    >
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white rounded-[32px] p-6 max-w-md w-full mx-4 shadow-2xl border border-slate-100 flex flex-col gap-4 max-h-[80vh]"
-                        >
-                            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-                                        <Info size={16} />
-                                    </div>
-                                    <div>
-                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-800">
-                                            Unassigned Staff
-                                        </h4>
-                                        <p className="text-[9px] text-slate-400 uppercase tracking-tight font-bold">
-                                            Shift not assigned / शिफ्ट रहित कर्मचारी
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setShowUnassignedModal(false)}
-                                    className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all cursor-pointer flex items-center justify-center"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </div>
-
-                            {/* Scrollable list */}
-                            <div className="overflow-y-auto custom-scrollbar pr-1 space-y-2 max-h-[45vh]">
-                                {employees.filter(e => !e.assigned_shift).length === 0 ? (
-                                    <div className="py-8 text-center text-slate-400">
-                                        <CheckCircle size={24} className="mx-auto mb-2 text-emerald-500" />
-                                        <p className="text-[10px] font-black uppercase tracking-widest">All Staff Assigned</p>
-                                    </div>
-                                ) : (
-                                    employees.filter(e => !e.assigned_shift).map((emp) => (
-                                        <div 
-                                            key={emp.id} 
-                                            className="p-3 rounded-xl border border-slate-50 bg-slate-50/50 flex items-center justify-between"
-                                        >
-                                            <div className="flex flex-col gap-0.5">
-                                                <span className="text-[10px] font-black text-slate-700 uppercase">
-                                                    {emp.first_name} {emp.last_name}
-                                                </span>
-                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">
-                                                    Code: {emp.employee_id_number || 'N/A'} • {emp.designation || 'Staff'}
-                                                </span>
-                                            </div>
-                                            <span className="text-[8px] font-extrabold text-slate-400 bg-white px-2 py-1 rounded border border-slate-100">
-                                                {emp.department_name || emp.department || 'General'}
-                                            </span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-
-                            <button
-                                onClick={() => setShowUnassignedModal(false)}
-                                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-lg cursor-pointer active:scale-95"
-                            >
-                                Close List
-                            </button>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
             <style jsx>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

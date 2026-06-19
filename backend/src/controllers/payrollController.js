@@ -372,9 +372,9 @@ class PayrollController {
                 .whereIn('settlement_status', ['pending', 'calculated'])
                 .first();
 
-            // Inputs (prioritize query parameters, fallback to DB separation record, then defaults)
-            const lastWorkingDay = req.query.last_working_day || separation?.last_working_day || employee.exit_date || new Date().toISOString().split('T')[0];
-            const resignationDate = req.query.resignation_date || separation?.resignation_date || employee.resignation_date || new Date().toISOString().split('T')[0];
+            const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+            const lastWorkingDay = req.query.last_working_day || separation?.last_working_day || employee.exit_date || todayStr;
+            const resignationDate = req.query.resignation_date || separation?.resignation_date || employee.resignation_date || todayStr;
 
             // Notice Period
             const noticePeriod = parseInt(req.query.notice_period_days || separation?.notice_period_days || 0);
