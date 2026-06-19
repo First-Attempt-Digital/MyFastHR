@@ -312,10 +312,8 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
             };
         } else {
             // Check if this punch is for today
-            const checkInDate = new Date(log.check_in);
-            const options = { timeZone: 'Asia/Kolkata' };
-            const checkInYMD = checkInDate.toLocaleDateString('sv-SE', options);
-            const todayYMD = new Date().toLocaleDateString('sv-SE', options);
+            const checkInYMD = toLocalYMD(log.check_in);
+            const todayYMD = toLocalYMD(new Date());
             const isToday = (checkInYMD === todayYMD);
 
             let isTerminated = false;
@@ -1243,8 +1241,19 @@ class AttendanceService {
                     const firstLog = dayLogs[0];
                     const dbStatus = firstLog.status ? firstLog.status.toLowerCase() : '';
 
+                    const logCheckInDate = dbDateToUTC(firstLog.check_in);
+                    const logCheckInYMD = logCheckInDate ? logCheckInDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : null;
+                    const curTodayYMD = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+                    const isTodayActive = (logCheckInYMD === curTodayYMD);
+
                     if (dbStatus === 'pending') {
                         status = '-';
+                    } else if (!firstLog.check_out && isTodayActive && 
+                               firstLog.punch_source !== 'manual' && 
+                               firstLog.punch_source !== 'manual_override' && 
+                               firstLog.punch_source !== 'regularization' && 
+                               dbStatus !== 'regularized' && dbStatus !== 'r' && !dayRegularization) {
+                        status = 'CI';
                     } else if (firstLog.punch_source === 'manual' || firstLog.punch_source === 'manual_override') {
                         status = mapDbStatusToFrontend(dbStatus);
                         if (status === 'P' || status === 'R') stats.P++;
