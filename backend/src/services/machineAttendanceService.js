@@ -563,8 +563,8 @@ class MachineAttendanceService {
                     const shiftEnd = employeeWithShift.shift_end;
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
                     const [eHours, eMins] = shiftEnd.split(':').map(Number);
-                    const shiftStartDate = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
-                    let shiftEndDate = new Date(`${dateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                    const shiftStartDate = new Date(`${targetShiftDate} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                    let shiftEndDate = new Date(`${targetShiftDate} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
                     if (shiftEndDate < shiftStartDate) {
                         // Midnight crossing
                         shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
@@ -573,8 +573,15 @@ class MachineAttendanceService {
                     const checkoutWindowMins = Math.min(120, shiftDurationMins * 0.25);
                     const thresholdDate = new Date(shiftEndDate.getTime() - checkoutWindowMins * 60 * 1000);
                     if (punchTime >= thresholdDate) {
-                        isCheckoutAttempt = true;
-                        status = 'no_in';
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'skipped',
+                            error_details: `Punch in ignored: checkout window has started (earliest allowed: ${thresholdDate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })})`
+                        });
+                        return { status: 'skipped', reason: 'Check-in after checkout window started' };
                     }
                 }
 
@@ -680,7 +687,8 @@ class MachineAttendanceService {
                 }
 
                 // Shift Terminate Hour check
-                if (employeeWithShift && employeeWithShift.shift_terminate_hour) {
+                const isSession1Checkout = (reqPunches === 4 && !isSession2);
+                if (employeeWithShift && employeeWithShift.shift_terminate_hour && !isSession1Checkout) {
                     const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
                     const shiftStartStr = employeeWithShift.shift_start || '09:00';
                     const shiftEndStr = employeeWithShift.shift_end || '18:00';

@@ -225,26 +225,11 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                 s1Present = true;
                 s1PunchText = `S1: ${s1Late ? 'Late' : 'On-Time'} (${safeFormatTime(s1Log.check_in)} - ${safeFormatTime(s1Log.check_out)})`;
             } else {
-                let isS1Terminated = false;
-                if (shift.terminate_hour) {
-                    const checkInDateStr = toLocalYMD(s1Log.check_in);
-                    const [sHours, sMins] = (shift.start_time || shift.shift_start || '09:00').split(':').map(Number);
-                    const [eHours, eMins] = (shift.end_time || shift.shift_end || '13:00').split(':').map(Number);
-                    const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
-                    let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
-                    if (shiftEndDate < shiftStartDate) {
-                        shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
-                    }
-                    const terminationDate = new Date(shiftEndDate.getTime() + parseInt(shift.terminate_hour) * 60 * 60 * 1000);
-                    if (new Date() > terminationDate) {
-                        isS1Terminated = true;
-                    }
-                }
                 const isS1Today = toLocalYMD(s1Log.check_in) === toLocalYMD(new Date());
-                if (!isS1Terminated && isS1Today) {
+                if (isS1Today) {
                     s1Active = true;
                 }
-                s1PunchText = `S1: ${isS1Terminated ? 'Terminated (No Out)' : 'No Out'} (${safeFormatTime(s1Log.check_in)} - --:--)`;
+                s1PunchText = `S1: No Out (${safeFormatTime(s1Log.check_in)} - --:--)`;
             }
         }
 
@@ -585,12 +570,13 @@ class AttendanceService {
                 const shiftStartDate = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
                 const earliestCheckIn = new Date(shiftStartDate.getTime() - inMargin * 60 * 1000);
                 if (now < earliestCheckIn) {
-                    throw new Error(`PUNCH_BLOCKED: Check-in blocked. You cannot check in before the allowed margin (earliest allowed: ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })}).`);
+                    throw new Error(`PUNCH_SKIPPED: Punch ignored. You cannot check in before the allowed margin (earliest allowed: ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })}).`);
                 }
             }
         }
 
         let isCheckoutAttempt = false;
+        let isAfterShiftEnd = false;
         if (employee && employee.shift_start && employee.shift_end && !employee.shift_is_flexi) {
             const shiftStart = employee.shift_start;
             const shiftEnd = employee.shift_end;
@@ -605,10 +591,16 @@ class AttendanceService {
             const shiftDurationMins = Math.round((shiftEndDate - shiftStartDate) / 60000);
             const checkoutWindowMins = Math.min(120, shiftDurationMins * 0.25);
             const thresholdDate = new Date(shiftEndDate.getTime() - checkoutWindowMins * 60 * 1000);
-            if (now >= thresholdDate) {
+            
+            if (now >= shiftEndDate) {
+                isAfterShiftEnd = true;
+            } else if (now >= thresholdDate) {
                 isCheckoutAttempt = true;
-                status = 'no_in';
             }
+        }
+
+        if (isAfterShiftEnd || isCheckoutAttempt) {
+            throw new Error('PUNCH_SKIPPED: Punch ignored. Check-in is not allowed after the checkout window has started.');
         }
 
         // Check if there is an approved Entry/Exit Request for this date and type 'late_in'
@@ -797,7 +789,8 @@ class AttendanceService {
         }
 
         // Shift Terminate Hour check
-        if (employee && employee.terminate_hour) {
+        const isSession1Checkout = (reqPunches === 4 && !isSession2);
+        if (employee && employee.terminate_hour && !isSession1Checkout) {
             const checkInDateStr = toLocalYMD(activeEntry.check_in);
             const shiftStartStr = employee.start_time || '09:00';
             const shiftEndStr = employee.end_time || '18:00';
@@ -836,6 +829,9 @@ class AttendanceService {
         if (employee?.is_flexi) {
             const minHours = parseFloat(employee?.min_hours) || 8;
             halfDayLimit = minHours / 2;
+            if (workedHours < halfDayLimit) {
+                return await attendanceRepository.getCurrentStatus(empId, companyId);
+            }
             if (workedHours < minHours) {
                 isEarlyCheckoutAttempt = true;
             }
@@ -1423,20 +1419,32 @@ class AttendanceService {
         const companyId = user.company_id;
         const dbStatus = mapFrontendStatusToDb(status);
 
-        const isNight = await isNightShiftForEmployeeDate(employee_id, date, companyId);
-
-        let existing = await db('attendance')
-            .where({ employee_id, company_id: companyId })
-            .whereRaw('DATE(check_in) = ?', [date])
+        const employee = await db('employees as e')
+            .leftJoin('shifts as s', 'e.shift_id', 's.id')
+            .where('e.id', employee_id)
+            .select('e.*', 's.start_time as shift_start', 's.end_time as shift_end')
             .first();
+        const defaultShift = employee ? { start_time: employee.shift_start, end_time: employee.shift_end } : null;
+        const empAssignments = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', employee_id)
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
 
-        if (!existing && isNight) {
-            const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            existing = await db('attendance')
-                .where({ employee_id, company_id: companyId })
-                .whereRaw('DATE(check_in) = ?', [nextDate])
-                .whereRaw('HOUR(check_in) < 6')
-                .first();
+        const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+
+        const candidateLogs = await db('attendance')
+            .where({ employee_id, company_id: companyId })
+            .where('check_in', '>=', `${date} 00:00:00`)
+            .where('check_in', '<=', `${nextDateStr} 23:59:59`);
+
+        let existing = null;
+        for (const log of candidateLogs) {
+            const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+            if (lDate === date) {
+                existing = log;
+                break;
+            }
         }
 
         if (existing) {
@@ -1888,21 +1896,33 @@ class AttendanceService {
         const { employee_id, date, status } = data;
         const dbStatus = mapFrontendStatusToDb(status);
 
-        const isNight = await isNightShiftForEmployeeDate(employee_id, date, companyId);
-
         await db.transaction(async (trx) => {
-            let existing = await trx('attendance')
-                .where({ employee_id, company_id: companyId })
-                .whereRaw('DATE(check_in) = ?', [date])
+            const employee = await trx('employees as e')
+                .leftJoin('shifts as s', 'e.shift_id', 's.id')
+                .where('e.id', employee_id)
+                .select('e.*', 's.start_time as shift_start', 's.end_time as shift_end')
                 .first();
+            const defaultShift = employee ? { start_time: employee.shift_start, end_time: employee.shift_end } : null;
+            const empAssignments = await trx('employee_shift_assignments as esa')
+                .join('shifts as s', 'esa.shift_id', 's.id')
+                .where('esa.employee_id', employee_id)
+                .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
 
-            if (!existing && isNight) {
-                const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                existing = await trx('attendance')
-                    .where({ employee_id, company_id: companyId })
-                    .whereRaw('DATE(check_in) = ?', [nextDate])
-                    .whereRaw('HOUR(check_in) < 6')
-                    .first();
+            const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000);
+            const nextDateStr = nextDate.toISOString().split('T')[0];
+
+            const candidateLogs = await trx('attendance')
+                .where({ employee_id, company_id: companyId })
+                .where('check_in', '>=', `${date} 00:00:00`)
+                .where('check_in', '<=', `${nextDateStr} 23:59:59`);
+
+            let existing = null;
+            for (const log of candidateLogs) {
+                const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+                if (lDate === date) {
+                    existing = log;
+                    break;
+                }
             }
 
             const prevStatus = existing?.status || 'absent';
@@ -3362,12 +3382,35 @@ class AttendanceService {
                 dbStatus = 'absent';
             }
 
-            if (request.request_type === 'late_in') {
-                const existingAtt = await db('attendance')
-                    .where({ employee_id: request.employee_id })
-                    .whereRaw('DATE(check_in) = ?', [dateStr])
-                    .first();
+            const employee = await db('employees as e')
+                .leftJoin('shifts as s', 'e.shift_id', 's.id')
+                .where('e.id', request.employee_id)
+                .select('e.*', 's.start_time as shift_start', 's.end_time as shift_end')
+                .first();
+            const defaultShift = employee ? { start_time: employee.shift_start, end_time: employee.shift_end } : null;
+            const empAssignments = await db('employee_shift_assignments as esa')
+                .join('shifts as s', 'esa.shift_id', 's.id')
+                .where('esa.employee_id', request.employee_id)
+                .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
 
+            const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
+            const nextDateStr = nextDate.toISOString().split('T')[0];
+
+            const candidateLogs = await db('attendance')
+                .where({ employee_id: request.employee_id, company_id: companyId })
+                .where('check_in', '>=', `${dateStr} 00:00:00`)
+                .where('check_in', '<=', `${nextDateStr} 23:59:59`);
+
+            let existingAtt = null;
+            for (const log of candidateLogs) {
+                const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+                if (lDate === dateStr) {
+                    existingAtt = log;
+                    break;
+                }
+            }
+
+            if (request.request_type === 'late_in') {
                 if (!existingAtt) {
                     await db('attendance').insert({
                         employee_id: request.employee_id,
@@ -3388,11 +3431,6 @@ class AttendanceService {
                         });
                 }
             } else if (request.request_type === 'early_out') {
-                const existingAtt = await db('attendance')
-                    .where({ employee_id: request.employee_id })
-                    .whereRaw('DATE(check_in) = ?', [dateStr])
-                    .first();
-
                 if (existingAtt) {
                     const updates = {
                         status: dbStatus,
