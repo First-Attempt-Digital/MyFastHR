@@ -1,25 +1,62 @@
 const db = require('../config/db');
 
+function toLocalYYYYMMDDHHmmss(dateVal) {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
+}
+
+function getISTHour(dateVal) {
+    const d = new Date(dateVal);
+    const istStr = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+    return parseInt(istStr, 10);
+}
+
+function getISTDate(dateVal) {
+    const d = new Date(dateVal);
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+}
+
 class AttendanceRepository {
     async punchIn(employeeId, companyId, status = 'present', location = {}, ip = '') {
         // Prevent multiple punch-ins on the same day if one is already open
+        const now = new Date();
+        const hour = getISTHour(now);
+        let logicalDateStr, nextLogicalDateStr;
+        if (hour < 6) {
+            const prev = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            logicalDateStr = getISTDate(prev);
+            nextLogicalDateStr = getISTDate(now);
+        } else {
+            logicalDateStr = getISTDate(now);
+            const next = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+            nextLogicalDateStr = getISTDate(next);
+        }
+
         const existing = await db('attendance')
             .where({
                 employee_id: employeeId,
                 company_id: companyId,
                 check_out: null
             })
-            .whereRaw('DATE(check_in) = CURRENT_DATE')
+            .andWhere(qb => {
+                qb.where(qb1 => {
+                    qb1.whereRaw('DATE(check_in) = ?', [logicalDateStr]).whereRaw('HOUR(check_in) >= 6');
+                }).orWhere(qb2 => {
+                    qb2.whereRaw('DATE(check_in) = ?', [nextLogicalDateStr]).whereRaw('HOUR(check_in) < 6');
+                });
+            })
             .first();
 
         if (existing) throw new Error('Already punched in today');
 
-        const utcNowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const localNowStr = toLocalYYYYMMDDHHmmss(new Date());
 
         return await db('attendance').insert({
             employee_id: employeeId,
             company_id: companyId,
-            check_in: utcNowStr,
+            check_in: localNowStr,
             status: status,
             latitude: location.latitude || null,
             longitude: location.longitude || null,
@@ -47,12 +84,12 @@ class AttendanceRepository {
         const diffMs = now - checkIn;
         const workHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
 
-        const utcNowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const localNowStr = toLocalYYYYMMDDHHmmss(new Date());
 
         return await db('attendance')
             .where({ id: entry.id })
             .update({
-                check_out: utcNowStr,
+                check_out: localNowStr,
                 out_latitude: location.latitude || null,
                 out_longitude: location.longitude || null,
                 out_accuracy: location.accuracy || null,
@@ -140,10 +177,17 @@ class AttendanceRepository {
             );
         const employeeIds = employees.map(e => e.id);
 
-        // 2. Get attendance for these employees
+        // 2. Get attendance for these employees (include crossover logs from the 1st of next month)
         const attendance = await db('attendance')
             .whereIn('employee_id', employeeIds)
-            .whereRaw('MONTH(check_in) = ? AND YEAR(check_in) = ?', [month, year])
+            .where(qb => {
+                qb.whereRaw('MONTH(check_in) = ? AND YEAR(check_in) = ?', [month, year])
+                  .orWhere(qb2 => {
+                      const nextM = month === 12 ? 1 : month + 1;
+                      const nextY = month === 12 ? year + 1 : year;
+                      qb2.whereRaw('MONTH(check_in) = ? AND YEAR(check_in) = ? AND DAY(check_in) = 1 AND HOUR(check_in) < 6', [nextM, nextY]);
+                  });
+            })
             .select('employee_id', 'check_in', 'check_out', 'status', 'punch_source');
 
         // 3. Get leaves for these employees

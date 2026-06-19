@@ -2,11 +2,101 @@ const attendanceRepository = require('../repositories/attendanceRepository');
 const db = require('../config/db');
 const notificationService = require('./notificationService');
 
+function isNightShift(shift) {
+    if (!shift || !shift.start_time || !shift.end_time) return false;
+    const [sH, sM] = shift.start_time.split(':').map(Number);
+    const [eH, eM] = shift.end_time.split(':').map(Number);
+    const sMins = sH * 60 + sM;
+    const eMins = eH * 60 + eM;
+    return eMins < sMins;
+}
+
+function getLogicalDateStr(checkIn, employeeShifts = [], defaultShift = null) {
+    if (!checkIn) return null;
+    const d = new Date(checkIn);
+    if (isNaN(d.getTime())) return null;
+    
+    const checkInYMD = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    const istStr = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+    const hour = parseInt(istStr, 10);
+    
+    if (hour >= 0 && hour < 6) {
+        const prevDate = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+        const prevDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+        
+        const shift = employeeShifts.find(s => {
+            const fromStr = s.from_date instanceof Date ? s.from_date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : String(s.from_date || '').split('T')[0];
+            const toStr = s.to_date instanceof Date ? s.to_date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : (s.to_date ? String(s.to_date).split('T')[0] : null);
+            return prevDateStr >= fromStr && (!toStr || prevDateStr <= toStr);
+        }) || defaultShift;
+        
+        if (shift && isNightShift(shift)) {
+            return prevDateStr;
+        }
+    }
+    
+    return checkInYMD;
+}
+
+function checkIfLogUsedGrace(log, employee, rules) {
+    if (!log.check_in) return false;
+    const logCheckIn = new Date(log.check_in);
+    
+    const shiftStart = employee?.shift_start || rules.shift_start || '09:00';
+    const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
+    
+    const [sHours, sMins] = shiftStart.split(':').map(Number);
+    const hour = logCheckIn.getHours();
+    
+    let logicalDateStr = logCheckIn.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    const [sH, sM] = shiftStart.split(':').map(Number);
+    const [eH, eM] = (employee?.shift_end || '18:00').split(':').map(Number);
+    const isNight = eH * 60 + eM < sH * 60 + sM;
+    
+    if (isNight && hour >= 0 && hour < 6) {
+        const prevDate = new Date(logCheckIn.getTime() - 24 * 60 * 60 * 1000);
+        logicalDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    }
+    
+    const shiftStartActual = new Date(`${logicalDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+    const shiftStartLimit = new Date(shiftStartActual.getTime() + grace * 60 * 1000);
+    
+    return logCheckIn > shiftStartActual && logCheckIn <= shiftStartLimit;
+}
+
+async function isNightShiftForEmployeeDate(employeeId, dateStr, companyId) {
+    const activeAssignment = await db('employee_shift_assignments as esa')
+        .join('shifts as s', 'esa.shift_id', 's.id')
+        .where('esa.employee_id', employeeId)
+        .where('esa.from_date', '<=', dateStr)
+        .andWhere(qb => {
+            qb.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
+        })
+        .select('s.*')
+        .orderBy('esa.id', 'desc')
+        .first();
+    
+    const shift = activeAssignment || await db('employees as e')
+        .join('shifts as s', 'e.shift_id', 's.id')
+        .where('e.id', employeeId)
+        .select('s.*')
+        .first();
+        
+    return isNightShift(shift);
+}
+
 function toLocalYMD(dateVal) {
     if (!dateVal) return null;
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return null;
     return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+}
+
+function toLocalYYYYMMDDHHmmss(dateVal) {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
 }
 
 function dbDateToUTC(dateVal) {
@@ -22,20 +112,12 @@ function dbDateToUTC(dateVal) {
             const hr = parseInt(parts[3]);
             const mi = parseInt(parts[4]);
             const sc = parts[5] ? parseInt(parts[5]) : 0;
-            return new Date(Date.UTC(yr, mo, dy, hr, mi, sc));
+            return new Date(yr, mo, dy, hr, mi, sc);
         }
         return null;
     }
     
-    // Treat the local fields as UTC values
-    return new Date(Date.UTC(
-        d.getFullYear(),
-        d.getMonth(),
-        d.getDate(),
-        d.getHours(),
-        d.getMinutes(),
-        d.getSeconds()
-    ));
+    return d;
 }
 
 function dateToISTMins(dateVal) {
@@ -128,6 +210,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
         let s1Late = false;
         let s1Early = false;
         let s1PunchText = 'S1: Missed';
+        let s1Active = false;
 
         const s1Log = s1Logs[0];
         if (s1Log) {
@@ -142,7 +225,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
             } else {
                 let isS1Terminated = false;
                 if (shift.terminate_hour) {
-                    const checkInDateStr = toLocalYMD(dbDateToUTC(s1Log.check_in));
+                    const checkInDateStr = toLocalYMD(s1Log.check_in);
                     const [sHours, sMins] = (shift.start_time || shift.shift_start || '09:00').split(':').map(Number);
                     const [eHours, eMins] = (shift.end_time || shift.shift_end || '13:00').split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -155,6 +238,10 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                         isS1Terminated = true;
                     }
                 }
+                const isS1Today = toLocalYMD(s1Log.check_in) === toLocalYMD(new Date());
+                if (!isS1Terminated && isS1Today) {
+                    s1Active = true;
+                }
                 s1PunchText = `S1: ${isS1Terminated ? 'Terminated (No Out)' : 'No Out'} (${safeFormatTime(s1Log.check_in)} - --:--)`;
             }
         }
@@ -163,6 +250,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
         let s2Late = false;
         let s2Early = false;
         let s2PunchText = 'S2: Missed';
+        let s2Active = false;
 
         const s2Log = s2Logs[0];
         if (s2Log) {
@@ -177,7 +265,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
             } else {
                 let isS2Terminated = false;
                 if (shift.terminate_hour) {
-                    const checkInDateStr = toLocalYMD(dbDateToUTC(s2Log.check_in));
+                    const checkInDateStr = toLocalYMD(s2Log.check_in);
                     const [sHours, sMins] = (shift.session2_start_time || shift.shift_session2_start || '14:00').split(':').map(Number);
                     const [eHours, eMins] = (shift.session2_end_time || shift.shift_session2_end || '18:00').split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -190,12 +278,18 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
                         isS2Terminated = true;
                     }
                 }
+                const isS2Today = toLocalYMD(s2Log.check_in) === toLocalYMD(new Date());
+                if (!isS2Terminated && isS2Today) {
+                    s2Active = true;
+                }
                 s2PunchText = `S2: ${isS2Terminated ? 'Terminated (No Out)' : 'No Out'} (${safeFormatTime(s2Log.check_in)} - --:--)`;
             }
         }
 
         let status = 'A';
-        if (s1Present && s2Present) {
+        if (s1Active || s2Active) {
+            status = 'CI';
+        } else if (s1Present && s2Present) {
             if (s1Late || s2Late) {
                 status = 'L';
             } else if (s1Early || s2Early) {
@@ -211,8 +305,8 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
 
         return {
             status,
-            session1_status: s1Present ? (s1Late ? 'Late' : 'Present') : 'Absent',
-            session2_status: s2Present ? (s2Late ? 'Late' : 'Present') : 'Absent',
+            session1_status: s1Present ? (s1Late ? 'Late' : 'Present') : (s1Active ? 'Checked In' : 'Absent'),
+            session2_status: s2Present ? (s2Late ? 'Late' : 'Present') : (s2Active ? 'Checked In' : 'Absent'),
             explanation: `${s1PunchText} | ${s2PunchText}`,
             punch_count: dayLogs.length * 2
         };
@@ -248,7 +342,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
 
             let isTerminated = false;
             if (shift.terminate_hour) {
-                const checkInDateStr = toLocalYMD(dbDateToUTC(log.check_in));
+                const checkInDateStr = toLocalYMD(log.check_in);
                 const [sHours, sMins] = (shift.start_time || shift.shift_start || '09:00').split(':').map(Number);
                 const [eHours, eMins] = (shift.end_time || shift.shift_end || '18:00').split(':').map(Number);
                 const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -340,8 +434,39 @@ class AttendanceService {
 
         let status = 'present';
         const now = new Date();
-        const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
-        const dateStr = toLocalYMD(now);
+        const punchTimeStr = toLocalYYYYMMDDHHmmss(now);
+        let dateStr = toLocalYMD(now);
+
+        const istHourStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+        const hour = parseInt(istHourStr, 10);
+        if (hour >= 0 && hour < 6) {
+            const prevDateObj = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            const prevDateStr = prevDateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+            
+            let prevShift = null;
+            if (employee) {
+                const activeAssignment = await db('employee_shift_assignments as esa')
+                    .join('shifts as s', 'esa.shift_id', 's.id')
+                    .where('esa.employee_id', empId)
+                    .where('esa.from_date', '<=', prevDateStr)
+                    .andWhere(qb => {
+                        qb.where('esa.to_date', '>=', prevDateStr).orWhereNull('esa.to_date');
+                    })
+                    .select('s.*')
+                    .orderBy('esa.id', 'desc')
+                    .first();
+                
+                if (activeAssignment) {
+                    prevShift = activeAssignment;
+                } else {
+                    prevShift = await db('shifts').where('id', employee.shift_id).first();
+                }
+            }
+            
+            if (prevShift && isNightShift(prevShift)) {
+                dateStr = prevDateStr;
+            }
+        }
 
         // Resolve overridden shift for check-in date
         if (employee) {
@@ -494,14 +619,12 @@ class AttendanceService {
             const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
 
             const [sHours, sMins] = shiftStart.split(':').map(Number);
-            const shiftStartMins = sHours * 60 + sMins;
-            const shiftStartLimitMins = shiftStartMins + (parseInt(grace) || 0);
-            const nowMins = dateToISTMins(now);
+            const shiftStartActual = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+            const shiftStartLimit = new Date(shiftStartActual.getTime() + (parseInt(grace) || 0) * 60 * 1000);
 
-            let isLate = false;
-            if (nowMins > shiftStartLimitMins) {
-                isLate = true;
-            } else if (nowMins > shiftStartMins && nowMins <= shiftStartLimitMins) {
+            let isLate = now > shiftStartLimit;
+
+            if (!isLate && now > shiftStartActual && now <= shiftStartLimit) {
                 // Check if grace limit has been exceeded for the current month
                 const startOfMonth = `${dateStr.slice(0, 8)}01`;
                 const currentMonthLogs = await db('attendance')
@@ -511,28 +634,8 @@ class AttendanceService {
                     .select('check_in');
 
                 let graceCount = 0;
-                const s1StartStr = origShiftStart;
-                const [s1H, s1M] = s1StartStr.split(':').map(Number);
-                const s1StartMinsVal = s1H * 60 + s1M;
-                const s1Grace = parseInt(employee?.scheme_grace ?? origShiftGrace ?? rules.grace_period ?? 15);
-                const s1AllowedMins = s1StartMinsVal + s1Grace;
-
-                const s2StartStr = employee?.session2_start_time;
-                let s2StartMinsVal = null;
-                let s2AllowedMins = null;
-                if (s2StartStr && reqPunches === 4) {
-                    const [s2H, s2M] = s2StartStr.split(':').map(Number);
-                    s2StartMinsVal = s2H * 60 + s2M;
-                    const s2Grace = parseInt(employee?.session2_grace_in ?? employee?.scheme_grace ?? rules.grace_period ?? 15);
-                    s2AllowedMins = s2StartMinsVal + s2Grace;
-                }
-
                 for (const log of currentMonthLogs) {
-                    const checkInDate = dbDateToUTC(log.check_in);
-                    const checkInMins = dateToISTMins(checkInDate);
-                    const usedS1Grace = checkInMins > s1StartMinsVal && checkInMins <= s1AllowedMins;
-                    const usedS2Grace = s2StartMinsVal !== null && checkInMins > s2StartMinsVal && checkInMins <= s2AllowedMins;
-                    if (usedS1Grace || usedS2Grace) {
+                    if (checkIfLogUsedGrace(log, employee, rules)) {
                         graceCount++;
                     }
                 }
@@ -616,12 +719,12 @@ class AttendanceService {
             .first();
 
         const now = new Date();
-        const punchTimeStr = now.toISOString().slice(0, 19).replace('T', ' ');
+        const punchTimeStr = toLocalYYYYMMDDHHmmss(now);
         const dateStr = toLocalYMD(now);
 
         // Resolve overridden shift for this check-in date
         if (employee) {
-            const checkInDateStr = toLocalYMD(dbDateToUTC(activeEntry.check_in));
+            const checkInDateStr = toLocalYMD(activeEntry.check_in);
             const activeAssignment = await db('employee_shift_assignments as esa')
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', empId)
@@ -670,7 +773,7 @@ class AttendanceService {
         let isSession2 = false;
         const reqPunches = parseInt(employee?.shift_total_punches || 2);
         if (reqPunches === 4) {
-            const checkInTime = dbDateToUTC(activeEntry.check_in);
+            const checkInTime = new Date(activeEntry.check_in);
             const checkInMins = dateToISTMins(checkInTime);
             
             const s1EndStr = employee?.end_time || '18:00';
@@ -693,7 +796,7 @@ class AttendanceService {
 
         // Shift Terminate Hour check
         if (employee && employee.terminate_hour) {
-            const checkInDateStr = toLocalYMD(dbDateToUTC(activeEntry.check_in));
+            const checkInDateStr = toLocalYMD(activeEntry.check_in);
             const shiftStartStr = employee.start_time || '09:00';
             const shiftEndStr = employee.end_time || '18:00';
             
@@ -717,7 +820,7 @@ class AttendanceService {
             .first();
 
         let isEarlyCheckoutAttempt = false;
-        const checkIn = dbDateToUTC(activeEntry.check_in);
+        const checkIn = new Date(activeEntry.check_in);
         const checkInMins = dateToISTMins(checkIn);
         const punchMins = dateToISTMins(now);
         let workedMins = punchMins - checkInMins;
@@ -819,7 +922,7 @@ class AttendanceService {
         if (employee?.is_flexi) {
             const minHours = parseFloat(employee.min_hours) || 8;
             if (workedHours < halfDayLimit) {
-                newStatus = 'short';
+                newStatus = 'absent';
             } else if (workedHours < minHours) {
                 newStatus = 'half-day';
             } else {
@@ -829,7 +932,7 @@ class AttendanceService {
             if (outMarginThreshold && shiftEndDate && now >= outMarginThreshold && now < shiftEndDate) {
                 newStatus = 'early_out';
             } else if (workedHours < halfDayLimit) {
-                newStatus = 'short';
+                newStatus = 'absent';
             } else if (isEarlyCheckoutAttempt) {
                 newStatus = 'early_out';
             } else if (newStatus !== 'pending') {
@@ -970,13 +1073,17 @@ class AttendanceService {
             });
         });
 
-        // Pre-parse and group attendance logs by employee_id and day
+        // Pre-parse and group attendance logs by employee_id and day (using logical date)
         const attendanceMap = {};
         raw.attendance.forEach(a => {
             const empId = a.employee_id;
-            const dateObj = new Date(a.check_in);
-            const day = dateObj.getDate();
-            const time = dateObj.getTime();
+            const employeeInfo = raw.employees.find(e => e.id === empId);
+            const empAssignments = shiftAssignmentsByEmployee[empId] || [];
+            const defaultShift = employeeInfo ? { start_time: employeeInfo.shift_start, end_time: employeeInfo.shift_end } : null;
+            
+            const logicalDate = getLogicalDateStr(a.check_in, empAssignments, defaultShift);
+            const day = logicalDate ? parseInt(logicalDate.split('-')[2], 10) : new Date(a.check_in).getDate();
+            const time = new Date(a.check_in).getTime();
             
             if (!attendanceMap[empId]) {
                 attendanceMap[empId] = {};
@@ -1003,8 +1110,8 @@ class AttendanceService {
         if (raw.regularizations) {
             raw.regularizations.forEach(r => {
                 const empId = r.employee_id;
-                const dObj = new Date(r.date);
-                const day = dObj.getDate();
+                const dayYmd = toLocalYMD(r.date);
+                const day = dayYmd ? parseInt(dayYmd.split('-')[2], 10) : new Date(r.date).getDate();
                 if (!regularizationsMap[empId]) {
                     regularizationsMap[empId] = {};
                 }
@@ -1017,8 +1124,8 @@ class AttendanceService {
         if (raw.entryRequests) {
             raw.entryRequests.forEach(er => {
                 const empId = er.employee_id;
-                const dObj = new Date(er.date);
-                const day = dObj.getDate();
+                const dayYmd = toLocalYMD(er.date);
+                const day = dayYmd ? parseInt(dayYmd.split('-')[2], 10) : new Date(er.date).getDate();
                 if (!entryRequestsMap[empId]) {
                     entryRequestsMap[empId] = {};
                 }
@@ -1057,16 +1164,6 @@ class AttendanceService {
             const empWeekoffs = emp.scheme_weekoffs
                 ? (typeof emp.scheme_weekoffs === 'string' ? JSON.parse(emp.scheme_weekoffs) : emp.scheme_weekoffs)
                 : weekoffs;
-
-            const toLocalYMD = (dateVal) => {
-                if (!dateVal) return null;
-                const d = new Date(dateVal);
-                if (isNaN(d.getTime())) return null;
-                const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                return `${y}-${m}-${day}`;
-            };
 
             const empJoinStr = emp.joining_date ? toLocalYMD(emp.joining_date) : null;
             const empResignStr = emp.resignation_date ? toLocalYMD(emp.resignation_date) : null;
@@ -1120,17 +1217,7 @@ class AttendanceService {
 
                 let status = '-'; // Default unknown
 
-                // A. Check Week-offs
-                if (empWeekoffs.includes(dayName)) {
-                    status = 'OFF';
-                    stats.OFF++;
-                }
-                // B. Check Holidays
-                else if (holidays.some(h => new Date(h.date).getDate() === d)) {
-                    status = 'H';
-                    stats.H++;
-                }
-                // C. Check Attendance
+                // 1. Check Attendance (Includes Manual Overrides, Biometric, Regularization, Entry/Exit Requests)
                 const dayLogs = (attendanceMap[emp.id] && attendanceMap[emp.id][d]) || [];
 
                 const dayRegularization = regularizationsMap[emp.id]?.[d];
@@ -1206,22 +1293,36 @@ class AttendanceService {
                     status = 'E';
                     stats.P++;
                 } else {
-                    // C. Check Leaves
-                    const onLeave = empLeaves.find(l =>
-                        l.startTime <= dateTime && l.endTime >= dateTime
-                    );
-
-                    if (onLeave) {
-                        const isPaid = !onLeave.leave_type_name.toLowerCase().includes('unpaid') &&
-                            !onLeave.leave_type_name.toLowerCase().includes('lop');
-                        status = isPaid ? 'PL' : 'UL';
-                        if (isPaid) stats.PL++; else stats.UL++;
+                    // 2. Check Week-offs
+                    if (empWeekoffs.includes(dayName)) {
+                        status = 'OFF';
+                        stats.OFF++;
+                    }
+                    // 3. Check Holidays
+                    else if (holidays.some(h => {
+                        const dayYmd = toLocalYMD(h.date);
+                        return dayYmd && parseInt(dayYmd.split('-')[2], 10) === d;
+                    })) {
+                        status = 'H';
+                        stats.H++;
                     } else {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        if (date < today) {
-                            status = 'A'; // Absent
-                            stats.A++;
+                        // 4. Check Leaves
+                        const onLeave = empLeaves.find(l =>
+                            l.startTime <= dateTime && l.endTime >= dateTime
+                        );
+
+                        if (onLeave) {
+                            const isPaid = !onLeave.leave_type_name.toLowerCase().includes('unpaid') &&
+                                !onLeave.leave_type_name.toLowerCase().includes('lop');
+                            status = isPaid ? 'PL' : 'UL';
+                            if (isPaid) stats.PL++; else stats.UL++;
+                        } else {
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            if (date < today) {
+                                status = 'A'; // Absent
+                                stats.A++;
+                            }
                         }
                     }
                 }
@@ -1281,7 +1382,7 @@ class AttendanceService {
                 grid_timings[d] = { in1, out1, in2, out2 };
                 grid_meta[d] = {
                     is_override: dayLogs.length > 0 && (dayLogs[0].punch_source === 'manual' || dayLogs[0].punch_source === 'manual_override'),
-                    is_grace: isGrace
+                    is_grace: isGrace && status !== 'L' && status !== 'A' && status !== '-'
                 };
             }
 
@@ -1311,11 +1412,21 @@ class AttendanceService {
         const companyId = user.company_id;
         const dbStatus = mapFrontendStatusToDb(status);
 
-        // Check if record exists for that date
-        const existing = await db('attendance')
+        const isNight = await isNightShiftForEmployeeDate(employee_id, date, companyId);
+
+        let existing = await db('attendance')
             .where({ employee_id, company_id: companyId })
             .whereRaw('DATE(check_in) = ?', [date])
             .first();
+
+        if (!existing && isNight) {
+            const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            existing = await db('attendance')
+                .where({ employee_id, company_id: companyId })
+                .whereRaw('DATE(check_in) = ?', [nextDate])
+                .whereRaw('HOUR(check_in) < 6')
+                .first();
+        }
 
         if (existing) {
             await db('attendance')
@@ -1598,7 +1709,7 @@ class AttendanceService {
 
         await db.transaction(async (trx) => {
             for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                const dateStr = d.toISOString().split('T')[0];
+                const dateStr = toLocalYMD(d);
 
                 for (const empId of employee_ids) {
                     // Check existing attendance
@@ -1628,21 +1739,23 @@ class AttendanceService {
     }
 
     async getEmployeeAttendanceHistory(companyId, employeeId, from, to) {
+        // Adjust the query range slightly to capture crossover night shifts
+        const nextToDate = new Date(new Date(to).getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         const attendance = await db('attendance')
             .where({ employee_id: employeeId, company_id: companyId })
-            .whereRaw('DATE(check_in) >= ? AND DATE(check_in) <= ?', [from, to])
+            .whereRaw('DATE(check_in) >= ? AND DATE(check_in) <= ?', [from, nextToDate])
             .orderBy('check_in', 'asc');
 
         const shifts = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where({ 'esa.employee_id': employeeId })
-            .select('s.name', 'esa.from_date', 'esa.to_date')
+            .select('s.*', 'esa.from_date', 'esa.to_date')
             .orderBy('esa.id', 'desc');
 
         const employee = await db('employees as e')
             .leftJoin('shifts as s', 'e.shift_id', 's.id')
             .where('e.id', employeeId)
-            .select('s.name as default_shift_name')
+            .select('s.*', 's.name as default_shift_name')
             .first();
         const defaultShiftName = employee?.default_shift_name || '---';
 
@@ -1653,7 +1766,10 @@ class AttendanceService {
 
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
             const dateStr = toLocalYMD(d);
-            const dayLogs = attendance.filter(a => toLocalYMD(a.check_in) === dateStr);
+            const dayLogs = attendance.filter(a => {
+                const logLogicalDate = getLogicalDateStr(a.check_in, shifts, employee);
+                return logLogicalDate === dateStr;
+            });
             const record = dayLogs[0]; // fallback/primary status record
             const shift = shifts.find(s => {
                 const fromStr = toLocalYMD(s.from_date);
@@ -1700,20 +1816,39 @@ class AttendanceService {
             .andWhere(function () {
                 this.where('esa.to_date', '>=', date).orWhereNull('esa.to_date');
             })
-            .select('esa.employee_id', 's.name as shift_name')
+            .select('esa.employee_id', 's.start_time', 's.end_time', 's.grace_period', 's.name as shift_name')
             .orderBy('esa.id', 'desc');
 
         const shifts = await db('shifts').where({ company_id: companyId });
 
+        const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         const attendance = await db('attendance')
             .where({ company_id: companyId })
-            .whereRaw('DATE(check_in) = ?', [date]);
+            .where(qb => {
+                qb.whereRaw('DATE(check_in) = ?', [date])
+                  .orWhereRaw('DATE(check_in) = ?', [nextDate]);
+            });
 
         return employees.map(emp => {
-            const empLogs = attendance.filter(a => a.employee_id === emp.id);
-            const record = empLogs[0];
             const activeAssignment = assignments.find(a => a.employee_id === emp.id);
             const defaultShift = shifts.find(s => s.id === emp.shift_id);
+
+            const empLogs = attendance.filter(a => {
+                if (a.employee_id !== emp.id) return false;
+                
+                const empAssignments = assignments.filter(asg => asg.employee_id === emp.id);
+                const formattedAssignments = empAssignments.map(asg => ({
+                    from_date: date,
+                    to_date: date,
+                    start_time: asg.start_time,
+                    end_time: asg.end_time,
+                    grace_period: asg.grace_period
+                }));
+                
+                const logLogicalDate = getLogicalDateStr(a.check_in, formattedAssignments, defaultShift);
+                return logLogicalDate === date;
+            });
+            const record = empLogs[0];
             const shiftName = activeAssignment?.shift_name || defaultShift?.name || '---';
 
             const s1Ms = empLogs[0] && empLogs[0].check_out ? (new Date(empLogs[0].check_out) - new Date(empLogs[0].check_in)) : 0;
@@ -1742,11 +1877,22 @@ class AttendanceService {
         const { employee_id, date, status } = data;
         const dbStatus = mapFrontendStatusToDb(status);
 
+        const isNight = await isNightShiftForEmployeeDate(employee_id, date, companyId);
+
         await db.transaction(async (trx) => {
-            const existing = await trx('attendance')
+            let existing = await trx('attendance')
                 .where({ employee_id, company_id: companyId })
                 .whereRaw('DATE(check_in) = ?', [date])
                 .first();
+
+            if (!existing && isNight) {
+                const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                existing = await trx('attendance')
+                    .where({ employee_id, company_id: companyId })
+                    .whereRaw('DATE(check_in) = ?', [nextDate])
+                    .whereRaw('HOUR(check_in) < 6')
+                    .first();
+            }
 
             const prevStatus = existing?.status || 'absent';
 
@@ -1885,7 +2031,7 @@ class AttendanceService {
 
     async getEligibleEmployees(companyId) {
         console.log('>>> [DEBUG]: Fetching Eligible Employees for Company:', companyId);
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 
         // Fetch all employees with department/designation details
         const employees = await db('employees')
@@ -1904,25 +2050,67 @@ class AttendanceService {
 
         console.log(`>>> [DEBUG]: Found ${employees.length} employees`);
 
-        // Fetch current shift assignments
+        // Fetch all shift assignments (active or future)
         const assignments = await db('employee_shift_assignments')
             .join('shifts', 'employee_shift_assignments.shift_id', 'shifts.id')
             .where('employee_shift_assignments.company_id', companyId)
-            .where('from_date', '<=', today)
-            .andWhere(function () {
-                this.where('to_date', '>=', today).orWhereNull('to_date');
-            })
-            .select('employee_id', 'shifts.name as shift_name');
+            .select(
+                'employee_shift_assignments.employee_id',
+                'employee_shift_assignments.from_date',
+                'employee_shift_assignments.to_date',
+                'shifts.name as shift_name',
+                'shifts.id as shift_id'
+            )
+            .orderBy('employee_shift_assignments.from_date', 'asc');
 
         const assignmentMap = {};
         assignments.forEach(a => {
-            assignmentMap[a.employee_id] = a.shift_name;
+            const fromStr = toLocalYMD(a.from_date);
+            const toStr = toLocalYMD(a.to_date);
+            const empId = a.employee_id;
+
+            if (!assignmentMap[empId]) {
+                assignmentMap[empId] = {
+                    current: null,
+                    upcoming: null
+                };
+            }
+
+            if (fromStr <= today && (!toStr || toStr >= today)) {
+                // If multiple assignments are active (though rare), take the latest start date one
+                assignmentMap[empId].current = {
+                    shift_id: a.shift_id,
+                    shift_name: a.shift_name,
+                    from_date: fromStr,
+                    to_date: toStr
+                };
+            } else if (fromStr > today) {
+                // Take the earliest upcoming assignment
+                if (!assignmentMap[empId].upcoming || fromStr < assignmentMap[empId].upcoming.from_date) {
+                    assignmentMap[empId].upcoming = {
+                        shift_id: a.shift_id,
+                        shift_name: a.shift_name,
+                        from_date: fromStr,
+                        to_date: toStr
+                    };
+                }
+            }
         });
 
-        return employees.map(emp => ({
-            ...emp,
-            assigned_shift: assignmentMap[emp.id] || null
-        }));
+        return employees.map(emp => {
+            const mapData = assignmentMap[emp.id] || { current: null, upcoming: null };
+            return {
+                ...emp,
+                assigned_shift: mapData.current ? mapData.current.shift_name : null,
+                assigned_shift_id: mapData.current ? mapData.current.shift_id : null,
+                assigned_from_date: mapData.current ? mapData.current.from_date : null,
+                assigned_to_date: mapData.current ? mapData.current.to_date : null,
+                upcoming_shift: mapData.upcoming ? mapData.upcoming.shift_name : null,
+                upcoming_shift_id: mapData.upcoming ? mapData.upcoming.shift_id : null,
+                upcoming_from_date: mapData.upcoming ? mapData.upcoming.from_date : null,
+                upcoming_to_date: mapData.upcoming ? mapData.upcoming.to_date : null
+            };
+        });
     }
     async assignShift(user, companyId, data) {
         const { employee_ids, shift_id, from_date, to_date } = data;
@@ -2157,16 +2345,6 @@ class AttendanceService {
         const assignmentList = await qb.select('esa.id', 'esa.employee_id', 'esa.from_date', 'esa.to_date', 's.name')
             .orderBy('esa.id', 'desc');
 
-        // Helper to format date to YYYY-MM-DD in local time
-        const toLocalYMD = (dateVal) => {
-            if (!dateVal) return null;
-            const d = new Date(dateVal);
-            if (isNaN(d.getTime())) return null;
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-        };
 
         // 3. Build Roster Matrix
         const roster = employees.map(emp => {
@@ -2447,7 +2625,7 @@ class AttendanceService {
                 ? (activeShift.session2_end_time || activeShift.end_time || '18:00') 
                 : (activeShift.end_time || '18:00');
             const [eHours, eMins] = finalEndStr.split(':').map(Number);
-            const checkInDateStr = toLocalYMD(dbDateToUTC(attendance.check_in));
+            const checkInDateStr = toLocalYMD(attendance.check_in);
             const [sHours, sMins] = (activeShift.start_time || '09:00').split(':').map(Number);
             
             const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -2467,7 +2645,7 @@ class AttendanceService {
                 const reqPunches = parseInt(activeShift.total_punches_required || 2);
                 let sessionEndTimeStr = activeShift.end_time || '18:00';
                 if (reqPunches === 4) {
-                    const checkInTime = dbDateToUTC(log.check_in);
+                    const checkInTime = new Date(log.check_in);
                     const checkInMins = dateToISTMins(checkInTime);
                     const s2StartStr = activeShift.session2_start_time || '14:00';
                     const [s2Hours, s2Mins] = s2StartStr.split(':').map(Number);
@@ -2481,7 +2659,7 @@ class AttendanceService {
                 }
                 
                 const [eHours, eMins] = sessionEndTimeStr.split(':').map(Number);
-                const checkInDateStr = toLocalYMD(dbDateToUTC(log.check_in));
+                const checkInDateStr = toLocalYMD(log.check_in);
                 const shiftStartStr = activeShift.start_time || '09:00';
                 const [sHours, sMins] = shiftStartStr.split(':').map(Number);
                 const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -2725,7 +2903,7 @@ class AttendanceService {
                     continue;
                 }
 
-                const logDate = punchTime.toISOString().split('T')[0];
+                const logDate = toLocalYMD(punchTime);
 
                 const existing = await db('attendance')
                     .where({ employee_id: empId, company_id: companyId })
@@ -3001,7 +3179,7 @@ class AttendanceService {
     }
 
     async getTodayNotCheckedIn(companyId, user) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = toLocalYMD(new Date());
         const isAdmin = ['company_admin', 'super_admin'].includes(user.role_name);
 
         let empQuery = db('employees as e')
@@ -3070,7 +3248,7 @@ class AttendanceService {
             throw new Error('Invalid request type');
         }
 
-        const targetDate = date || new Date().toISOString().split('T')[0];
+        const targetDate = date || toLocalYMD(new Date());
 
         const existing = await db('attendance_entry_requests')
             .where({ employee_id: employeeId, company_id: companyId, date: targetDate, request_type: type })
@@ -3085,7 +3263,7 @@ class AttendanceService {
                     updated_at: db.fn.now()
                 });
         } else {
-            const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            const nowStr = toLocalYYYYMMDDHHmmss(new Date());
             await db('attendance_entry_requests').insert({
                 company_id: companyId,
                 employee_id: employeeId,

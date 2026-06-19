@@ -1,6 +1,41 @@
 const db = require('../config/db');
 const crypto = require('crypto');
 
+function isNightShift(shift) {
+    if (!shift || !shift.start_time || !shift.end_time) return false;
+    const [sH, sM] = shift.start_time.split(':').map(Number);
+    const [eH, eM] = shift.end_time.split(':').map(Number);
+    const sMins = sH * 60 + sM;
+    const eMins = eH * 60 + eM;
+    return eMins < sMins;
+}
+
+function checkIfLogUsedGrace(log, employee, rules) {
+    if (!log.check_in) return false;
+    const logCheckIn = new Date(log.check_in);
+    
+    const shiftStart = employee?.shift_start || rules.shift_start || '09:00';
+    const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
+    
+    const [sHours, sMins] = shiftStart.split(':').map(Number);
+    const hour = logCheckIn.getHours();
+    
+    let logicalDateStr = logCheckIn.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    const [sH, sM] = shiftStart.split(':').map(Number);
+    const [eH, eM] = (employee?.shift_end || '18:00').split(':').map(Number);
+    const isNight = eH * 60 + eM < sH * 60 + sM;
+    
+    if (isNight && hour >= 0 && hour < 6) {
+        const prevDate = new Date(logCheckIn.getTime() - 24 * 60 * 60 * 1000);
+        logicalDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    }
+    
+    const shiftStartActual = new Date(`${logicalDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+    const shiftStartLimit = new Date(shiftStartActual.getTime() + grace * 60 * 1000);
+    
+    return logCheckIn > shiftStartActual && logCheckIn <= shiftStartLimit;
+}
+
 /**
  * Normalizes a database datetime (which Knex/MySQL parses as local time)
  * into a UTC Date object matching the string time.
@@ -18,20 +53,18 @@ function dbDateToUTC(dateVal) {
             const hr = parseInt(parts[3]);
             const mi = parseInt(parts[4]);
             const sc = parts[5] ? parseInt(parts[5]) : 0;
-            return new Date(Date.UTC(yr, mo, dy, hr, mi, sc));
+            return new Date(yr, mo, dy, hr, mi, sc);
         }
         return null;
     }
-    
-    // Treat the local fields as UTC values
-    return new Date(Date.UTC(
-        d.getFullYear(),
-        d.getMonth(),
-        d.getDate(),
-        d.getHours(),
-        d.getMinutes(),
-        d.getSeconds()
-    ));
+    return d;
+}
+
+function toLocalYYYYMMDDHHmmss(dateVal) {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
 }
 
 function dateToISTMins(dateVal) {
@@ -177,7 +210,7 @@ class MachineAttendanceService {
             return { status: 'failed', reason: 'Invalid timestamp format' };
         }
 
-        const punchTimeStr = punchTime.toISOString().slice(0, 19).replace('T', ' ');
+        const punchTimeStr = toLocalYYYYMMDDHHmmss(punchTime);
 
         // 1. Duplicate Transmission Prevention (Check if raw log already exists in audit table)
         const duplicateRaw = await db('biometric_raw_logs')
@@ -303,9 +336,38 @@ class MachineAttendanceService {
                 .first();
 
             // Resolve overridden shift for this date
-            const targetShiftDate = activeLog 
-                ? dateToISTDateString(dbDateToUTC(activeLog.check_in)) 
-                : dateStr;
+            const hour = punchTime.getHours();
+            let targetShiftDate = dateStr;
+            if (!activeLog && hour >= 0 && hour < 6) {
+                const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
+                const prevDateStr = dateToISTDateString(prevDateObj);
+                
+                let prevShift = null;
+                if (employeeWithShift) {
+                    const activeAssignment = await db('employee_shift_assignments as esa')
+                        .join('shifts as s', 'esa.shift_id', 's.id')
+                        .where('esa.employee_id', employeeId)
+                        .where('esa.from_date', '<=', prevDateStr)
+                        .andWhere(qb => {
+                            qb.where('esa.to_date', '>=', prevDateStr).orWhereNull('esa.to_date');
+                        })
+                        .select('s.*')
+                        .orderBy('esa.id', 'desc')
+                        .first();
+                    
+                    if (activeAssignment) {
+                        prevShift = activeAssignment;
+                    } else {
+                        prevShift = await db('shifts').where('id', employeeWithShift.shift_id).first();
+                    }
+                }
+                
+                if (prevShift && isNightShift(prevShift)) {
+                    targetShiftDate = prevDateStr;
+                }
+            } else if (activeLog) {
+                targetShiftDate = dateToISTDateString(dbDateToUTC(activeLog.check_in));
+            }
 
             if (employeeWithShift) {
                 const activeAssignment = await db('employee_shift_assignments as esa')
@@ -367,10 +429,19 @@ class MachineAttendanceService {
 
             const reqPunches = parseInt(employeeWithShift?.shift_total_punches || 2);
 
-            // Fetch the latest attendance record today (to see if one exists, open or closed)
+            // Fetch the latest attendance record (to see if one exists, open or closed for targetShiftDate)
+            const nextShiftDateObj = new Date(new Date(targetShiftDate).getTime() + 24 * 60 * 60 * 1000);
+            const nextShiftDateStr = dateToISTDateString(nextShiftDateObj);
+            
             const latestLog = await db('attendance')
                 .where({ employee_id: employeeId, company_id: companyId })
-                .whereRaw('DATE(check_in) = ?', [dateStr])
+                .andWhere(qb => {
+                    qb.where(qb1 => {
+                        qb1.whereRaw('DATE(check_in) = ?', [targetShiftDate]).whereRaw('HOUR(check_in) >= 6');
+                    }).orWhere(qb2 => {
+                        qb2.whereRaw('DATE(check_in) = ?', [nextShiftDateStr]).whereRaw('HOUR(check_in) < 6');
+                    });
+                })
                 .orderBy('check_in', 'desc')
                 .first();
 
@@ -459,7 +530,8 @@ class MachineAttendanceService {
                     const inMargin = employeeWithShift.shift_in_margin !== undefined ? parseInt(employeeWithShift.shift_in_margin) : 0;
                     if (inMargin > 0) {
                         const [sHours, sMins] = shiftStart.split(':').map(Number);
-                        const shiftStartDate = new Date(`${dateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                        // Use targetShiftDate (not dateStr) so night shifts anchor correctly to their start date
+                        const shiftStartDate = new Date(`${targetShiftDate} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
                         const earliestCheckIn = new Date(shiftStartDate.getTime() - inMargin * 60 * 1000);
                         if (punchTime < earliestCheckIn) {
                             await db('biometric_raw_logs').insert({
@@ -512,46 +584,23 @@ class MachineAttendanceService {
                     const grace = employeeWithShift?.scheme_grace ?? employeeWithShift?.shift_grace ?? rules.grace_period ?? 15;
 
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
-                    const shiftStartMins = sHours * 60 + sMins;
-                    const shiftStartLimitMins = shiftStartMins + (parseInt(grace) || 0);
+                    const shiftStartActual = new Date(`${targetShiftDate} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                    const shiftStartLimit = new Date(shiftStartActual.getTime() + (parseInt(grace) || 0) * 60 * 1000);
 
-                    const punchMins = dateToISTMins(punchTime);
-                    let isLate = false;
+                    let isLate = punchTime > shiftStartLimit;
 
-                    if (punchMins > shiftStartLimitMins) {
-                        isLate = true;
-                    } else if (punchMins > shiftStartMins && punchMins <= shiftStartLimitMins) {
+                    if (!isLate && punchTime > shiftStartActual && punchTime <= shiftStartLimit) {
                         // Check if grace limit has been exceeded for the current month
-                        const startOfMonth = `${dateStr.slice(0, 8)}01`;
+                        const startOfMonth = `${targetShiftDate.slice(0, 8)}01`;
                         const currentMonthLogs = await db('attendance')
                             .where({ employee_id: employeeId, company_id: companyId })
                             .whereRaw('DATE(check_in) >= ?', [startOfMonth])
-                            .whereRaw('DATE(check_in) < ?', [dateStr])
+                            .whereRaw('DATE(check_in) < ?', [targetShiftDate])
                             .select('check_in');
 
                         let graceCount = 0;
-                        const s1StartStr = origShiftStart;
-                        const [s1H, s1M] = s1StartStr.split(':').map(Number);
-                        const s1StartMinsVal = s1H * 60 + s1M;
-                        const s1Grace = parseInt(employeeWithShift?.scheme_grace ?? origShiftGrace ?? rules.grace_period ?? 15);
-                        const s1AllowedMins = s1StartMinsVal + s1Grace;
-
-                        const s2StartStr = employeeWithShift?.session2_start_time;
-                        let s2StartMinsVal = null;
-                        let s2AllowedMins = null;
-                        if (s2StartStr && reqPunches === 4) {
-                            const [s2H, s2M] = s2StartStr.split(':').map(Number);
-                            s2StartMinsVal = s2H * 60 + s2M;
-                            const s2Grace = parseInt(employeeWithShift?.session2_grace_in ?? employeeWithShift?.scheme_grace ?? rules.grace_period ?? 15);
-                            s2AllowedMins = s2StartMinsVal + s2Grace;
-                        }
-
                         for (const log of currentMonthLogs) {
-                            const checkInDate = dbDateToUTC(log.check_in);
-                            const checkInMins = dateToISTMins(checkInDate);
-                            const usedS1Grace = checkInMins > s1StartMinsVal && checkInMins <= s1AllowedMins;
-                            const usedS2Grace = s2StartMinsVal !== null && checkInMins > s2StartMinsVal && checkInMins <= s2AllowedMins;
-                            if (usedS1Grace || usedS2Grace) {
+                            if (checkIfLogUsedGrace(log, employeeWithShift, rules)) {
                                 graceCount++;
                             }
                         }
@@ -728,7 +777,7 @@ class MachineAttendanceService {
                     const shiftEnd = employee?.shift_end || '18:00';
                     const outMargin = employee?.shift_out_margin !== undefined ? parseInt(employee.shift_out_margin) : 0;
                     
-                    const checkInDateStr = dateToISTDateString(currentCheckIn);
+                    const checkInDateStr = dateToISTDateString(checkIn);
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
                     const [eHours, eMins] = shiftEnd.split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -764,29 +813,30 @@ class MachineAttendanceService {
                                 : parseFloat(rules.half_day_hours || 4));
                     }
 
-                    // Skip punch checkout if before half day limit
-                    if (workedHours < halfDayLimit) {
-                        await db('biometric_raw_logs').insert({
-                            company_id: companyId,
-                            device_serial: deviceSerial,
-                            employee_code,
-                            punch_time: punchTimeStr,
-                            status: 'skipped',
-                            error_details: `Punch ignored: checkout before half day limit (worked: ${workedHours.toFixed(2)}h, limit: ${halfDayLimit.toFixed(2)}h)`
-                        });
-                        return { status: 'skipped', reason: 'Punch ignored: before half day limit' };
-                    }
-
                     outMarginThreshold = new Date(shiftEndDate.getTime() - outMargin * 60 * 1000);
 
                     if (punchTime < shiftEndDate) {
                         isEarly = true;
                     }
+                }
+
+                // Check for half-day limit skip for ALL shift types
+                if (workedHours < halfDayLimit) {
+                    await db('biometric_raw_logs').insert({
+                        company_id: companyId,
+                        device_serial: deviceSerial,
+                        employee_code,
+                        punch_time: punchTimeStr,
+                        status: 'skipped',
+                        error_details: `Punch ignored: worked hours (${workedHours.toFixed(2)}) is less than the half-day threshold (${halfDayLimit.toFixed(2)} hours).`
+                    });
+                    return { status: 'skipped', reason: 'Punch ignored: before half-day limit' };
+                }
 
                     // 2. Determine if we should generate an early out regularization request
                     let triggersEarlyOutRequest = false;
 
-                    if (isEarly) {
+                    if (isEarly && workedHours >= halfDayLimit) {
                         if (punchTime < outMarginThreshold) {
                             // If they are punching out BEFORE the out margin window, triggers early out request
                             triggersEarlyOutRequest = true;
@@ -838,7 +888,6 @@ class MachineAttendanceService {
 
                         return { status: 'check-out', record_status: 'pending' };
                     }
-                }
 
                 // Normal/non-blocked checkout: Update check_out
                 await db('attendance')
@@ -855,7 +904,7 @@ class MachineAttendanceService {
                 if (employee?.is_flexi) {
                     const minHours = parseFloat(employee.min_hours) || 8;
                     if (workedHours < halfDayLimit) {
-                        newStatus = 'short';
+                        newStatus = 'absent';
                     } else if (workedHours < minHours) {
                         newStatus = 'half-day';
                     } else {
@@ -865,7 +914,7 @@ class MachineAttendanceService {
                     if (outMarginThreshold && shiftEndDate && punchTime >= outMarginThreshold && punchTime < shiftEndDate) {
                         newStatus = 'early_out';
                     } else if (workedHours < halfDayLimit) {
-                        newStatus = 'short';
+                        newStatus = 'absent';
                     } else if (isEarly) {
                         newStatus = 'early_out';
                     } else if (newStatus !== 'pending') {
