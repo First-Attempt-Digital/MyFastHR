@@ -513,11 +513,29 @@ class AttendanceService {
         const origShiftOutMargin = employee?.shift_out_margin !== undefined ? employee.shift_out_margin : 0;
 
         // Fetch the latest attendance record today (to see if one exists, open or closed)
-        const latestLog = await db('attendance')
+        const defaultShift = employee ? { start_time: employee.shift_start, end_time: employee.shift_end } : null;
+        const empAssignments = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', empId)
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+
+        const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+
+        const candidateLogs = await db('attendance')
             .where({ employee_id: empId, company_id: companyId })
-            .whereRaw('DATE(check_in) = ?', [dateStr])
-            .orderBy('check_in', 'desc')
-            .first();
+            .where('check_in', '>=', `${dateStr} 00:00:00`)
+            .where('check_in', '<=', `${nextDateStr} 23:59:59`)
+            .orderBy('check_in', 'desc');
+
+        let latestLog = null;
+        for (const log of candidateLogs) {
+            const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+            if (lDate === dateStr) {
+                latestLog = log;
+                break;
+            }
+        }
 
         // Determine if the current punch belongs to Session 2 (for 4-punch shifts)
         let isSession2 = false;
@@ -1970,10 +1988,35 @@ class AttendanceService {
             throw new Error('Not allowed: Deletion is restricted to employee 963258 (Ritesh Patel).');
         }
 
-        const deletedCount = await db('attendance')
+        const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+
+        const defaultShift = employee ? { start_time: employee.shift_start, end_time: employee.shift_end } : null;
+        const empAssignments = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', employeeId)
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+
+        // Find candidate records in attendance
+        const candidateLogs = await db('attendance')
             .where({ employee_id: employeeId, company_id: companyId })
-            .whereRaw('DATE(check_in) = ?', [dateStr])
-            .del();
+            .where('check_in', '>=', `${dateStr} 00:00:00`)
+            .where('check_in', '<=', `${nextDateStr} 23:59:59`);
+
+        const idsToDelete = [];
+        for (const log of candidateLogs) {
+            const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+            if (lDate === dateStr) {
+                idsToDelete.push(log.id);
+            }
+        }
+
+        let deletedCount = 0;
+        if (idsToDelete.length > 0) {
+            deletedCount = await db('attendance')
+                .whereIn('id', idsToDelete)
+                .del();
+        }
 
         // Also delete from attendance_entry_requests for this date
         await db('attendance_entry_requests')
@@ -1992,11 +2035,25 @@ class AttendanceService {
             enrollIds.push('0' + employee.employee_id_number);
         }
 
-        await db('biometric_raw_logs')
+        const candidateRawLogs = await db('biometric_raw_logs')
             .where({ company_id: companyId })
             .whereIn('employee_code', enrollIds)
-            .whereRaw('DATE(punch_time) = ?', [dateStr])
-            .del();
+            .where('punch_time', '>=', `${dateStr} 00:00:00`)
+            .where('punch_time', '<=', `${nextDateStr} 23:59:59`);
+
+        const rawLogIdsToDelete = [];
+        for (const log of candidateRawLogs) {
+            const lDate = getLogicalDateStr(log.punch_time, empAssignments, defaultShift);
+            if (lDate === dateStr) {
+                rawLogIdsToDelete.push(log.id);
+            }
+        }
+
+        if (rawLogIdsToDelete.length > 0) {
+            await db('biometric_raw_logs')
+                .whereIn('id', rawLogIdsToDelete)
+                .del();
+        }
 
         return { message: 'Attendance records, requests, and logs deleted successfully', deletedCount };
     }
@@ -2554,10 +2611,28 @@ class AttendanceService {
             .first();
 
         // 5. Fetch All Attendance logs
-        const attendanceLogs = await db('attendance')
+        const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
+        const nextDateStr = nextDate.toISOString().split('T')[0];
+
+        const defaultShift = emp ? { start_time: emp.default_shift_start, end_time: emp.default_shift_end } : null;
+        const empAssignments = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', employeeId)
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+
+        const candidateLogs = await db('attendance')
             .where({ employee_id: employeeId, company_id: companyId })
-            .whereRaw('DATE(check_in) = ?', [dateStr])
+            .where('check_in', '>=', `${dateStr} 00:00:00`)
+            .where('check_in', '<=', `${nextDateStr} 23:59:59`)
             .orderBy('check_in', 'asc');
+
+        const attendanceLogs = [];
+        for (const log of candidateLogs) {
+            const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+            if (lDate === dateStr) {
+                attendanceLogs.push(log);
+            }
+        }
 
         const attendance = attendanceLogs[0] || null;
 

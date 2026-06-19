@@ -19,7 +19,7 @@ const formatPunchTime = (punchTimeVal) => {
         } else {
             let str = String(punchTimeVal).trim();
             if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(str)) {
-                str = str.replace(' ', 'T') + 'Z';
+                str = str.replace(' ', 'T');
             }
             dateObj = new Date(str);
         }
