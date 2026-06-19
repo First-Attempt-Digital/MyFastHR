@@ -64,15 +64,15 @@ function dbDateToUTC(dateVal) {
 
 function toLocalYYYYMMDDHHmmss(dateVal) {
     if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return null;
     return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
 }
 
 function dateToISTMins(dateVal) {
     if (!dateVal) return 0;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return 0;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return 0;
     const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false };
     const istStr = d.toLocaleTimeString('en-GB', options);
     const [h, m] = istStr.split(':').map(Number);
@@ -81,8 +81,8 @@ function dateToISTMins(dateVal) {
 
 function dateToISTDateString(dateVal) {
     if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return null;
     return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 }
 

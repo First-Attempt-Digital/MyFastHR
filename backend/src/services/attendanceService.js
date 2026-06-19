@@ -88,20 +88,6 @@ async function isNightShiftForEmployeeDate(employeeId, dateStr, companyId) {
     return isNightShift(shift);
 }
 
-function toLocalYMD(dateVal) {
-    if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
-}
-
-function toLocalYYYYMMDDHHmmss(dateVal) {
-    if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
-}
-
 function dbDateToUTC(dateVal) {
     if (!dateVal) return null;
     if (dateVal instanceof Date) {
@@ -122,10 +108,24 @@ function dbDateToUTC(dateVal) {
     return isNaN(d.getTime()) ? null : d;
 }
 
+function toLocalYMD(dateVal) {
+    if (!dateVal) return null;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+}
+
+function toLocalYYYYMMDDHHmmss(dateVal) {
+    if (!dateVal) return null;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
+}
+
 function dateToISTMins(dateVal) {
     if (!dateVal) return 0;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return 0;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return 0;
     const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false };
     const istStr = d.toLocaleTimeString('en-GB', options);
     const [h, m] = istStr.split(':').map(Number);
@@ -134,17 +134,8 @@ function dateToISTMins(dateVal) {
 
 function safeFormatTime(dateTimeVal) {
     if (!dateTimeVal) return null;
-    let d;
-    if (dateTimeVal instanceof Date) {
-        d = dateTimeVal;
-    } else {
-        let str = String(dateTimeVal).trim();
-        if (str.includes(' ') && !str.includes('T')) {
-            str = str.replace(' ', 'T');
-        }
-        d = new Date(str);
-    }
-    if (isNaN(d.getTime())) return null;
+    const d = dbDateToUTC(dateTimeVal);
+    if (!d || isNaN(d.getTime())) return null;
     return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 }
 
