@@ -2549,16 +2549,7 @@ const Payroll = () => {
                                                     </select>
                                                 </div>
 
-                                                {/* Synced Grace Limit */}
-                                                <div className="space-y-1">
-                                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Max Allowed Late Marks / Month (Synced)</label>
-                                                    <input
-                                                        type="text"
-                                                        value={selectedShiftData ? `${selectedShiftData.grace_count_limit} Per Month` : `${businessRules.max_late_allowed} Per Month`}
-                                                        disabled
-                                                        className="w-full px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-black outline-none text-slate-500 cursor-not-allowed"
-                                                    />
-                                                </div>
+
 
                                                 {/* Deduction Protocol */}
                                                 <div className="space-y-1">
@@ -4460,16 +4451,7 @@ const Payroll = () => {
                                         <ShieldAlert size={12} /> Late Mark Penalties (Company-Wide)
                                     </h4>
                                     <div className="space-y-3">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Max Allowed Late Marks / Month</label>
-                                            <input
-                                                type="number"
-                                                value={businessRules.max_late_allowed}
-                                                onChange={(e) => setBusinessRules({ ...businessRules, max_late_allowed: e.target.value === '' ? '' : (parseInt(e.target.value) || 0) })}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black outline-none focus:ring-2 focus:ring-rose-500/5 focus:border-rose-500 transition-all"
-                                            />
-                                            <span className="text-[7.5px] text-slate-400 block font-bold leading-normal">Crossing this limit will trigger automatic salary deductions on excess late marks.</span>
-                                        </div>
+
 
                                         <div className="space-y-1.5">
                                             <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Deduction Protocol</label>

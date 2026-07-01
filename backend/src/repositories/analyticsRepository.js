@@ -217,7 +217,7 @@ class AnalyticsRepository {
         let projectedNet = null;
         if (salary) {
             const base = parseFloat(salary.base_salary);
-            const extraLates = Math.max(0, lateCount - rules.max_late_allowed);
+            const extraLates = lateCount;
             const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
             const dailyRate = base / daysInMonth;
             

@@ -247,7 +247,7 @@ class PayrollService {
 
         const dailyRate = baseSalary / daysInMonth;
         let lateDeduction = 0;
-        const extraLates = Math.max(0, (stats?.L || 0) - (parseInt(rules.max_late_allowed) || 0));
+        const extraLates = stats?.L || 0;
         if (extraLates > 0) {
             if (rules.late_deduction_type === 'half_day') {
                 lateDeduction = extraLates * (dailyRate * 0.5);
@@ -449,7 +449,7 @@ class PayrollService {
             const earnedAllowances = totalAllowances * prorationFactor;
 
             lateDeduction = 0;
-            const extraLates = Math.max(0, empRecord.stats.L - (parseInt(activeRules.max_late_allowed) || 0));
+            const extraLates = empRecord.stats.L || 0;
             if (extraLates > 0) {
                 if (activeRules.late_deduction_type === 'half_day') {
                     lateDeduction = extraLates * (dailyRate * 0.5);
