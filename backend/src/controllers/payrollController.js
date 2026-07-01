@@ -132,6 +132,32 @@ class PayrollController {
         }
     }
 
+    async updateLoan(req, res) {
+        try {
+            const companyId = req.user.company_id;
+            const { id } = req.params;
+            if (!companyId) return res.status(400).json({ message: 'Managed companies only' });
+
+            const result = await payrollService.updateLoan(companyId, parseInt(id), req.body);
+            res.json({ message: 'Loan updated successfully', result });
+        } catch (error) {
+            res.status(400).json({ message: error.message });
+        }
+    }
+
+    async deleteLoan(req, res) {
+        try {
+            const companyId = req.user.company_id;
+            const { id } = req.params;
+            if (!companyId) return res.status(400).json({ message: 'Managed companies only' });
+
+            const result = await payrollService.deleteLoan(companyId, parseInt(id));
+            res.json({ message: 'Loan deleted successfully', result });
+        } catch (error) {
+            res.status(400).json({ message: error.message });
+        }
+    }
+
     async updateLoanStatus(req, res) {
         try {
             const companyId = req.user.company_id;

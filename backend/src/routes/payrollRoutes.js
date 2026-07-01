@@ -495,6 +495,8 @@ router.get('/loans/download-slip/:id', async (req, res) => {
 
 router.get('/loans', payrollController.getLoans);
 router.post('/loans', payrollController.createLoan);
+router.put('/loans/:id', payrollController.updateLoan);
+router.delete('/loans/:id', payrollController.deleteLoan);
 router.post('/loans/:id/status', payrollController.updateLoanStatus);
 router.get('/loans/preview-deductions', payrollController.previewLoanDeductions);
 router.get('/loans/repayments', payrollController.getRepayments);

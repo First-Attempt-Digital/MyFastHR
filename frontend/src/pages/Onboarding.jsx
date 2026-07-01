@@ -1013,7 +1013,7 @@ const Onboarding = () => {
             if (!formData.department) newErrors.department = true;
             if (!formData.shift) newErrors.shift = true;
         } else if (step === 3) {
-            if (formData.include_pf && !formData.pf_number) newErrors.pf_number = true;
+            if (formData.include_pf && !formData.uan_number) newErrors.uan_number = true;
             if (formData.include_esi && !formData.esi_number) newErrors.esi_number = true;
         } else if (step === 4) {
             if (!formData.payment_type) newErrors.payment_type = true;
@@ -1552,8 +1552,10 @@ const Onboarding = () => {
 
                                         <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2 duration-300">
                                             <div className="flex items-center justify-between">
-                                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">UAN Number</label>
-                                                {formData.uan_number && (formData.uan_number || '').length !== 12 && (
+                                                <label className={`text-[11px] font-bold uppercase tracking-wider ${errors.uan_number ? 'text-rose-600' : 'text-slate-500'}`}>UAN Number <span className="text-rose-500">*</span></label>
+                                                {errors.uan_number && !formData.uan_number ? (
+                                                    <span className="text-[10px] font-bold text-rose-500 uppercase tracking-tight">UAN is required</span>
+                                                ) : formData.uan_number && (formData.uan_number || '').length !== 12 && (
                                                     <span className="text-[10px] font-bold text-rose-500 uppercase tracking-tight">Invalid UAN Number</span>
                                                 )}
                                             </div>
@@ -1568,39 +1570,11 @@ const Onboarding = () => {
                                                 }}
                                                 placeholder="12 Digit UAN Number"
                                                 className={`px-4 py-2 bg-white border rounded text-sm focus:outline-none transition-all ${
-                                                    formData.uan_number && (formData.uan_number || '').length !== 12 
-                                                    ? 'border-rose-400 bg-rose-50' 
+                                                    ((formData.uan_number && (formData.uan_number || '').length !== 12) || errors.uan_number)
+                                                    ? 'border-rose-400 bg-rose-50 ring-1 ring-rose-100' 
                                                     : 'border-slate-300 focus:border-indigo-400'
                                                 }`}
                                             />
-                                        </div>
-
-                                        <div className="flex flex-col gap-3 animate-in slide-in-from-top-2 duration-300">
-                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">PF Excess Contribution</label>
-                                            <div className="space-y-2">
-                                                <label className="flex items-center gap-3 cursor-pointer group">
-                                                    <input 
-                                                        type="radio" 
-                                                        name="pf_excess_contribution" 
-                                                        value="ceiling"
-                                                        checked={formData.pf_excess_contribution === 'ceiling'}
-                                                        onChange={handleChange}
-                                                        className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    <span className="text-xs text-slate-600 group-hover:text-slate-900">Employee & Employer contribution - 12% with in wage ceiling (Max Rs.1800)</span>
-                                                </label>
-                                                <label className="flex items-center gap-3 cursor-pointer group">
-                                                    <input 
-                                                        type="radio" 
-                                                        name="pf_excess_contribution" 
-                                                        value="above"
-                                                        checked={formData.pf_excess_contribution === 'above'}
-                                                        onChange={handleChange}
-                                                        className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    <span className="text-xs text-slate-600 group-hover:text-slate-900">Employee contribution - 12% over and above wage ceiling (In excess to Rs.1800)</span>
-                                                </label>
-                                            </div>
                                         </div>
                                     </>
                                 )}

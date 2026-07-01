@@ -391,7 +391,8 @@ const Payroll = () => {
         grace_period: 15,
         half_day_hours: 4,
         max_late_allowed: 3,
-        late_deduction_type: 'half_day'
+        late_deduction_type: 'half_day',
+        late_deduction_value: 0
     });
     const [shifts, setShifts] = useState([]);
     const [selectedShiftId, setSelectedShiftId] = useState(null);
@@ -413,12 +414,14 @@ const Payroll = () => {
     const [loans, setLoans] = useState([]);
     const [loansLoading, setLoansLoading] = useState(false);
     const [showAddLoan, setShowAddLoan] = useState(false);
+    const [editingLoanId, setEditingLoanId] = useState(null);
     const [newLoanData, setNewLoanData] = useState({
         employee_id: '',
         title: 'Salary Advance',
         amount: '',
         monthly_emi: '',
-        status: 'active'
+        status: 'active',
+        loan_date: new Date().toISOString().split('T')[0]
     });
     const [activeLoanSubTab, setActiveLoanSubTab] = useState('ledger'); // 'ledger' | 'repayments'
     const [repayments, setRepayments] = useState([]);
@@ -572,6 +575,7 @@ const Payroll = () => {
         fetchGlobalRules();
         if (selectedTab === 'overview') {
             fetchSummary();
+            fetchBusinessRules();
         } else if (selectedTab === 'register') {
             fetchRegister();
         } else if (selectedTab === 'inputs') {
@@ -1642,6 +1646,7 @@ const Payroll = () => {
                 ...businessRules,
                 half_day_hours: businessRules.half_day_hours === '' ? 0 : (parseInt(businessRules.half_day_hours) || 0),
                 max_late_allowed: businessRules.max_late_allowed === '' ? 0 : (parseInt(businessRules.max_late_allowed) || 0),
+                late_deduction_value: businessRules.late_deduction_value === '' ? 0 : (parseFloat(businessRules.late_deduction_value) || 0),
             };
             await api.post('/settings/working-rules', cleanedBusinessRules);
 
@@ -1769,12 +1774,53 @@ const Payroll = () => {
                 title: 'Salary Advance',
                 amount: '',
                 monthly_emi: '',
-                status: 'active'
+                status: 'active',
+                loan_date: new Date().toISOString().split('T')[0]
             });
             fetchLoans();
             alert('Salary Advance / Loan registered successfully!');
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to register loan');
+        }
+    };
+
+    const handleUpdateLoan = async () => {
+        if (!newLoanData.employee_id || !newLoanData.amount || !newLoanData.monthly_emi || !newLoanData.title) {
+            alert('Please fill out all fields');
+            return;
+        }
+        try {
+            await api.put(`/payroll/loans/${editingLoanId}`, newLoanData);
+            setShowAddLoan(false);
+            setEditingLoanId(null);
+            setModalOutlet('All');
+            setModalDept('All');
+            setModalDesignation('All');
+            setNewLoanData({
+                employee_id: '',
+                title: 'Salary Advance',
+                amount: '',
+                monthly_emi: '',
+                status: 'active',
+                loan_date: new Date().toISOString().split('T')[0]
+            });
+            fetchLoans();
+            alert('Salary Advance / Loan updated successfully!');
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to update loan');
+        }
+    };
+
+    const handleDeleteLoan = async (loanId) => {
+        if (!window.confirm('Are you sure you want to delete this loan record? This will also remove any repayments recorded against it.')) {
+            return;
+        }
+        try {
+            await api.delete(`/payroll/loans/${loanId}`);
+            fetchLoans();
+            alert('Loan deleted successfully!');
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to delete loan');
         }
     };
 
@@ -2233,247 +2279,331 @@ const Payroll = () => {
                         </div>
 
                         {/* Main Grid: Metrics & Controls Side-by-Side */}
+                        {/* Main Grid: Metrics & Controls Side-by-Side */}
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                            {/* Left Column: Payout Details & Stacked Metrics (col-span-8) */}
-                            <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-12 gap-4">
-                                {/* Payout Details Recharts Card */}
-                                <div className="md:col-span-5 bg-white border border-slate-200/40 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
-                                    <div className="flex justify-between items-center">
-                                        <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payout Details</h3>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Net</span>
-                                    </div>
-                                    <div className="mt-1">
-                                        <span className="text-xl font-black text-slate-900">₹{Number(filteredSummary.netPay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
+                            {/* Left Column: Payout Details Card (col-span-4) */}
+                            <div className="lg:col-span-4 bg-white border border-slate-200/40 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between self-start">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Payout Details</h3>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Net</span>
+                                </div>
+                                <div className="mt-1">
+                                    <span className="text-xl font-black text-slate-900">₹{Number(filteredSummary.netPay || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
 
-                                    <div className="h-24 relative my-1.5">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <RePie>
-                                                <Pie
-                                                    data={chartData}
-                                                    cx="50%"
-                                                    cy="50%"
-                                                    innerRadius={26}
-                                                    outerRadius={36}
-                                                    paddingAngle={4}
-                                                    dataKey="value"
-                                                >
-                                                    {chartData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip formatter={(value) => `₹${Number(value).toLocaleString()}`} />
-                                            </RePie>
-                                        </ResponsiveContainer>
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                            <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">Ratio</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                        <div>
-                                            <div className="flex items-center gap-1 mb-0.5">
-                                                <div className="w-1.5 h-1.5 bg-[#10b981] rounded-full"></div>
-                                                <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">Gross</span>
-                                            </div>
-                                            <p className="text-[11px] font-black text-slate-700">₹{Number(filteredSummary.grossPay || 0).toLocaleString()}</p>
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-1 mb-0.5">
-                                                <div className="w-1.5 h-1.5 bg-[#ef4444] rounded-full"></div>
-                                                <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">Cuts</span>
-                                            </div>
-                                            <p className="text-[11px] font-black text-slate-700">₹{Number(filteredSummary.deductions || 0).toLocaleString()}</p>
-                                        </div>
+                                <div className="h-24 relative my-1.5">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <RePie>
+                                            <Pie
+                                                data={chartData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={26}
+                                                outerRadius={36}
+                                                paddingAngle={4}
+                                                dataKey="value"
+                                            >
+                                                {chartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip formatter={(value) => `₹${Number(value).toLocaleString()}`} />
+                                        </RePie>
+                                    </ResponsiveContainer>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                        <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest">Ratio</span>
                                     </div>
                                 </div>
 
-                                {/* Stacked Metrics Cards */}
-                                <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {/* Column 1: Enrolled Staff & Onboarded */}
-                                    <div className="flex flex-col gap-4">
-                                        <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group flex-1">
-                                            <div className="flex items-center gap-2.5">
-                                                <div className="p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-[#4361ee] shrink-0"><Users size={14} /></div>
-                                                <div>
-                                                    <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Enrolled Staff</span>
-                                                    <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{filteredSummary.totalEmployees}</p>
-                                                    <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Registered members</p>
-                                                </div>
-                                            </div>
+                                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                    <div>
+                                        <div className="flex items-center gap-1 mb-0.5">
+                                            <div className="w-1.5 h-1.5 bg-[#10b981] rounded-full"></div>
+                                            <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">Gross</span>
                                         </div>
-
-                                        <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group flex-1">
-                                            <div className="flex items-center gap-2.5">
-                                                <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 shrink-0"><Plus size={14} /></div>
-                                                <div>
-                                                    <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Onboarded</span>
-                                                    <p className="text-[18px] font-black text-[#10b981] mt-1 leading-none">{filteredSummary.additions}</p>
-                                                    <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Joined this cycle</p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <p className="text-[11px] font-black text-slate-700">₹{Number(filteredSummary.grossPay || 0).toLocaleString()}</p>
                                     </div>
-
-                                    {/* Column 2: Payout Queue & Separated */}
-                                    <div className="flex flex-col gap-4">
-                                        <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group flex-1">
-                                            <div className="flex items-center gap-2.5">
-                                                <div className="p-2.5 bg-amber-50 border border-amber-100 rounded-xl text-amber-600 shrink-0"><Clock size={14} /></div>
-                                                <div>
-                                                    <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Payout Queue</span>
-                                                    <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{filteredSummary.payoutPending}</p>
-                                                    <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Awaiting verification</p>
-                                                </div>
-                                            </div>
+                                    <div>
+                                        <div className="flex items-center gap-1 mb-0.5">
+                                            <div className="w-1.5 h-1.5 bg-[#ef4444] rounded-full"></div>
+                                            <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-wider">Cuts</span>
                                         </div>
-
-                                        <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group flex-1">
-                                            <div className="flex items-center gap-2.5">
-                                                <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 shrink-0"><Minus size={14} /></div>
-                                                <div>
-                                                    <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Separated</span>
-                                                    <p className="text-[18px] font-black text-[#ef4444] mt-1 leading-none">{filteredSummary.separations}</p>
-                                                    <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Released this cycle</p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <p className="text-[11px] font-black text-slate-700">₹{Number(filteredSummary.deductions || 0).toLocaleString()}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Right Column: Payroll Operations Control Panel (col-span-4) */}
-                            <div className="lg:col-span-4 bg-white border border-slate-200/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-3.5">
-                                        <div className="p-1.5 bg-indigo-50 text-[#4361ee] rounded-xl border border-indigo-100 flex items-center justify-center">
-                                            <Sliders size={13} />
-                                        </div>
-                                        <div>
-                                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">Control Panel</h3>
-                                            <p className="text-slate-450 text-[8px] mt-0.5 font-bold uppercase tracking-wider">Set inputs lock, slips release, and finalization.</p>
+                            {/* Right Column: Wrapper column (col-span-8) */}
+                            <div className="lg:col-span-8 space-y-5 self-start">
+                                {/* Row 1: The 4 metric cards inline (grid grid-cols-2 sm:grid-cols-4 gap-4) */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-[#4361ee] shrink-0"><Users size={14} /></div>
+                                            <div>
+                                                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Enrolled Staff</span>
+                                                <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{filteredSummary.totalEmployees}</p>
+                                                <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Members</p>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div className="flex flex-col gap-3.5 border-t border-slate-100 pt-3.5">
-                                        {/* Row 1: Payroll Inputs */}
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">Payroll Inputs</span>
-                                                <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Adjustments & structure locking</span>
+                                    <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 shrink-0"><Plus size={14} /></div>
+                                            <div>
+                                                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Onboarded</span>
+                                                <p className="text-[18px] font-black text-[#10b981] mt-1 leading-none">{filteredSummary.additions}</p>
+                                                <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Joined</p>
                                             </div>
-                                            <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('inputs_locked', false)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.inputs_locked
-                                                        ? 'bg-white text-slate-800 shadow-sm border border-slate-200/20 font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Unlock
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('inputs_locked', true)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.inputs_locked
-                                                        ? 'bg-[#4361ee] text-white shadow-sm font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Lock
-                                                </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2.5 bg-amber-50 border border-amber-100 rounded-xl text-amber-600 shrink-0"><Clock size={14} /></div>
+                                            <div>
+                                                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Payout Queue</span>
+                                                <p className="text-[18px] font-black text-slate-800 mt-1 leading-none">{filteredSummary.payoutPending}</p>
+                                                <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Awaiting</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white border border-slate-150 rounded-2xl p-3 shadow-sm flex items-center justify-between hover:shadow-md transition-all group">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 shrink-0"><Minus size={14} /></div>
+                                            <div>
+                                                <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider block leading-none">Separated</span>
+                                                <p className="text-[18px] font-black text-[#ef4444] mt-1 leading-none">{filteredSummary.separations}</p>
+                                                <p className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Released</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 2: Control Panel and Late Mark Penalties Card side-by-side */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Control Panel Card */}
+                                    <div className="bg-white border border-slate-200/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-3.5">
+                                                <div className="p-1.5 bg-indigo-50 text-[#4361ee] rounded-xl border border-indigo-100 flex items-center justify-center">
+                                                    <Sliders size={13} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">Control Panel</h3>
+                                                    <p className="text-slate-450 text-[8px] mt-0.5 font-bold uppercase tracking-wider">Set inputs lock, slips release, and finalization.</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col gap-3.5 border-t border-slate-100 pt-3.5">
+                                                {/* Row 1: Payroll Inputs */}
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">Payroll Inputs</span>
+                                                        <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Adjustments & structure locking</span>
+                                                    </div>
+                                                    <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('inputs_locked', false)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.inputs_locked
+                                                                ? 'bg-white text-slate-800 shadow-sm border border-slate-200/20 font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Unlock
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('inputs_locked', true)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.inputs_locked
+                                                                ? 'bg-[#4361ee] text-white shadow-sm font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Lock
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Row 2: Employee View Release */}
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">Employee View Release</span>
+                                                        <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Slips download release / hold</span>
+                                                    </div>
+                                                    <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('employee_view_released', true)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.employee_view_released
+                                                                ? 'bg-[#4361ee] text-white shadow-sm font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Release
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('employee_view_released', false)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.employee_view_released
+                                                                ? 'bg-[#4361ee] text-white shadow-sm font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Hold
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Row 3: IT Statement Employee View */}
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">IT Statement View</span>
+                                                        <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Tax declaration visibility</span>
+                                                    </div>
+                                                    <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('it_statement_released', true)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.it_statement_released
+                                                                ? 'bg-[#4361ee] text-white shadow-sm font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Release
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('it_statement_released', false)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.it_statement_released
+                                                                ? 'bg-[#4361ee] text-white shadow-sm font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Hold
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Row 4: Payroll */}
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">Payroll Locked</span>
+                                                        <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Recalculations & bulk processing</span>
+                                                    </div>
+                                                    <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('payroll_locked', false)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.payroll_locked
+                                                                ? 'bg-white text-slate-800 shadow-sm border border-slate-200/20 font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Unlock
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleControl('payroll_locked', true)}
+                                                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.payroll_locked
+                                                                ? 'bg-[#4361ee] text-white shadow-sm font-black'
+                                                                : 'text-slate-400 hover:text-slate-600'
+                                                                }`}
+                                                        >
+                                                            Lock
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Late Mark Penalties Card */}
+                                    <div className="bg-white border border-slate-200/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+                                        <div className="space-y-3.5">
+                                            <div className="flex items-center gap-2">
+                                                <div className="p-1.5 bg-rose-50 text-rose-500 rounded-xl border border-rose-100 flex items-center justify-center">
+                                                    <ShieldAlert size={13} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">Late Mark Penalties</h3>
+                                                    <p className="text-slate-450 text-[8px] mt-0.5 font-bold uppercase tracking-wider">Sync shift grace limits and late cuts.</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col gap-3 border-t border-slate-100 pt-3.5">
+                                                {/* Shift Selector */}
+                                                <div className="space-y-1">
+                                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Configure For Shift</label>
+                                                    <select
+                                                        value={selectedShiftId || ''}
+                                                        onChange={(e) => handleSelectShift(Number(e.target.value))}
+                                                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                    >
+                                                        {shifts.map(s => (
+                                                            <option key={s.id} value={s.id}>{s.name} ({s.start_time} - {s.end_time})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* Synced Grace Limit */}
+                                                <div className="space-y-1">
+                                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Max Allowed Late Marks / Month (Synced)</label>
+                                                    <input
+                                                        type="text"
+                                                        value={selectedShiftData ? `${selectedShiftData.grace_count_limit} Per Month` : `${businessRules.max_late_allowed} Per Month`}
+                                                        disabled
+                                                        className="w-full px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-black outline-none text-slate-500 cursor-not-allowed"
+                                                    />
+                                                </div>
+
+                                                {/* Deduction Protocol */}
+                                                <div className="space-y-1">
+                                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">Deduction Protocol</label>
+                                                    <select
+                                                        value={businessRules.late_deduction_type || 'none'}
+                                                        onChange={(e) => setBusinessRules({ ...businessRules, late_deduction_type: e.target.value })}
+                                                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-rose-500/5 focus:border-rose-500 transition-all"
+                                                    >
+                                                        <option value="none">No Penalty (Warnings only)</option>
+                                                        <option value="half_day">Half-Day Salary Cut / Excess Late</option>
+                                                        <option value="full_day">Full-Day Salary Cut / Excess Late</option>
+                                                        <option value="flat">Flat Amount / Excess Late</option>
+                                                        <option value="percent_gross">% of Gross Salary / Excess Late</option>
+                                                        <option value="percent_basic">% of Basic Salary / Excess Late</option>
+                                                    </select>
+                                                </div>
+
+                                                {/* Conditional Input */}
+                                                {['flat', 'percent_gross', 'percent_basic'].includes(businessRules.late_deduction_type) && (
+                                                    <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                                        <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">
+                                                            {businessRules.late_deduction_type === 'flat' ? 'Flat Penalty Amount (₹)' : 'Penalty Percentage (%)'}
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            step="any"
+                                                            value={businessRules.late_deduction_value !== undefined ? businessRules.late_deduction_value : ''}
+                                                            onChange={(e) => setBusinessRules({ ...businessRules, late_deduction_value: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
+                                                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none focus:ring-2 focus:ring-rose-500/5 focus:border-rose-500 transition-all"
+                                                            placeholder={businessRules.late_deduction_type === 'flat' ? 'e.g. 100' : 'e.g. 2.5'}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* Row 2: Employee View Release */}
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">Employee View Release</span>
-                                                <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Slips download release / hold</span>
-                                            </div>
-                                            <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('employee_view_released', true)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.employee_view_released
-                                                        ? 'bg-[#4361ee] text-white shadow-sm font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Release
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('employee_view_released', false)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.employee_view_released
-                                                        ? 'bg-[#4361ee] text-white shadow-sm font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Hold
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Row 3: IT Statement Employee View */}
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">IT Statement View</span>
-                                                <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Tax declaration visibility</span>
-                                            </div>
-                                            <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('it_statement_released', true)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.it_statement_released
-                                                        ? 'bg-[#4361ee] text-white shadow-sm font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Release
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('it_statement_released', false)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.it_statement_released
-                                                        ? 'bg-[#4361ee] text-white shadow-sm font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Hold
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Row 4: Payroll */}
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-tight leading-none">Payroll Locked</span>
-                                                <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-1 leading-none">Recalculations & bulk processing</span>
-                                            </div>
-                                            <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200/40">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('payroll_locked', false)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${!controls.payroll_locked
-                                                        ? 'bg-white text-slate-800 shadow-sm border border-slate-200/20 font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Unlock
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleControl('payroll_locked', true)}
-                                                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all duration-200 select-none ${controls.payroll_locked
-                                                        ? 'bg-[#4361ee] text-white shadow-sm font-black'
-                                                        : 'text-slate-400 hover:text-slate-600'
-                                                        }`}
-                                                >
-                                                    Lock
-                                                </button>
-                                            </div>
+                                        <div className="flex justify-end pt-3">
+                                            <button
+                                                onClick={handleSaveBusinessRules}
+                                                disabled={savingRules}
+                                                className="px-4 py-2.5 bg-[#4361ee] hover:bg-indigo-750 text-white rounded-xl text-[9px] font-black uppercase tracking-wider shadow-md hover:scale-[1.01] active:scale-95 transition-all flex items-center gap-1 w-full justify-center"
+                                            >
+                                                <CheckCircle size={11} /> Deploy Settings
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -4351,8 +4481,35 @@ const Payroll = () => {
                                                 <option value="none">No Penalty (Warnings & alerts only)</option>
                                                 <option value="half_day">Half-Day Salary Cut / Excess Late Mark</option>
                                                 <option value="full_day">Full-Day Salary Cut / Excess Late Mark</option>
+                                                <option value="flat">Flat Amount / Excess Late Mark</option>
+                                                <option value="percent_gross">Percentage of Gross Salary / Excess Late Mark</option>
+                                                <option value="percent_basic">Percentage of Basic Salary / Excess Late Mark</option>
                                             </select>
                                         </div>
+
+                                        {['flat', 'percent_gross', 'percent_basic'].includes(businessRules.late_deduction_type) && (
+                                            <div className="space-y-1.5">
+                                                <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">
+                                                    {businessRules.late_deduction_type === 'flat' ? 'Flat Penalty Amount (₹)' : 'Penalty Percentage (%)'}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step={businessRules.late_deduction_type === 'flat' ? '1' : '0.01'}
+                                                    value={businessRules.late_deduction_value !== undefined ? businessRules.late_deduction_value : ''}
+                                                    onChange={(e) => setBusinessRules({ ...businessRules, late_deduction_value: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
+                                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black outline-none focus:ring-2 focus:ring-rose-500/5 focus:border-rose-500 transition-all"
+                                                    placeholder={businessRules.late_deduction_type === 'flat' ? 'e.g. 100' : 'e.g. 2.5'}
+                                                />
+                                                <span className="text-[7.5px] text-slate-400 block font-bold leading-normal">
+                                                    {businessRules.late_deduction_type === 'flat'
+                                                        ? 'Fixed rupee amount deducted per excess late mark.'
+                                                        : businessRules.late_deduction_type === 'percent_gross'
+                                                            ? 'Percentage of gross salary deducted per excess late mark.'
+                                                            : 'Percentage of basic salary deducted per excess late mark.'}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -4652,6 +4809,7 @@ const Payroll = () => {
                                                     <tr className="bg-slate-50/75 border-b border-slate-100">
                                                         <th className="px-5 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Employee</th>
                                                         <th className="px-5 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Title / Purpose</th>
+                                                        <th className="px-5 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Loan Date</th>
                                                         <th className="px-5 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Loan Amount</th>
                                                         <th className="px-5 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Repayment EMI</th>
                                                         <th className="px-5 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Outstanding</th>
@@ -4680,6 +4838,9 @@ const Payroll = () => {
                                                                 </td>
                                                                 <td className="px-5 py-4">
                                                                     <span className="text-xs font-bold text-slate-700">{loan.title}</span>
+                                                                </td>
+                                                                <td className="px-5 py-4 text-xs font-bold text-slate-500 whitespace-nowrap">
+                                                                    {loan.loan_date ? new Date(loan.loan_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date(loan.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                                 </td>
                                                                 <td className="px-5 py-4 text-xs font-black text-slate-850">
                                                                     ₹{Number(loan.amount).toLocaleString()}
@@ -4746,6 +4907,35 @@ const Payroll = () => {
                                                                             >
                                                                                 <CheckCircle size={10} /> Repay
                                                                             </button>
+                                                                        )}
+                                                                        {!controls.inputs_locked && (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        setEditingLoanId(loan.id);
+                                                                                        setNewLoanData({
+                                                                                            employee_id: loan.employee_id,
+                                                                                            title: loan.title,
+                                                                                            amount: String(loan.amount),
+                                                                                            monthly_emi: String(loan.monthly_emi),
+                                                                                            status: loan.status,
+                                                                                            loan_date: loan.loan_date ? loan.loan_date.split('T')[0] : new Date(loan.created_at).toISOString().split('T')[0]
+                                                                                        });
+                                                                                        setShowAddLoan(true);
+                                                                                    }}
+                                                                                    className="p-1.5 text-slate-400 hover:text-[#4361ee] hover:bg-slate-100 rounded-lg transition-all flex items-center justify-center active:scale-95"
+                                                                                    title="Edit Advance"
+                                                                                >
+                                                                                    <Edit2 size={14} />
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleDeleteLoan(loan.id)}
+                                                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all flex items-center justify-center active:scale-95"
+                                                                                    title="Delete Advance"
+                                                                                >
+                                                                                    <Trash2 size={14} />
+                                                                                </button>
+                                                                            </>
                                                                         )}
                                                                         <a
                                                                             href={`${api.defaults.baseURL}/payroll/loans/download-slip/${loan.id}?token=${localStorage.getItem('auth_token') || 'test.admin.token'}`}
@@ -4859,6 +5049,7 @@ const Payroll = () => {
                         )}
 
                         {/* Issuance Form Modal */}
+                        {/* Issuance Form Modal */}
                         {showAddLoan && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
                                 <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col gap-5 relative overflow-hidden">
@@ -4867,9 +5058,18 @@ const Payroll = () => {
                                     <button
                                         onClick={() => {
                                             setShowAddLoan(false);
+                                            setEditingLoanId(null);
                                             setModalOutlet('All');
                                             setModalDept('All');
                                             setModalDesignation('All');
+                                            setNewLoanData({
+                                                employee_id: '',
+                                                title: 'Salary Advance',
+                                                amount: '',
+                                                monthly_emi: '',
+                                                status: 'active',
+                                                loan_date: new Date().toISOString().split('T')[0]
+                                            });
                                         }}
                                         className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-50 transition-all font-black text-xs w-7 h-7 flex items-center justify-center border border-slate-200/50"
                                     >
@@ -4877,60 +5077,69 @@ const Payroll = () => {
                                     </button>
 
                                     <div>
-                                        <h3 className="text-lg font-black text-slate-900 tracking-tight">Issue Salary Advance</h3>
-                                        <p className="text-[10px] font-bold text-slate-400">Record a new interest-free loan or advance to deduct auto-EMIs during monthly payrolls.</p>
+                                        <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                                            {editingLoanId ? 'Modify Salary Advance' : 'Issue Salary Advance'}
+                                        </h3>
+                                        <p className="text-[10px] font-bold text-slate-400">
+                                            {editingLoanId ? 'Update details of this active advance or interest-free loan.' : 'Record a new interest-free loan or advance to deduct auto-EMIs during monthly payrolls.'}
+                                        </p>
                                     </div>
 
                                     <div className="space-y-4">
                                         {/* Modal Filters for Employee List */}
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Outlet</label>
-                                                <select
-                                                    value={modalOutlet}
-                                                    onChange={(e) => setModalOutlet(e.target.value)}
-                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
-                                                >
-                                                    {uniqueOutlets.map(o => (
-                                                        <option key={o} value={o}>{o === 'All' ? 'All Outlets' : o}</option>
-                                                    ))}
-                                                </select>
+                                        {!editingLoanId && (
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Outlet</label>
+                                                    <select
+                                                        value={modalOutlet}
+                                                        onChange={(e) => setModalOutlet(e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                    >
+                                                        {uniqueOutlets.map(o => (
+                                                            <option key={o} value={o}>{o === 'All' ? 'All Outlets' : o}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Department</label>
+                                                    <select
+                                                        value={modalDept}
+                                                        onChange={(e) => setModalDept(e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                    >
+                                                        {uniqueDepartments.map(d => (
+                                                            <option key={d} value={d}>{d === 'All' ? 'All Depts' : d}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Designation</label>
+                                                    <select
+                                                        value={modalDesignation}
+                                                        onChange={(e) => setModalDesignation(e.target.value)}
+                                                        className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                    >
+                                                        {uniqueDesignations.map(d => (
+                                                            <option key={d} value={d}>{d === 'All' ? 'All Desgs' : d}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Department</label>
-                                                <select
-                                                    value={modalDept}
-                                                    onChange={(e) => setModalDept(e.target.value)}
-                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
-                                                >
-                                                    {uniqueDepartments.map(d => (
-                                                        <option key={d} value={d}>{d === 'All' ? 'All Depts' : d}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Designation</label>
-                                                <select
-                                                    value={modalDesignation}
-                                                    onChange={(e) => setModalDesignation(e.target.value)}
-                                                    className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
-                                                >
-                                                    {uniqueDesignations.map(d => (
-                                                        <option key={d} value={d}>{d === 'All' ? 'All Desgs' : d}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
+                                        )}
 
                                         <div className="space-y-1.5">
                                             <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Select Employee *</label>
                                             <select
                                                 value={newLoanData.employee_id}
+                                                disabled={!!editingLoanId}
                                                 onChange={(e) => setNewLoanData({ ...newLoanData, employee_id: e.target.value })}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                                className={`w-full px-3 py-2 border rounded-lg text-xs font-bold outline-none transition-all ${
+                                                    editingLoanId ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed' : 'bg-slate-50 border-slate-200 focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee]'
+                                                }`}
                                             >
                                                 <option value="">-- Choose Employee --</option>
-                                                {modalFilteredEmployees.map(emp => (
+                                                {employees.map(emp => (
                                                     <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_id_number})</option>
                                                 ))}
                                             </select>
@@ -4975,15 +5184,34 @@ const Payroll = () => {
                                                 />
                                             </div>
                                         </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Loan / Disbursal Date *</label>
+                                            <input
+                                                type="date"
+                                                value={newLoanData.loan_date || ''}
+                                                onChange={(e) => setNewLoanData({ ...newLoanData, loan_date: e.target.value })}
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/5 focus:border-[#4361ee] transition-all"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="flex gap-2 justify-end border-t border-slate-50 pt-4 mt-2">
                                         <button
                                             onClick={() => {
                                                 setShowAddLoan(false);
+                                                setEditingLoanId(null);
                                                 setModalOutlet('All');
                                                 setModalDept('All');
                                                 setModalDesignation('All');
+                                                setNewLoanData({
+                                                    employee_id: '',
+                                                    title: 'Salary Advance',
+                                                    amount: '',
+                                                    monthly_emi: '',
+                                                    status: 'active',
+                                                    loan_date: new Date().toISOString().split('T')[0]
+                                                });
                                             }}
                                             className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 text-slate-500 transition-colors"
                                         >
@@ -4991,13 +5219,13 @@ const Payroll = () => {
                                         </button>
                                         <button
                                             disabled={controls.inputs_locked}
-                                            onClick={handleCreateLoan}
+                                            onClick={editingLoanId ? handleUpdateLoan : handleCreateLoan}
                                             className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${controls.inputs_locked
                                                 ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
                                                 : 'bg-[#4361ee] hover:bg-indigo-700 text-white'
                                                 }`}
                                         >
-                                            Disburse Loan
+                                            {editingLoanId ? 'Update Loan' : 'Disburse Loan'}
                                         </button>
                                     </div>
                                 </div>

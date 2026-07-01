@@ -21,6 +21,7 @@ class WorkingRulesRepository {
             // New Advanced Fields
             max_late_allowed: parseInt(data.max_late_allowed || 3),
             late_deduction_type: data.late_deduction_type || 'half_day',
+            late_deduction_value: parseFloat(data.late_deduction_value || 0),
             ot_enabled: Boolean(data.ot_enabled),
             ot_min_minutes: parseInt(data.ot_min_minutes || 60),
             ot_rate_multiplier: parseFloat(data.ot_rate_multiplier || 1.5),

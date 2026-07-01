@@ -546,7 +546,7 @@ const Settings = () => {
                                 </div>
                                 <div className="flex items-center justify-between text-xs font-medium border-b border-white/10 pb-3">
                                     <span className="text-white/50">Late Mark Policy</span>
-                                    <span className="font-bold italic">{rules.max_late_allowed} Per Month</span>
+                                    <span className="font-bold italic">Shift Grace Cap</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs font-medium border-b border-white/10 pb-3">
                                     <span className="text-white/50">Missed Punches</span>

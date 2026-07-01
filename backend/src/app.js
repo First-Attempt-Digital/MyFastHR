@@ -438,22 +438,60 @@ const syncDatabaseSchema = async () => {
         }
 
         // 4. Ensure salary_history table exists
-        const hasSalaryHistory = await db.schema.hasTable('salary_history');
-        if (!hasSalaryHistory) {
-            console.log('>>> [DB-SYNC]: Creating salary_history table...');
-            await db.schema.createTable('salary_history', (table) => {
-                table.increments('id').primary();
-                table.integer('employee_id').unsigned().notNullable();
-                table.integer('company_id').unsigned().notNullable();
-                table.decimal('old_salary', 15, 2).nullable();
-                table.decimal('new_salary', 15, 2).notNullable();
-                table.date('change_date').notNullable();
-                table.string('reason', 255).nullable();
-                table.timestamp('created_at').defaultTo(db.fn.now());
-                table.foreign('employee_id').references('employees.id').onDelete('CASCADE');
-                table.foreign('company_id').references('companies.id').onDelete('CASCADE');
-            });
-            console.log('>>> [DB-SYNC]: salary_history table created.');
+        try {
+            const hasSalaryHistory = await db.schema.hasTable('salary_history');
+            if (!hasSalaryHistory) {
+                console.log('>>> [DB-SYNC]: Creating salary_history table...');
+                await db.schema.createTable('salary_history', (table) => {
+                    table.increments('id').primary();
+                    table.integer('employee_id').notNullable();
+                    table.integer('company_id').notNullable();
+                    table.decimal('old_salary', 15, 2).nullable();
+                    table.decimal('new_salary', 15, 2).notNullable();
+                    table.date('change_date').notNullable();
+                    table.string('reason', 255).nullable();
+                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.foreign('employee_id').references('employees.id').onDelete('CASCADE');
+                    table.foreign('company_id').references('companies.id').onDelete('CASCADE');
+                });
+                console.log('>>> [DB-SYNC]: salary_history table created.');
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: salary_history sync failed:', e.message);
+        }
+
+        // 5. Ensure loans table has loan_date column
+        try {
+            const hasLoansTable = await db.schema.hasTable('loans');
+            if (hasLoansTable) {
+                const hasLoanDate = await db.schema.hasColumn('loans', 'loan_date');
+                if (!hasLoanDate) {
+                    console.log('>>> [DB-SYNC]: Adding loan_date column to loans table...');
+                    await db.schema.alterTable('loans', (table) => {
+                        table.date('loan_date').nullable();
+                    });
+                    console.log('>>> [DB-SYNC]: loan_date column added to loans table.');
+                }
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: loans column sync failed:', e.message);
+        }
+
+        // 6. Ensure working_rules table has late_deduction_value column
+        try {
+            const hasWorkingRulesTable = await db.schema.hasTable('working_rules');
+            if (hasWorkingRulesTable) {
+                const hasDeductionValue = await db.schema.hasColumn('working_rules', 'late_deduction_value');
+                if (!hasDeductionValue) {
+                    console.log('>>> [DB-SYNC]: Adding late_deduction_value column to working_rules table...');
+                    await db.schema.alterTable('working_rules', (table) => {
+                        table.decimal('late_deduction_value', 15, 2).defaultTo(0);
+                    });
+                    console.log('>>> [DB-SYNC]: late_deduction_value column added to working_rules table.');
+                }
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: working_rules column sync failed:', e.message);
         }
 
     } catch (err) {

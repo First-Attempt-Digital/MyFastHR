@@ -253,6 +253,13 @@ class PayrollService {
                 lateDeduction = extraLates * (dailyRate * 0.5);
             } else if (rules.late_deduction_type === 'full_day') {
                 lateDeduction = extraLates * dailyRate;
+            } else if (rules.late_deduction_type === 'flat') {
+                lateDeduction = extraLates * parseFloat(rules.late_deduction_value || 0);
+            } else if (rules.late_deduction_type === 'percent_gross') {
+                const grossSalary = parseFloat(activeRevision.gross_salary) || (baseSalary + totalAllowances);
+                lateDeduction = extraLates * (grossSalary * (parseFloat(rules.late_deduction_value || 0) / 100));
+            } else if (rules.late_deduction_type === 'percent_basic') {
+                lateDeduction = extraLates * (baseSalary * (parseFloat(rules.late_deduction_value || 0) / 100));
             }
         }
 
@@ -322,6 +329,7 @@ class PayrollService {
         const rules = await db('working_rules').where({ company_id: companyId }).first() || {
             max_late_allowed: 3,
             late_deduction_type: 'none',
+            late_deduction_value: 0,
             ot_rate_multiplier: 1.0
         };
 
@@ -334,9 +342,41 @@ class PayrollService {
                     ...activeRules,
                     max_late_allowed: scheme.max_late_allowed !== undefined && scheme.max_late_allowed !== null ? scheme.max_late_allowed : activeRules.max_late_allowed,
                     late_deduction_type: scheme.late_deduction_type !== undefined && scheme.late_deduction_type !== null ? scheme.late_deduction_type : activeRules.late_deduction_type,
+                    late_deduction_value: scheme.late_deduction_value !== undefined && scheme.late_deduction_value !== null ? scheme.late_deduction_value : activeRules.late_deduction_value,
                     ot_rate_multiplier: scheme.ot_rate_multiplier !== undefined && scheme.ot_rate_multiplier !== null ? scheme.ot_rate_multiplier : activeRules.ot_rate_multiplier
                 };
             }
+        }
+
+        // Dynamically resolve Grace Cap / Mo from assigned shift to sync Late Mark Policy
+        let employeeGraceCap = null;
+        try {
+            const targetDate = `${year}-${String(month).padStart(2, '0')}-01`;
+            const activeAssignment = await db('employee_shift_assignments as esa')
+                .join('shifts as s', 'esa.shift_id', 's.id')
+                .where('esa.employee_id', employeeId)
+                .where('esa.from_date', '<=', targetDate)
+                .andWhere(qb => {
+                    qb.where('esa.to_date', '>=', targetDate).orWhereNull('esa.to_date');
+                })
+                .select('s.grace_count_limit')
+                .orderBy('esa.id', 'desc')
+                .first();
+
+            if (activeAssignment && activeAssignment.grace_count_limit !== undefined && activeAssignment.grace_count_limit !== null) {
+                employeeGraceCap = parseInt(activeAssignment.grace_count_limit);
+            } else if (emp && emp.shift_id) {
+                const directShift = await db('shifts').where({ id: emp.shift_id }).first();
+                if (directShift && directShift.grace_count_limit !== undefined && directShift.grace_count_limit !== null) {
+                    employeeGraceCap = parseInt(directShift.grace_count_limit);
+                }
+            }
+        } catch (err) {
+            console.error('Error resolving employee shift grace cap:', err.message);
+        }
+
+        if (employeeGraceCap !== null) {
+            activeRules.max_late_allowed = employeeGraceCap;
         }
 
         const globalRules = await db('global_payroll_rules').where({ company_id: companyId, is_active: true });
@@ -404,6 +444,10 @@ class PayrollService {
             const dailyRate = baseSalary / daysInMonth;
             const earnedBase = dailyRate * paidDays;
 
+            totalAllowances = allowances.reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
+            const prorationFactor = paidDays / daysInMonth;
+            const earnedAllowances = totalAllowances * prorationFactor;
+
             lateDeduction = 0;
             const extraLates = Math.max(0, empRecord.stats.L - (parseInt(activeRules.max_late_allowed) || 0));
             if (extraLates > 0) {
@@ -411,12 +455,15 @@ class PayrollService {
                     lateDeduction = extraLates * (dailyRate * 0.5);
                 } else if (activeRules.late_deduction_type === 'full_day') {
                     lateDeduction = extraLates * dailyRate;
+                } else if (activeRules.late_deduction_type === 'flat') {
+                    lateDeduction = extraLates * parseFloat(activeRules.late_deduction_value || 0);
+                } else if (activeRules.late_deduction_type === 'percent_gross') {
+                    const grossSalary = parseFloat(activeRevision.gross_salary) || (baseSalary + totalAllowances);
+                    lateDeduction = extraLates * (grossSalary * (parseFloat(activeRules.late_deduction_value || 0) / 100));
+                } else if (activeRules.late_deduction_type === 'percent_basic') {
+                    lateDeduction = extraLates * (baseSalary * (parseFloat(activeRules.late_deduction_value || 0) / 100));
                 }
             }
-
-            totalAllowances = allowances.reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
-            const prorationFactor = paidDays / daysInMonth;
-            const earnedAllowances = totalAllowances * prorationFactor;
 
             const filteredDeductions = deductions.filter(d => {
                 const name = d.name.toLowerCase();
@@ -1257,7 +1304,7 @@ class PayrollService {
             return `${day} ${monthShort} ${yearVal}`;
         };
         doc.fillColor('#64748B').text('Disbursal Date:', margin + 15, infoY + 52);
-        doc.fillColor('#0F172A').text(formatDisplayDate(loan.created_at), margin + 105, infoY + 52);
+        doc.fillColor('#0F172A').text(formatDisplayDate(loan.loan_date || loan.created_at), margin + 105, infoY + 52);
 
         doc.fillColor('#64748B').text('Office Location:', margin + 260, infoY + 52);
         doc.fillColor('#0F172A').text(loan.office_location || 'N/A', margin + 340, infoY + 52);
@@ -1532,10 +1579,69 @@ class PayrollService {
             amount: parseFloat(loanData.amount),
             monthly_emi: parseFloat(loanData.monthly_emi),
             remaining_balance: parseFloat(loanData.amount),
+            loan_date: loanData.loan_date || now.toISOString().split('T')[0],
             status: loanData.status || 'pending'
         };
         const [id] = await db('loans').insert(payload);
         return { id, ...payload };
+    }
+
+    async updateLoan(companyId, loanId, loanData) {
+        // Check if inputs are locked for the current month
+        const now = new Date();
+        const curMonth = now.getMonth() + 1;
+        const curYear = now.getFullYear();
+        const controls = await this.getPayrollControls(companyId, curMonth, curYear);
+        if (controls.inputs_locked) {
+            throw new Error(`Payroll inputs are locked for ${curMonth}/${curYear}.`);
+        }
+
+        const loan = await db('loans').where({ id: loanId, company_id: companyId }).first();
+        if (!loan) throw new Error('Loan record not found');
+
+        // Recalculate remaining balance from repayment history
+        const repayments = await db('loan_repayments')
+            .where({ loan_id: loanId })
+            .sum('amount_paid as total_paid')
+            .first();
+        const totalPaid = parseFloat(repayments.total_paid || 0);
+
+        const newAmount = parseFloat(loanData.amount);
+        const newRemaining = Math.max(0, newAmount - totalPaid);
+
+        const payload = {
+            employee_id: parseInt(loanData.employee_id),
+            title: loanData.title,
+            amount: newAmount,
+            monthly_emi: parseFloat(loanData.monthly_emi),
+            remaining_balance: newRemaining,
+            loan_date: loanData.loan_date || now.toISOString().split('T')[0],
+            status: loanData.status || 'active'
+        };
+
+        await db('loans').where({ id: loanId }).update(payload);
+        return { id: loanId, ...payload };
+    }
+
+    async deleteLoan(companyId, loanId) {
+        // Check if inputs are locked for the current month
+        const now = new Date();
+        const curMonth = now.getMonth() + 1;
+        const curYear = now.getFullYear();
+        const controls = await this.getPayrollControls(companyId, curMonth, curYear);
+        if (controls.inputs_locked) {
+            throw new Error(`Payroll inputs are locked for ${curMonth}/${curYear}.`);
+        }
+
+        const loan = await db('loans').where({ id: loanId, company_id: companyId }).first();
+        if (!loan) throw new Error('Loan record not found');
+
+        await db.transaction(async (trx) => {
+            // Delete repayments first, then the loan itself
+            await trx('loan_repayments').where({ loan_id: loanId }).del();
+            await trx('loans').where({ id: loanId }).del();
+        });
+        return { success: true };
     }
 
     async updateLoanStatus(companyId, loanId, status) {
