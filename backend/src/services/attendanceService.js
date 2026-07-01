@@ -112,23 +112,34 @@ function toLocalYMD(dateVal) {
     if (!dateVal) return null;
     const d = dbDateToUTC(dateVal);
     if (!d || isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    const y = istDate.getUTCFullYear();
+    const m = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(istDate.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 function toLocalYYYYMMDDHHmmss(dateVal) {
     if (!dateVal) return null;
     const d = dbDateToUTC(dateVal);
     if (!d || isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) + ' ' + d.toLocaleTimeString('sv-SE', { timeZone: 'Asia/Kolkata', hour12: false });
+    const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    const y = istDate.getUTCFullYear();
+    const m = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(istDate.getUTCDate()).padStart(2, '0');
+    const hr = String(istDate.getUTCHours()).padStart(2, '0');
+    const min = String(istDate.getUTCMinutes()).padStart(2, '0');
+    const sec = String(istDate.getUTCSeconds()).padStart(2, '0');
+    return `${y}-${m}-${day} ${hr}:${min}:${sec}`;
 }
 
 function dateToISTMins(dateVal) {
     if (!dateVal) return 0;
     const d = dbDateToUTC(dateVal);
     if (!d || isNaN(d.getTime())) return 0;
-    const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false };
-    const istStr = d.toLocaleTimeString('en-GB', options);
-    const [h, m] = istStr.split(':').map(Number);
+    const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    const h = istDate.getUTCHours();
+    const m = istDate.getUTCMinutes();
     return h * 60 + m;
 }
 
