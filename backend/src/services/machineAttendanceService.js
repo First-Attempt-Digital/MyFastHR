@@ -608,10 +608,38 @@ class MachineAttendanceService {
                             .whereRaw('DATE(check_in) < ?', [targetShiftDate])
                             .select('check_in');
 
+                        const monthAssignments = await db('employee_shift_assignments as esa')
+                            .join('shifts as s', 'esa.shift_id', 's.id')
+                            .where('esa.employee_id', employeeId)
+                            .where(qb => {
+                                qb.where('esa.from_date', '<=', targetShiftDate)
+                                  .andWhere(qb2 => {
+                                      qb2.where('esa.to_date', '>=', startOfMonth).orWhereNull('esa.to_date');
+                                  });
+                            })
+                            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time', 's.grace_period', 's.is_night_shift');
+
                         let graceCount = 0;
                         for (const log of currentMonthLogs) {
-                            if (checkIfLogUsedGrace(log, employeeWithShift, rules)) {
-                                graceCount++;
+                            const logDateStr = dateToISTDateString(log.check_in);
+                            const ass = monthAssignments.find(a => {
+                                const fromStr = dateToISTDateString(a.from_date);
+                                const toStr = a.to_date ? dateToISTDateString(a.to_date) : null;
+                                return fromStr <= logDateStr && (!toStr || toStr >= logDateStr);
+                            });
+
+                            const shiftStart = ass ? ass.start_time : (employeeWithShift?.shift_start || rules.shift_start || '09:00');
+                            const grace = employeeWithShift?.scheme_grace ?? (ass ? ass.grace_period : (employeeWithShift?.shift_grace ?? rules.grace_period ?? 15));
+
+                            const logCheckIn = dbDateToUTC(log.check_in);
+                            if (logCheckIn) {
+                                const [sHours, sMins] = shiftStart.split(':').map(Number);
+                                const shiftStartActual = new Date(`${logDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                                const shiftStartLimit = new Date(shiftStartActual.getTime() + (parseInt(grace) || 0) * 60 * 1000);
+
+                                if (logCheckIn > shiftStartActual && logCheckIn <= shiftStartLimit) {
+                                    graceCount++;
+                                }
                             }
                         }
 
