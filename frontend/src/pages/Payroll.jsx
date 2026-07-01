@@ -5121,7 +5121,7 @@ const Payroll = () => {
                                                 }`}
                                             >
                                                 <option value="">-- Choose Employee --</option>
-                                                {employees.map(emp => (
+                                                {modalFilteredEmployees.map(emp => (
                                                     <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name} ({emp.employee_id_number})</option>
                                                 ))}
                                             </select>
