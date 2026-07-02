@@ -1409,6 +1409,26 @@ class AttendanceService {
                             if (date < today) {
                                 status = 'A'; // Absent
                                 stats.A++;
+                            } else if (date.getTime() === today.getTime()) {
+                                const now = new Date();
+                                const shiftEndStr = resolvedShift.end_time || '18:00';
+                                const [h, m] = shiftEndStr.split(':').map(Number);
+                                const terminateHour = parseInt(resolvedShift.terminate_hour || 2);
+                                
+                                const targetDateStr = formatDbDate(date);
+                                const shiftStartStr = resolvedShift.start_time || '09:00';
+                                const [sHours, sMins] = shiftStartStr.split(':').map(Number);
+                                const shiftStartDate = new Date(`${targetDateStr}T${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00+05:30`);
+                                let shiftEndDate = new Date(`${targetDateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+05:30`);
+                                if (shiftEndDate < shiftStartDate) {
+                                    shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                                }
+                                const terminationDate = new Date(shiftEndDate.getTime() + (terminateHour * 60 * 60 * 1000));
+                                
+                                if (now > terminationDate) {
+                                    status = 'A'; // Absent after shift termination
+                                    stats.A++;
+                                }
                             }
                         }
                     }
