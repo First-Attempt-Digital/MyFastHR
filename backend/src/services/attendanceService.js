@@ -533,7 +533,6 @@ class AttendanceService {
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', empId)
             .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
-            .orderBy('esa.from_date', 'desc')
             .orderBy('esa.id', 'desc');
 
         const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
@@ -1113,7 +1112,6 @@ class AttendanceService {
                 's.terminate_hour',
                 'esa.id'
             )
-            .orderBy('esa.from_date', 'desc')
             .orderBy('esa.id', 'desc') : [];
 
         const formatDbDate = (val) => {
@@ -1511,7 +1509,6 @@ class AttendanceService {
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employee_id)
             .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
-            .orderBy('esa.from_date', 'desc')
             .orderBy('esa.id', 'desc');
 
         const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000);
@@ -2062,7 +2059,6 @@ class AttendanceService {
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employeeId)
             .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
-            .orderBy('esa.from_date', 'desc')
             .orderBy('esa.id', 'desc');
 
         // Find candidate records in attendance
@@ -2687,7 +2683,6 @@ class AttendanceService {
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employeeId)
             .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
-            .orderBy('esa.from_date', 'desc')
             .orderBy('esa.id', 'desc');
 
         const candidateLogs = await db('attendance')
@@ -3537,7 +3532,6 @@ class AttendanceService {
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', request.employee_id)
                 .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
-                .orderBy('esa.from_date', 'desc')
                 .orderBy('esa.id', 'desc');
 
             const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
