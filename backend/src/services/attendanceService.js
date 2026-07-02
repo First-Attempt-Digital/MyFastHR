@@ -315,6 +315,11 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
         const inMins = dateToMins(log.check_in);
         const isLate = inMins > (s1Start + grace1In);
 
+        // [DEBUG_MUSTER] - remove after fix confirmed
+        if (inMins > 0 && inMins < 700) { // 0-11:40am range
+            console.log(`[DEBUG_MUSTER] check_in=${log.check_in} typeof=${typeof log.check_in} inMins=${inMins} s1Start=${s1Start} grace1In=${grace1In} threshold=${s1Start+grace1In} isLate=${isLate}`);
+        }
+
         if (log.check_out) {
             const outMins = dateToMins(log.check_out);
             const isEarly = outMins < (s1End - grace1Out);
