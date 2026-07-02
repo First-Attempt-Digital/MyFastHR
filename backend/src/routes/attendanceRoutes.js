@@ -124,6 +124,9 @@ router.get('/matrix', hasPermission(['approve_attendance']), async (req, res) =>
             month || (now.getMonth() + 1), 
             year || now.getFullYear()
         );
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.json(data);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -356,6 +359,9 @@ router.get('/day-detail', async (req, res) => {
             return res.status(403).json({ message: 'Access denied: Cannot view other employee details' });
         }
         const result = await attendanceService.getDayDetail(req.company_id, empId, date);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.json(result);
     } catch (err) {
         res.status(400).json({ message: err.message });
