@@ -1253,8 +1253,11 @@ class AttendanceService {
 
                 // Resolve active shift for this employee on targetDateStr
                 const activeAssignment = empAssignments.find(sa => {
-                    return sa.fromStr <= targetDateStr &&
-                        (!sa.toStr || sa.toStr >= targetDateStr);
+                    const matched = sa.fromStr <= targetDateStr && (!sa.toStr || sa.toStr >= targetDateStr);
+                    if (emp.employee_id_number === '963258' && d === 2) {
+                        console.log(`[DEBUG_FIND] sa.id=${sa.id} sa.fromStr=${sa.fromStr} sa.toStr=${sa.toStr} targetDateStr=${targetDateStr} matched=${matched}`);
+                    }
+                    return matched;
                 });
 
                 const resolvedShift = {
