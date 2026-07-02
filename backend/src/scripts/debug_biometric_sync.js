@@ -32,13 +32,15 @@ async function debugSync() {
     const attAfterReset = await db('attendance').where({ id: attBefore.id }).first();
     console.log(JSON.stringify(attAfterReset, null, 2));
 
-    // Now call processBiometricLog for the first checkout punch: 15:39:19
+    // Now call processPunch for the first checkout punch: 15:39:19
     console.log('\n--- Processing Punch 15:39:19 via machineAttendanceService... ---');
-    const result1 = await machineAttendanceService.processBiometricLog(
+    const result1 = await machineAttendanceService.processPunch(
         emp.company_id,
         'TW1KDW0010250441',
-        code,
-        '2026-07-02 15:39:19'
+        {
+            employee_code: code,
+            timestamp: '2026-07-02 15:39:19'
+        }
     );
     console.log('Result 1:', result1);
 
