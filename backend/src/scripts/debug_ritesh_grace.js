@@ -5,13 +5,15 @@ const db = require('../config/db');
 function dbDateToUTC(dateVal) {
     if (!dateVal) return null;
     if (dateVal instanceof Date) {
-        const yr = dateVal.getFullYear();
-        const mo = String(dateVal.getMonth() + 1).padStart(2, '0');
-        const dy = String(dateVal.getDate()).padStart(2, '0');
-        const hr = String(dateVal.getHours()).padStart(2, '0');
-        const mi = String(dateVal.getMinutes()).padStart(2, '0');
-        const sc = String(dateVal.getSeconds()).padStart(2, '0');
-        return new Date(`${yr}-${mo}-${dy}T${hr}:${mi}:${sc}+05:30`);
+        const yr = dateVal.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric' });
+        const mo = dateVal.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: '2-digit' });
+        const dy = dateVal.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', day: '2-digit' });
+        const timeParts = dateVal.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false }).split(':');
+        const hr = timeParts[0].padStart(2, '0');
+        const mi = timeParts[1].padStart(2, '0');
+        const sc = timeParts[2].padStart(2, '0');
+        const hrClean = hr === '24' ? '00' : hr;
+        return new Date(`${yr}-${mo}-${dy}T${hrClean}:${mi}:${sc}+05:30`);
     }
     const str = String(dateVal).trim();
     const parts = str.split(/[- : T]/);
