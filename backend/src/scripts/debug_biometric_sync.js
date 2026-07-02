@@ -17,6 +17,13 @@ async function debugSync() {
     const attBefore = await db('attendance').where({ employee_id: emp.id }).whereRaw('DATE(check_in) = ?', [dateStr]).first();
     console.log(JSON.stringify(attBefore, null, 2));
 
+    // Delete raw logs for today's checkout punches to allow re-processing
+    console.log('\n--- Deleting checkout raw logs to allow re-processing... ---');
+    await db('biometric_raw_logs')
+        .where({ company_id: emp.company_id, employee_code: code })
+        .whereIn('punch_time', ['2026-07-02 15:39:19', '2026-07-02 16:03:18', '2026-07-02 16:11:31'])
+        .del();
+
     // Reset attendance record to simulated state BEFORE the first checkout punch
     // i.e., check_in = 11:04:04, check_out = null, status = 'late' (since request is approved)
     console.log('\n--- Resetting Attendance Record to state before checkout... ---');
@@ -43,21 +50,36 @@ async function debugSync() {
         }
     );
     console.log('Result 1:', result1);
-
     const attAfterPunch1 = await db('attendance').where({ id: attBefore.id }).first();
     console.log('Attendance after punch 1:', JSON.stringify(attAfterPunch1, null, 2));
 
-    // Clean up / restore the checkout time to 16:11:31 so the employee doesn't lose their data
-    console.log('\n--- Restoring to original DB state... ---');
-    await db('attendance')
-        .where({ id: attBefore.id })
-        .update({
-            check_out: '2026-07-02 16:11:31',
-            status: attBefore.status,
-            punch_source: attBefore.punch_source,
-            device_id: attBefore.device_id,
-            updated_at: attBefore.updated_at
-        });
+    // Now call processPunch for the second checkout punch: 16:03:18
+    console.log('\n--- Processing Punch 16:03:18 via machineAttendanceService... ---');
+    const result2 = await machineAttendanceService.processPunch(
+        emp.company_id,
+        'TW1KDW0010250441',
+        {
+            employee_code: code,
+            timestamp: '2026-07-02 16:03:18'
+        }
+    );
+    console.log('Result 2:', result2);
+    const attAfterPunch2 = await db('attendance').where({ id: attBefore.id }).first();
+    console.log('Attendance after punch 2:', JSON.stringify(attAfterPunch2, null, 2));
+
+    // Now call processPunch for the third checkout punch: 16:11:31
+    console.log('\n--- Processing Punch 16:11:31 via machineAttendanceService... ---');
+    const result3 = await machineAttendanceService.processPunch(
+        emp.company_id,
+        'TW1KDW0010250441',
+        {
+            employee_code: code,
+            timestamp: '2026-07-02 16:11:31'
+        }
+    );
+    console.log('Result 3:', result3);
+    const attAfterPunch3 = await db('attendance').where({ id: attBefore.id }).first();
+    console.log('Attendance after punch 3:', JSON.stringify(attAfterPunch3, null, 2));
 
     process.exit(0);
 }
