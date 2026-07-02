@@ -1408,7 +1408,7 @@ class AttendanceService {
                         } else {
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
-                            if (date < today) {
+                            if (date <= today) {
                                 status = 'A'; // Absent
                                 stats.A++;
                             }
