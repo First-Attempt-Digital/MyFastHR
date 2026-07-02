@@ -45,7 +45,13 @@ function checkIfLogUsedGrace(log, employee, rules) {
 function dbDateToUTC(dateVal) {
     if (!dateVal) return null;
     if (dateVal instanceof Date) {
-        return dateVal;
+        const yr = dateVal.getFullYear();
+        const mo = String(dateVal.getMonth() + 1).padStart(2, '0');
+        const dy = String(dateVal.getDate()).padStart(2, '0');
+        const hr = String(dateVal.getHours()).padStart(2, '0');
+        const mi = String(dateVal.getMinutes()).padStart(2, '0');
+        const sc = String(dateVal.getSeconds()).padStart(2, '0');
+        return new Date(`${yr}-${mo}-${dy}T${hr}:${mi}:${sc}+05:30`);
     }
     const str = String(dateVal).trim();
     const parts = str.split(/[- : T]/);
