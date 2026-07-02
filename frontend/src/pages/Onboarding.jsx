@@ -1576,6 +1576,61 @@ const Onboarding = () => {
                                                 }`}
                                             />
                                         </div>
+
+                                        <div className="flex flex-col gap-3 pt-2 animate-in slide-in-from-top-2 duration-300">
+                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">PF Excess Contribution</label>
+                                            <div className="flex flex-col gap-3.5 mt-1">
+                                                <label className="flex items-start gap-3 cursor-pointer group">
+                                                    <div className="pt-0.5">
+                                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                            formData.pf_excess_contribution === 'ceiling' 
+                                                            ? 'border-[#4361ee]' 
+                                                            : 'border-slate-300 group-hover:border-[#4361ee]'
+                                                        }`}>
+                                                            {formData.pf_excess_contribution === 'ceiling' && (
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-[#4361ee]" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <input 
+                                                        type="radio" 
+                                                        name="pf_excess_contribution" 
+                                                        value="ceiling"
+                                                        checked={formData.pf_excess_contribution === 'ceiling'}
+                                                        onChange={() => handleChange({ target: { name: 'pf_excess_contribution', value: 'ceiling' } })}
+                                                        className="hidden"
+                                                    />
+                                                    <span className="text-xs font-semibold text-slate-600 leading-tight">
+                                                        Employee & Employer contribution - 12% with in wage ceiling (Max Rs.1800)
+                                                    </span>
+                                                </label>
+
+                                                <label className="flex items-start gap-3 cursor-pointer group">
+                                                    <div className="pt-0.5">
+                                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                            formData.pf_excess_contribution === 'above' 
+                                                            ? 'border-[#4361ee]' 
+                                                            : 'border-slate-300 group-hover:border-[#4361ee]'
+                                                        }`}>
+                                                            {formData.pf_excess_contribution === 'above' && (
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-[#4361ee]" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <input 
+                                                        type="radio" 
+                                                        name="pf_excess_contribution" 
+                                                        value="above"
+                                                        checked={formData.pf_excess_contribution === 'above'}
+                                                        onChange={() => handleChange({ target: { name: 'pf_excess_contribution', value: 'above' } })}
+                                                        className="hidden"
+                                                    />
+                                                    <span className="text-xs font-semibold text-slate-600 leading-tight">
+                                                        Employee contribution - 12% over and above wage ceiling (In excess to Rs.1800)
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
                                     </>
                                 )}
                             </div>
