@@ -1459,6 +1459,12 @@ class AttendanceService {
                         }
                     }
                 }
+                if (emp.employee_id_number === '963258' && d === 2) {
+                    const inMins = dayLogs && dayLogs[0] ? dateToMinsLocal(dayLogs[0].check_in) : 'no_log';
+                    const s1Start = timeToMinsLocal(resolvedShift.start_time || '09:00');
+                    const grace1In = parseInt(emp.scheme_grace ?? resolvedShift.grace_period ?? rules.grace_period ?? 15);
+                    console.log(`[DEBUG_RITESH] d=${d} inMins=${inMins} s1Start=${s1Start} grace1In=${grace1In} isGrace=${isGrace} status=${status} resolvedShift.start_time=${resolvedShift.start_time} emp.scheme_grace=${emp.scheme_grace} resolvedShift.grace_period=${resolvedShift.grace_period}`);
+                }
                 grid[d] = status;
                 grid_timings[d] = { in1, out1, in2, out2 };
                 grid_meta[d] = {
