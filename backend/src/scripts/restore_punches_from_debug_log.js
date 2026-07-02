@@ -47,7 +47,10 @@ function employeeCodeClean(code) {
 }
 
 async function restore() {
-    const logFile = path.join(__dirname, '../../../biometric_machine_debug.log');
+    let logFile = path.join(__dirname, '../../biometric_machine_debug.log');
+    if (!fs.existsSync(logFile)) {
+        logFile = path.join(__dirname, '../../../biometric_machine_debug.log');
+    }
     
     if (!fs.existsSync(logFile)) {
         console.error('Biometric machine debug log file not found at:', logFile);
