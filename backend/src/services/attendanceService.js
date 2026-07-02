@@ -1309,7 +1309,20 @@ class AttendanceService {
                     const isTodayActive = (logCheckInYMD === curTodayYMD);
 
                     if (dbStatus === 'pending') {
-                        status = '-';
+                        if (firstLog.check_out) {
+                            const calc = calculateSplitShiftStatus(dayLogs, resolvedShift, rules);
+                            status = calc.status;
+                            if (status === 'P') stats.P++;
+                            else if (status === 'HD') stats.P += 0.5;
+                            else if (status === 'L') stats.L++;
+                            else if (status === 'E') stats.P++;
+                            else if (status === 'A') stats.A++;
+                        } else if (isTodayActive) {
+                            status = 'CI';
+                        } else {
+                            status = 'A';
+                            stats.A++;
+                        }
                     } else if (!firstLog.check_out && isTodayActive && 
                                firstLog.punch_source !== 'manual' && 
                                firstLog.punch_source !== 'manual_override' && 
@@ -1900,10 +1913,32 @@ class AttendanceService {
             const s1Ms = dayLogs[0] && dayLogs[0].check_out ? (new Date(dayLogs[0].check_out) - new Date(dayLogs[0].check_in)) : 0;
             const s2Ms = dayLogs[1] && dayLogs[1].check_out ? (new Date(dayLogs[1].check_out) - new Date(dayLogs[1].check_in)) : 0;
 
+            let historyStatus = 'A';
+            if (record) {
+                if (record.status === 'pending') {
+                    if (record.check_out) {
+                        const resolvedShift = shift || employee || { start_time: '09:00', end_time: '18:00' };
+                        const calc = calculateSplitShiftStatus(dayLogs, resolvedShift);
+                        historyStatus = calc.status;
+                    } else {
+                        const checkInDate = dbDateToUTC(record.check_in);
+                        const checkInYMD = checkInDate ? checkInDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : null;
+                        const todayYMD = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+                        if (checkInYMD === todayYMD) {
+                            historyStatus = 'CI';
+                        } else {
+                            historyStatus = 'A';
+                        }
+                    }
+                } else {
+                    historyStatus = mapDbStatusToFrontend(record.status || 'present');
+                }
+            }
+
             sheet.push({
                 date: dateStr,
                 shift_code: shift?.name || defaultShiftName,
-                status: mapDbStatusToFrontend(record ? (record.status || 'present') : 'A'),
+                status: historyStatus,
                 first_in: dayLogs[0] ? safeFormatTime(dayLogs[0].check_in) : null,
                 last_out: dayLogs[dayLogs.length - 1] ? safeFormatTime(dayLogs[dayLogs.length - 1].check_out) : null,
                 session1: s1Ms > 0 ? `${(s1Ms / 3600000).toFixed(1)}h` : '0.0h',
