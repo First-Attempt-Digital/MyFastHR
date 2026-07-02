@@ -532,7 +532,9 @@ class AttendanceService {
         const empAssignments = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', empId)
-            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+            .orderBy('esa.from_date', 'desc')
+            .orderBy('esa.id', 'desc');
 
         const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
         const nextDateStr = nextDate.toISOString().split('T')[0];
@@ -1108,8 +1110,11 @@ class AttendanceService {
                 's.session1_out_margin',
                 's.session2_in_margin',
                 's.session2_out_margin',
-                's.terminate_hour'
-            ) : [];
+                's.terminate_hour',
+                'esa.id'
+            )
+            .orderBy('esa.from_date', 'desc')
+            .orderBy('esa.id', 'desc') : [];
 
         const formatDbDate = (val) => {
             if (!val) return null;
@@ -1459,12 +1464,6 @@ class AttendanceService {
                         }
                     }
                 }
-                if (emp.employee_id_number === '963258' && d === 2) {
-                    const inMins = dayLogs && dayLogs[0] ? dateToMinsLocal(dayLogs[0].check_in) : 'no_log';
-                    const s1Start = timeToMinsLocal(resolvedShift.start_time || '09:00');
-                    const grace1In = parseInt(emp.scheme_grace ?? resolvedShift.grace_period ?? rules.grace_period ?? 15);
-                    console.log(`[DEBUG_RITESH] d=${d} inMins=${inMins} s1Start=${s1Start} grace1In=${grace1In} isGrace=${isGrace} status=${status} resolvedShift.start_time=${resolvedShift.start_time} emp.scheme_grace=${emp.scheme_grace} resolvedShift.grace_period=${resolvedShift.grace_period}`);
-                }
                 grid[d] = status;
                 grid_timings[d] = { in1, out1, in2, out2 };
                 grid_meta[d] = {
@@ -1508,7 +1507,9 @@ class AttendanceService {
         const empAssignments = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employee_id)
-            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+            .orderBy('esa.from_date', 'desc')
+            .orderBy('esa.id', 'desc');
 
         const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000);
         const nextDateStr = nextDate.toISOString().split('T')[0];
@@ -2057,7 +2058,9 @@ class AttendanceService {
         const empAssignments = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employeeId)
-            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+            .orderBy('esa.from_date', 'desc')
+            .orderBy('esa.id', 'desc');
 
         // Find candidate records in attendance
         const candidateLogs = await db('attendance')
@@ -2680,7 +2683,9 @@ class AttendanceService {
         const empAssignments = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employeeId)
-            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+            .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+            .orderBy('esa.from_date', 'desc')
+            .orderBy('esa.id', 'desc');
 
         const candidateLogs = await db('attendance')
             .where({ employee_id: employeeId, company_id: companyId })
@@ -3528,7 +3533,9 @@ class AttendanceService {
             const empAssignments = await db('employee_shift_assignments as esa')
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', request.employee_id)
-                .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+                .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+                .orderBy('esa.from_date', 'desc')
+                .orderBy('esa.id', 'desc');
 
             const nextDate = new Date(new Date(dateStr).getTime() + 24 * 60 * 60 * 1000);
             const nextDateStr = nextDate.toISOString().split('T')[0];
