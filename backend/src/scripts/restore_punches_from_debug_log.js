@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const readline = require('readline');
 const db = require('../config/db');
 
 // Same fixed helpers as attendanceService
@@ -57,15 +58,19 @@ async function restore() {
         process.exit(1);
     }
 
-    console.log('Reading biometric log file...');
-    const content = fs.readFileSync(logFile, 'utf8');
-    const lines = content.trim().split('\n');
-    console.log(`Found ${lines.length} total raw log lines.`);
+    console.log('Streaming biometric log file line-by-line...');
+    const fileStream = fs.createReadStream(logFile);
+    const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity
+    });
 
     // Group punches by employee + date
     const punchGroups = {}; // key: employeeCode_date, value: array of times (e.g. '18:03:00')
 
-    for (const line of lines) {
+    let lineCount = 0;
+    for await (const line of rl) {
+        lineCount++;
         if (!line.trim()) continue;
         
         try {
@@ -89,7 +94,7 @@ async function restore() {
         }
     }
 
-    console.log(`Grouped into ${Object.keys(punchGroups).length} employee-day combinations.`);
+    console.log(`Processed ${lineCount} log lines. Grouped into ${Object.keys(punchGroups).length} employee-day combinations.`);
 
     let totalUpdated = 0;
 
