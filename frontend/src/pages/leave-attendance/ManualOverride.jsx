@@ -564,13 +564,22 @@ const EmployeeWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
                 status
             });
             setSuccess(true);
-            handleShow(); // Refresh
+            // Re-fetch ledger data so updated status shows immediately
+            const res = await api.get('/attendance/employee-history', {
+                params: {
+                    employee_id: selectedEmp.id,
+                    from: dateRange.from,
+                    to: dateRange.to
+                }
+            });
+            setAttendance(res || []);
         } catch (err) {
             setError(err.message || 'Failed to update status');
         } finally {
             setLoading(false);
         }
     };
+
 
     const handleExport = () => {
         if (!attendance || attendance.length === 0) {
