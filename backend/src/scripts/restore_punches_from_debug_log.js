@@ -105,8 +105,23 @@ async function restore() {
         if (dateStr !== '2026-07-01' && dateStr !== '2026-07-02') continue;
 
         const times = Array.from(timeSet).sort();
-        const checkInTimeStr = `${dateStr} ${times[0]}`;
-        const checkOutTimeStr = times.length > 1 ? `${dateStr} ${times[times.length - 1]}` : null;
+        
+        // Deduplicate double check-ins:
+        // Filter out any punch times that are within 5 minutes of check-in
+        const checkInTime = times[0];
+        const [ciH, ciM] = checkInTime.split(':').map(Number);
+        const checkInMins = ciH * 60 + ciM;
+
+        const validCheckoutTimes = times.filter(t => {
+            const [h, m] = t.split(':').map(Number);
+            const mins = h * 60 + m;
+            return (mins - checkInMins) >= 5; // Must be at least 5 minutes after check-in
+        });
+
+        const checkInTimeStr = `${dateStr} ${checkInTime}`;
+        const checkOutTimeStr = validCheckoutTimes.length > 0 
+            ? `${dateStr} ${validCheckoutTimes[validCheckoutTimes.length - 1]}` 
+            : null;
 
         // Resolve Employee ID
         let employee = await db('employees as e')
@@ -137,22 +152,43 @@ async function restore() {
 
         if (!att) continue;
 
-        // Calculate actual status based on correct times
+        // Fetch Active Shift assignment for the target date to get correct shift end, grace, etc.
+        const assignment = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', employee.id)
+            .where('esa.from_date', '<=', dateStr)
+            .andWhere(qb => {
+                qb.where('esa.to_date', '>=', dateStr).orWhereNull('esa.to_date');
+            })
+            .select('s.*')
+            .orderBy('esa.id', 'desc')
+            .first();
+
+        const activeShift = assignment || {
+            start_time: employee.shift_start || '09:00',
+            end_time: employee.shift_end || '18:00',
+            grace_period: employee.shift_grace || 15,
+            session1_grace_out: employee.session1_grace_out || 0,
+            total_punches_required: employee.total_punches_required || 2
+        };
+
+        // Calculate actual status based on correct times and resolved active shift
         const rules = await db('working_rules').where({ company_id: employee.company_id }).first() || { grace_period: 15 };
-        const shiftStart = employee.shift_start || '09:00';
-        const shiftEnd = employee.shift_end || '18:00';
-        const graceIn = parseInt(employee.scheme_grace ?? employee.shift_grace ?? rules.grace_period ?? 15);
-        const graceOut = parseInt(employee.session1_grace_out || 0);
+        const shiftStart = activeShift.start_time || '09:00';
+        const shiftEnd = activeShift.end_time || '18:00';
+        const graceIn = parseInt(employee.scheme_grace ?? activeShift.grace_period ?? rules.grace_period ?? 15);
+        const graceOut = parseInt(activeShift.session1_grace_out || 0);
 
         const s1StartMins = timeStrToMins(shiftStart);
         const s1EndMins = timeStrToMins(shiftEnd);
 
-        const checkInMins = timeStrToMins(times[0]);
-        const isLate = checkInMins > (s1StartMins + graceIn);
+        const checkInTimeMins = timeStrToMins(checkInTime);
+        const isLate = checkInTimeMins > (s1StartMins + graceIn);
 
         let newStatus;
         if (checkOutTimeStr) {
-            const checkOutMins = timeStrToMins(times[times.length - 1]);
+            const checkOutTimeOnly = validCheckoutTimes[validCheckoutTimes.length - 1];
+            const checkOutMins = timeStrToMins(checkOutTimeOnly);
             const isEarlyOut = checkOutMins < (s1EndMins - graceOut);
             if (isLate) newStatus = 'late';
             else if (isEarlyOut) newStatus = 'early_out';
