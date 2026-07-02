@@ -3526,7 +3526,7 @@ class AttendanceService {
 
         // Write punch to attendance table if approved
         if (status === 'approved') {
-            const dateStr = request.date;
+            const dateStr = toLocalYMD(request.date) || request.date;
             const punchTimeStr = request.punch_time;
 
             let dbStatus = 'present';
