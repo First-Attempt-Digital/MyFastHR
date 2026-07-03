@@ -20,7 +20,7 @@ function getLogicalDateStr(checkIn, employeeShifts = [], defaultShift = null) {
     const istStr = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
     const hour = parseInt(istStr, 10);
     
-    if (hour >= 0 && hour < 6) {
+    if (hour >= 0 && hour < 10) {
         const prevDate = new Date(d.getTime() - 24 * 60 * 60 * 1000);
         const prevDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         
@@ -56,7 +56,7 @@ function checkIfLogUsedGrace(log, employee, rules) {
     const [eH, eM] = (employee?.shift_end || '18:00').split(':').map(Number);
     const isNight = eH * 60 + eM < sH * 60 + sM;
     
-    if (isNight && hour >= 0 && hour < 6) {
+    if (isNight && hour >= 0 && hour < 10) {
         const prevDate = new Date(logCheckIn.getTime() - 24 * 60 * 60 * 1000);
         logicalDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
     }
@@ -439,7 +439,7 @@ class AttendanceService {
 
         const istHourStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
         const hour = parseInt(istHourStr, 10);
-        if (hour >= 0 && hour < 6) {
+        if (hour >= 0 && hour < 10) {
             const prevDateObj = new Date(now.getTime() - 24 * 60 * 60 * 1000);
             const prevDateStr = prevDateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
             

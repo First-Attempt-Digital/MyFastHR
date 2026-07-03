@@ -24,7 +24,7 @@ class AttendanceRepository {
         const now = new Date();
         const hour = getISTHour(now);
         let logicalDateStr, nextLogicalDateStr;
-        if (hour < 6) {
+        if (hour < 10) {
             const prev = new Date(now.getTime() - 24 * 60 * 60 * 1000);
             logicalDateStr = getISTDate(prev);
             nextLogicalDateStr = getISTDate(now);
@@ -34,7 +34,7 @@ class AttendanceRepository {
             nextLogicalDateStr = getISTDate(next);
         }
 
-        let cutoffHour = 6;
+        let cutoffHour = 10;
         const activeAssignment = await db('employee_shift_assignments as esa')
             .join('shifts as s', 'esa.shift_id', 's.id')
             .where('esa.employee_id', employeeId)
@@ -57,7 +57,7 @@ class AttendanceRepository {
             const shiftStartMins = sHours * 60 + sMins;
             const inMargin = shift.session1_in_margin !== undefined ? parseInt(shift.session1_in_margin) : 30;
             const earliestCheckInMins = shiftStartMins - inMargin;
-            if (earliestCheckInMins < 360) { // 360 mins = 6:00 AM
+            if (earliestCheckInMins < 600) { // 600 mins = 10:00 AM
                 cutoffHour = Math.floor(Math.max(0, earliestCheckInMins) / 60);
             }
         }
@@ -213,7 +213,7 @@ class AttendanceRepository {
                   .orWhere(qb2 => {
                       const nextM = month === 12 ? 1 : month + 1;
                       const nextY = month === 12 ? year + 1 : year;
-                      qb2.whereRaw('MONTH(check_in) = ? AND YEAR(check_in) = ? AND DAY(check_in) = 1 AND HOUR(check_in) < 6', [nextM, nextY]);
+                      qb2.whereRaw('MONTH(check_in) = ? AND YEAR(check_in) = ? AND DAY(check_in) = 1 AND HOUR(check_in) < 10', [nextM, nextY]);
                   });
             })
             .select('employee_id', 'check_in', 'check_out', 'status', 'punch_source');
