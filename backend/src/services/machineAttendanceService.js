@@ -761,7 +761,15 @@ class MachineAttendanceService {
                     
                     const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employeeWithShift.shift_terminate_hour) * 60 * 60 * 1000);
                     if (punchTime > terminationTime) {
-                        console.log(`[WARN] Punch time ${punchTimeStr} is past terminationTime (${terminationTime.toISOString()}) for employee ${employeeId}, but allowing checkout to prevent absent status.`);
+                        await db('biometric_raw_logs').insert({
+                            company_id: companyId,
+                            device_serial: deviceSerial,
+                            employee_code,
+                            punch_time: punchTimeStr,
+                            status: 'skipped',
+                            error_details: `Punch ignored: shift terminated at ${terminationTime.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })}`
+                        });
+                        return { status: 'skipped', reason: 'Shift terminated' };
                     }
                 }
 
