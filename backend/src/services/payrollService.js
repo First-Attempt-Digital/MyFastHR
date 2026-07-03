@@ -189,22 +189,32 @@ class PayrollService {
 
                 const isFlat = rule.base_on === 'flat_amount';
                 const calcBaseEarned = rule.base_on === 'gross_salary' ? earnedGross : earnedBasic;
-                const eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
-                const erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
-
-                breakdown.push({
-                    rule_name: rule.rule_name,
-                    employee_percentage: rule.employee_percentage,
-                    employer_percentage: rule.employer_percentage,
-                    employee_share: eeShare.toFixed(2),
-                    employer_share: erShare.toFixed(2),
-                    base_on: rule.base_on
-                });
+                let eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
+                let erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
+                    const pfCeiling = 15000 * prorationFactor;
+                    const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
+                    
+                    if (pfExcess) {
+                        // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at 15000 (1800 cap)
+                        eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
+                        erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
+                    } else {
+                        // Option 1: Both Employee and Employer PF capped at 15000 (1800 cap)
+                        eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employee_percentage) / 100));
+                        erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
+                    }
                     employeePf = eeShare;
                     employerPf = erShare;
-                } else if (ruleNameLower.includes('esic') || ruleNameLower.includes('insurance')) {
+                } else if (ruleNameLower.includes('esic') || ruleNameLower.includes('esi') || ruleNameLower.includes('insurance')) {
+                    const structuredGross = parseFloat(activeRevision.gross_salary) 
+                        || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
+                    
+                    if (structuredGross >= 21000) {
+                        eeShare = 0;
+                        erShare = 0;
+                    }
                     employeeEsic = eeShare;
                     employerEsic = erShare;
                 } else {
@@ -216,6 +226,15 @@ class PayrollService {
                         });
                     }
                 }
+
+                breakdown.push({
+                    rule_name: rule.rule_name,
+                    employee_percentage: rule.employee_percentage,
+                    employer_percentage: rule.employer_percentage,
+                    employee_share: eeShare.toFixed(2),
+                    employer_share: erShare.toFixed(2),
+                    base_on: rule.base_on
+                });
             }
         } else {
             employeePf = includePf ? (parseFloat(activeRevision.employee_pf) * prorationFactor) : 0;
@@ -492,22 +511,32 @@ class PayrollService {
 
                 const isFlat = rule.base_on === 'flat_amount';
                 const calcBaseEarned = rule.base_on === 'gross_salary' ? (earnedBase + earnedAllowances) : earnedBase;
-                const eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
-                const erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
-
-                breakdown.push({
-                    rule_name: rule.rule_name,
-                    employee_percentage: rule.employee_percentage,
-                    employer_percentage: rule.employer_percentage,
-                    employee_share: eeShare.toFixed(2),
-                    employer_share: erShare.toFixed(2),
-                    base_on: rule.base_on
-                });
+                let eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
+                let erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
+                    const pfCeiling = 15000 * prorationFactor;
+                    const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
+                    
+                    if (pfExcess) {
+                        // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at 15000 (1800 cap)
+                        eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
+                        erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
+                    } else {
+                        // Option 1: Both Employee and Employer PF capped at 15000 (1800 cap)
+                        eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employee_percentage) / 100));
+                        erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
+                    }
                     employeePf = eeShare;
                     employerPf = erShare;
-                } else if (ruleNameLower.includes('esic') || ruleNameLower.includes('insurance')) {
+                } else if (ruleNameLower.includes('esic') || ruleNameLower.includes('esi') || ruleNameLower.includes('insurance')) {
+                    const structuredGross = parseFloat(activeRevision.gross_salary) 
+                        || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
+                    
+                    if (structuredGross >= 21000) {
+                        eeShare = 0;
+                        erShare = 0;
+                    }
                     employeeEsic = eeShare;
                     employerEsic = erShare;
                 } else {
@@ -519,6 +548,15 @@ class PayrollService {
                         });
                     }
                 }
+
+                breakdown.push({
+                    rule_name: rule.rule_name,
+                    employee_percentage: rule.employee_percentage,
+                    employer_percentage: rule.employer_percentage,
+                    employee_share: eeShare.toFixed(2),
+                    employer_share: erShare.toFixed(2),
+                    base_on: rule.base_on
+                });
             }
 
             filteredDeductions.forEach(d => {
@@ -1725,13 +1763,15 @@ class PayrollService {
                 'p.month': parseInt(month), 
                 'p.year': parseInt(year)
             })
-            .select('p.*', 'e.first_name', 'e.last_name', 'e.employee_id_number');
+            .select('p.*', 'e.first_name', 'e.last_name', 'e.employee_id_number', 'e.pf_excess_contribution');
 
         let ecrText = '';
         statements.forEach((stmt) => {
-            const pfWages = Math.min(15000, parseFloat(stmt.base_salary) || 0);
-            const epsWages = pfWages;
-            const edliWages = pfWages;
+            const pfExcess = stmt.pf_excess_contribution === true || stmt.pf_excess_contribution === 1;
+            const actualBase = parseFloat(stmt.base_salary) || 0;
+            const pfWages = pfExcess ? actualBase : Math.min(15000, actualBase);
+            const epsWages = Math.min(15000, actualBase);
+            const edliWages = Math.min(15000, actualBase);
             
             const epfEmployee = parseFloat(stmt.employee_pf) || 0;
             const epsEmployer = Math.round(epsWages * 0.0833);
@@ -1760,6 +1800,7 @@ class PayrollService {
 
         let csvText = 'IP_Number,IP_Name,No_of_Days_Wages_Paid,Total_Monthly_Wages,Reason_Code_Zero_Wages\n';
         statements.forEach((stmt) => {
+            if ((parseFloat(stmt.employee_esic) || 0) <= 0) return; // skip if no ESIC
             const ipNum = stmt.employee_id_number || 'IP1000000';
             const name = `${stmt.first_name} ${stmt.last_name}`.replace(/,/g, ' ').toUpperCase();
             const gross = parseFloat(stmt.base_salary) + (parseFloat(stmt.total_allowances) || 0);
