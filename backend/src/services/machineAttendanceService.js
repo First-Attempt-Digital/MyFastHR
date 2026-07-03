@@ -455,13 +455,24 @@ class MachineAttendanceService {
             const nextShiftDateObj = new Date(new Date(targetShiftDate).getTime() + 24 * 60 * 60 * 1000);
             const nextShiftDateStr = dateToISTDateString(nextShiftDateObj);
             
+            let cutoffHour = 6;
+            if (employeeWithShift && employeeWithShift.shift_start) {
+                const [sHours, sMins] = employeeWithShift.shift_start.split(':').map(Number);
+                const shiftStartMins = sHours * 60 + sMins;
+                const inMargin = employeeWithShift.shift_in_margin !== undefined ? parseInt(employeeWithShift.shift_in_margin) : 30;
+                const earliestCheckInMins = shiftStartMins - inMargin;
+                if (earliestCheckInMins < 360) { // 360 mins = 6:00 AM
+                    cutoffHour = Math.floor(Math.max(0, earliestCheckInMins) / 60);
+                }
+            }
+            
             const latestLog = await db('attendance')
                 .where({ employee_id: employeeId, company_id: companyId })
                 .andWhere(qb => {
                     qb.where(qb1 => {
-                        qb1.whereRaw('DATE(check_in) = ?', [targetShiftDate]).whereRaw('HOUR(check_in) >= 6');
+                        qb1.whereRaw('DATE(check_in) = ?', [targetShiftDate]).whereRaw('HOUR(check_in) >= ?', [cutoffHour]);
                     }).orWhere(qb2 => {
-                        qb2.whereRaw('DATE(check_in) = ?', [nextShiftDateStr]).whereRaw('HOUR(check_in) < 6');
+                        qb2.whereRaw('DATE(check_in) = ?', [nextShiftDateStr]).whereRaw('HOUR(check_in) < ?', [cutoffHour]);
                     });
                 })
                 .orderBy('check_in', 'desc')

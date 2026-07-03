@@ -34,6 +34,34 @@ class AttendanceRepository {
             nextLogicalDateStr = getISTDate(next);
         }
 
+        let cutoffHour = 6;
+        const activeAssignment = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', employeeId)
+            .where('esa.from_date', '<=', logicalDateStr)
+            .andWhere(qb => {
+                qb.where('esa.to_date', '>=', logicalDateStr).orWhereNull('esa.to_date');
+            })
+            .select('s.start_time', 's.session1_in_margin')
+            .orderBy('esa.id', 'desc')
+            .first();
+        
+        const shift = activeAssignment || await db('employees as e')
+            .leftJoin('shifts as s', 'e.shift_id', 's.id')
+            .where('e.id', employeeId)
+            .select('s.start_time', 's.session1_in_margin')
+            .first();
+        
+        if (shift && shift.start_time) {
+            const [sHours, sMins] = shift.start_time.split(':').map(Number);
+            const shiftStartMins = sHours * 60 + sMins;
+            const inMargin = shift.session1_in_margin !== undefined ? parseInt(shift.session1_in_margin) : 30;
+            const earliestCheckInMins = shiftStartMins - inMargin;
+            if (earliestCheckInMins < 360) { // 360 mins = 6:00 AM
+                cutoffHour = Math.floor(Math.max(0, earliestCheckInMins) / 60);
+            }
+        }
+
         const existing = await db('attendance')
             .where({
                 employee_id: employeeId,
@@ -42,9 +70,9 @@ class AttendanceRepository {
             })
             .andWhere(qb => {
                 qb.where(qb1 => {
-                    qb1.whereRaw('DATE(check_in) = ?', [logicalDateStr]).whereRaw('HOUR(check_in) >= 6');
+                    qb1.whereRaw('DATE(check_in) = ?', [logicalDateStr]).whereRaw('HOUR(check_in) >= ?', [cutoffHour]);
                 }).orWhere(qb2 => {
-                    qb2.whereRaw('DATE(check_in) = ?', [nextLogicalDateStr]).whereRaw('HOUR(check_in) < 6');
+                    qb2.whereRaw('DATE(check_in) = ?', [nextLogicalDateStr]).whereRaw('HOUR(check_in) < ?', [cutoffHour]);
                 });
             })
             .first();
