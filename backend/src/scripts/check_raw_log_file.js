@@ -1,12 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const logFile = path.join(__dirname, '../../biometric_debug_test.log');
+const logFile = path.join(__dirname, '../../biometric_machine_debug.log');
 
 function checkLogFile() {
     console.log(`=== SEARCHING RAW LOG FILE FOR CHANDAN (10013) ===`);
     if (!fs.existsSync(logFile)) {
-        console.error('Log file biometric_debug_test.log does not exist!');
+        console.error('Log file biometric_machine_debug.log does not exist!');
         process.exit(1);
     }
     
