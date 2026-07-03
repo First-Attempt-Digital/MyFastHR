@@ -120,14 +120,33 @@ async function fixAllJuly2Errors() {
             continue;
         }
         
-        // Determine allowed shift window for July 2nd shift
-        const shiftStart = emp.start_time || '09:00';
-        const shiftEnd = emp.end_time || '18:00';
-        const terminateHour = emp.terminate_hour !== null && emp.terminate_hour !== undefined 
-            ? parseFloat(emp.terminate_hour) 
+        // Resolve active shift for July 2nd
+        const assignment = await db('employee_shift_assignments as esa')
+            .join('shifts as s', 'esa.shift_id', 's.id')
+            .where('esa.employee_id', emp.id)
+            .where('esa.from_date', '<=', '2026-07-02')
+            .andWhere(qb => {
+                qb.where('esa.to_date', '>=', '2026-07-02').orWhereNull('esa.to_date');
+            })
+            .select('s.*')
+            .orderBy('esa.id', 'desc')
+            .first();
+
+        const activeShift = assignment || {
+            start_time: emp.start_time || '09:00',
+            end_time: emp.end_time || '18:00',
+            grace_period: emp.grace_period || 15,
+            terminate_hour: emp.terminate_hour,
+            session1_in_margin: emp.session1_in_margin
+        };
+
+        const shiftStart = activeShift.start_time || '09:00';
+        const shiftEnd = activeShift.end_time || '18:00';
+        const terminateHour = activeShift.terminate_hour !== null && activeShift.terminate_hour !== undefined 
+            ? parseFloat(activeShift.terminate_hour) 
             : 2;
-        const inMargin = emp.session1_in_margin !== null && emp.session1_in_margin !== undefined 
-            ? parseInt(emp.session1_in_margin) 
+        const inMargin = activeShift.session1_in_margin !== null && activeShift.session1_in_margin !== undefined 
+            ? parseInt(activeShift.session1_in_margin) 
             : 30;
 
         const [sH, sM] = shiftStart.split(':').map(Number);
@@ -185,9 +204,9 @@ async function fixAllJuly2Errors() {
             const checkInTime = dbDateToUTC(checkInTimeStr);
             const checkOutTime = dbDateToUTC(checkOutTimeStr);
             
-            const shiftStart = emp.start_time || '09:00';
-            const shiftEnd = emp.end_time || '18:00';
-            const graceIn = parseInt(emp.grace_period || 15);
+            const shiftStart = activeShift.start_time || '09:00';
+            const shiftEnd = activeShift.end_time || '18:00';
+            const graceIn = parseInt(activeShift.grace_period || 15);
             
             const [sH, sM] = shiftStart.split(':').map(Number);
             const [eH, eM] = shiftEnd.split(':').map(Number);
