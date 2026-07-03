@@ -48,6 +48,16 @@ function dateToISTDateString(dateVal) {
     return `${y}-${m}-${day}`;
 }
 
+function dateToISTMins(dateVal) {
+    if (!dateVal) return 0;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return 0;
+    const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    const h = istDate.getUTCHours();
+    const m = istDate.getUTCMinutes();
+    return h * 60 + m;
+}
+
 function getLogicalDateStr(checkIn, employeeShift = null) {
     if (!checkIn) return null;
     const d = dbDateToUTC(checkIn);
@@ -162,9 +172,11 @@ async function fixAllJuly2Errors() {
             const [sH, sM] = shiftStart.split(':').map(Number);
             const [eH, eM] = shiftEnd.split(':').map(Number);
             
-            const checkInMins = checkInTime.getHours() * 60 + checkInTime.getMinutes();
-            let checkOutMins = checkOutTime.getHours() * 60 + checkOutTime.getMinutes();
-            if (checkOutTime.getDate() !== checkInTime.getDate()) {
+            const checkInMins = dateToISTMins(checkInTime);
+            let checkOutMins = dateToISTMins(checkOutTime);
+            const checkInDateStr = dateToISTDateString(checkInTime);
+            const checkOutDateStr = dateToISTDateString(checkOutTime);
+            if (checkOutDateStr !== checkInDateStr) {
                 checkOutMins += 24 * 60;
             }
             

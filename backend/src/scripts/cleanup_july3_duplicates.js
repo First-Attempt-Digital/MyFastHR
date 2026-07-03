@@ -25,6 +25,27 @@ function dbDateToUTC(dateVal) {
     return isNaN(d.getTime()) ? null : d;
 }
 
+function dateToISTMins(dateVal) {
+    if (!dateVal) return 0;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return 0;
+    const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    const h = istDate.getUTCHours();
+    const m = istDate.getUTCMinutes();
+    return h * 60 + m;
+}
+
+function dateToISTDateString(dateVal) {
+    if (!dateVal) return null;
+    const d = dbDateToUTC(dateVal);
+    if (!d || isNaN(d.getTime())) return null;
+    const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+    const y = istDate.getUTCFullYear();
+    const m = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(istDate.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 async function cleanupAndFix() {
     console.log(`=== STARTING CLEANUP AND FIX FOR JULY 2ND & 3RD ===\n`);
     
@@ -89,11 +110,13 @@ async function cleanupAndFix() {
         const [sH, sM] = shiftStart.split(':').map(Number);
         const [eH, eM] = shiftEnd.split(':').map(Number);
         
-        const checkInMins = checkInTime.getHours() * 60 + checkInTime.getMinutes();
+        const checkInMins = dateToISTMins(checkInTime);
         
         // Correct next-day timezone logic for checkOutMins
-        let checkOutMins = checkOutTime.getHours() * 60 + checkOutTime.getMinutes();
-        if (checkOutTime.getDate() !== checkInTime.getDate()) {
+        let checkOutMins = dateToISTMins(checkOutTime);
+        const checkInDateStr = dateToISTDateString(checkInTime);
+        const checkOutDateStr = dateToISTDateString(checkOutTime);
+        if (checkOutDateStr !== checkInDateStr) {
             checkOutMins += 24 * 60;
         }
         
