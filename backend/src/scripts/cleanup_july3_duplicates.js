@@ -49,38 +49,41 @@ function dateToISTDateString(dateVal) {
 async function cleanupAndFix() {
     console.log(`=== STARTING CLEANUP AND FIX FOR JULY 2ND & 3RD ===\n`);
     
-    // 1. DELETE INCORRECT DUPLICATE RECORDS ON JULY 3RD
-    // If an employee has duplicate records on July 3rd, keep the 'present' one and delete the 'absent' one
-    const duplicates = await db('attendance')
-        .select('employee_id')
+    // 1. DELETE ALL BIOMETRIC ATTENDANCE ON JULY 3RD AND RE-PROCESS FROM RAW LOGS
+    // This cleans up any duplicate, mismatched, or missing check-ins on July 3rd.
+    console.log("Cleaning up all biometric attendance records for July 3rd...");
+    await db('attendance')
+        .where({ company_id: 27 })
         .whereRaw('DATE(check_in) = ?', ['2026-07-03'])
-        .groupBy('employee_id')
-        .havingRaw('COUNT(id) > 1');
-        
-    console.log(`Found ${duplicates.length} employees with duplicate records on July 3rd.`);
-    
-    for (const dup of duplicates) {
-        const empId = dup.employee_id;
-        const records = await db('attendance')
-            .where({ employee_id: empId })
-            .whereRaw('DATE(check_in) = ?', ['2026-07-03'])
-            .orderBy('id', 'asc');
-            
-        console.log(`\nProcessing duplicate records for Employee ID: ${empId}`);
-        
-        // Find the record to keep (preferably the one that is 'present')
-        let recordToKeep = records.find(r => r.status === 'present' || r.status === 'pending' || r.status === 'late' || r.status === 'early_out');
-        if (!recordToKeep) {
-            recordToKeep = records[0]; // fallback
-        }
-        
-        console.log(`  Keeping Record ID: ${recordToKeep.id} | check_in: ${recordToKeep.check_in} | status: ${recordToKeep.status}`);
-        
-        for (const r of records) {
-            if (r.id !== recordToKeep.id) {
-                console.log(`  Deleting Record ID: ${r.id} | check_in: ${r.check_in} | status: ${r.status}`);
-                await db('attendance').where({ id: r.id }).del();
-            }
+        .where('punch_source', 'biometric')
+        .del();
+
+    console.log("Resetting July 3rd raw biometric logs to pending...");
+    await db('biometric_raw_logs')
+        .where({ company_id: 27 })
+        .whereRaw('DATE(punch_time) = ?', ['2026-07-03'])
+        .update({ status: 'pending' });
+
+    console.log("Fetching raw biometric logs for July 3rd...");
+    const rawLogs = await db('biometric_raw_logs')
+        .where({ company_id: 27 })
+        .whereRaw('DATE(punch_time) = ?', ['2026-07-03'])
+        .orderBy('punch_time', 'asc');
+
+    console.log(`Found ${rawLogs.length} raw logs for July 3rd. Re-processing...`);
+    const machineAttendanceService = require('../services/machineAttendanceService');
+    for (const log of rawLogs) {
+        console.log(`  -> Processing punch: Code ${log.employee_code} at ${log.punch_time}`);
+        const punchPayload = {
+            employee_code: log.employee_code,
+            punch_time: log.punch_time,
+            device_serial: log.device_serial || 'BIOMETRIC_DEV'
+        };
+        try {
+            const res = await machineAttendanceService.processPunch(27, log.device_serial || 'BIOMETRIC_DEV', punchPayload);
+            console.log(`     Result: ${JSON.stringify(res)}`);
+        } catch (err) {
+            console.error(`     Error processing: ${err.message}`);
         }
     }
     
