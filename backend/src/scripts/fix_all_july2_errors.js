@@ -67,7 +67,7 @@ function getLogicalDateStr(checkIn, employeeShift = null) {
     const istStr = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
     const hour = parseInt(istStr, 10);
     
-    if (hour >= 0 && hour < 6) {
+    if (hour >= 0 && hour < 10) {
         const prevDate = new Date(d.getTime() - 24 * 60 * 60 * 1000);
         const prevDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         
@@ -135,13 +135,15 @@ async function fixAllJuly2Errors() {
 
         const shiftStartActual = new Date(`2026-07-02T${String(sH).padStart(2,'0')}:${String(sM).padStart(2,'0')}:00+05:30`);
         let shiftEndActual = new Date(`2026-07-02T${String(eH).padStart(2,'0')}:${String(eM).padStart(2,'0')}:00+05:30`);
-        if (shiftEndActual < shiftStartActual) {
+        const isNight = eH * 60 + eM < sH * 60 + sM;
+        if (isNight) {
             // midnight crossing (night shift)
             shiftEndActual = new Date(shiftEndActual.getTime() + 24 * 60 * 60 * 1000);
         }
 
         const earliestAllowedIn = new Date(shiftStartActual.getTime() - inMargin * 60 * 1000);
-        const latestAllowedOut = new Date(shiftEndActual.getTime() + terminateHour * 60 * 60 * 1000);
+        const extendedHours = isNight ? Math.max(8, terminateHour) : terminateHour;
+        const latestAllowedOut = new Date(shiftEndActual.getTime() + extendedHours * 60 * 60 * 1000);
 
         const july2Punches = [];
         for (const p of rawPunches) {

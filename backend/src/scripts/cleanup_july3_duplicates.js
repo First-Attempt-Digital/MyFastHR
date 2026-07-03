@@ -66,13 +66,13 @@ async function cleanupAndFix() {
 
     console.log(`Found ${rawLogs.length} raw logs for July 3rd in memory.`);
 
-    console.log("Deleting July 3rd raw biometric logs from database to bypass duplicate transmission check...");
+    console.log("Resetting July 3rd raw biometric logs in database to pending for clean status audit...");
     await db('biometric_raw_logs')
         .where({ company_id: 27 })
         .whereRaw('DATE(punch_time) = ?', ['2026-07-03'])
-        .del();
+        .update({ status: 'pending', error_details: null });
 
-    console.log(`Re-processing ${rawLogs.length} raw logs...`);
+    console.log(`Re-processing ${rawLogs.length} raw logs with duplicate bypass...`);
     const machineAttendanceService = require('../services/machineAttendanceService');
     
     // Explicit helper to format Date object into YYYY-MM-DD HH:mm:ss local string
@@ -97,7 +97,7 @@ async function cleanupAndFix() {
             device_serial: log.device_serial || 'BIOMETRIC_DEV'
         };
         try {
-            const res = await machineAttendanceService.processPunch(27, log.device_serial || 'BIOMETRIC_DEV', punchPayload);
+            const res = await machineAttendanceService.processPunch(27, log.device_serial || 'BIOMETRIC_DEV', punchPayload, true);
             console.log(`     Result: ${JSON.stringify(res)}`);
         } catch (err) {
             console.error(`     Error processing: ${err.message}`);

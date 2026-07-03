@@ -27,7 +27,7 @@ function checkIfLogUsedGrace(log, employee, rules) {
     const [eH, eM] = (employee?.shift_end || '18:00').split(':').map(Number);
     const isNight = eH * 60 + eM < sH * 60 + sM;
     
-    if (isNight && hour >= 0 && hour < 6) {
+    if (isNight && hour >= 0 && hour < 10) {
         const prevDate = new Date(logCheckIn.getTime() - 24 * 60 * 60 * 1000);
         logicalDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
     }
@@ -217,7 +217,7 @@ class MachineAttendanceService {
     /**
      * Processes a single machine log entry.
      */
-    async processPunch(companyId, deviceSerial, punch) {
+    async processPunch(companyId, deviceSerial, punch, bypassDuplicateCheck = false) {
         const { employee_code, timestamp } = punch;
 
         if (!employee_code || !timestamp) {
@@ -243,7 +243,7 @@ class MachineAttendanceService {
             })
             .first();
 
-        if (duplicateRaw) {
+        if (!bypassDuplicateCheck && duplicateRaw) {
             return { status: 'skipped', reason: 'Duplicate log transmission' };
         }
 
@@ -360,7 +360,7 @@ class MachineAttendanceService {
             const istHourStr = punchTime.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
             const hour = parseInt(istHourStr, 10);
             let targetShiftDate = dateStr;
-            if (!activeLog && hour >= 0 && hour < 6) {
+            if (!activeLog && hour >= 0 && hour < 10) {
                 const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
                 const prevDateStr = dateToISTDateString(prevDateObj);
                 
@@ -889,18 +889,6 @@ class MachineAttendanceService {
                     }
                 }
 
-                // Check for half-day limit skip for ALL shift types
-                if (workedHours < halfDayLimit) {
-                    await db('biometric_raw_logs').insert({
-                        company_id: companyId,
-                        device_serial: deviceSerial,
-                        employee_code,
-                        punch_time: punchTimeStr,
-                        status: 'skipped',
-                        error_details: `Punch ignored: worked hours (${workedHours.toFixed(2)}) is less than the half-day threshold (${halfDayLimit.toFixed(2)} hours).`
-                    });
-                    return { status: 'skipped', reason: 'Punch ignored: before half-day limit' };
-                }
 
                     // 2. Determine if we should generate an early out regularization request
                     let triggersEarlyOutRequest = false;
