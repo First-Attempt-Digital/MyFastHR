@@ -76,7 +76,7 @@ async function cleanupAndFix() {
         console.log(`  -> Processing punch: Code ${log.employee_code} at ${log.punch_time}`);
         const punchPayload = {
             employee_code: log.employee_code,
-            punch_time: log.punch_time,
+            timestamp: log.punch_time,
             device_serial: log.device_serial || 'BIOMETRIC_DEV'
         };
         try {
