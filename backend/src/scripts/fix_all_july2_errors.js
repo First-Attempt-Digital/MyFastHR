@@ -95,7 +95,14 @@ async function fixAllJuly2Errors() {
     // Fetch all employees
     const employees = await db('employees as e')
         .leftJoin('shifts as s', 'e.shift_id', 's.id')
-        .select('e.*', 's.start_time', 's.end_time', 's.grace_period');
+        .select(
+            'e.*', 
+            's.start_time', 
+            's.end_time', 
+            's.grace_period',
+            's.terminate_hour',
+            's.session1_in_margin'
+        );
         
     console.log(`Analyzing ${employees.length} employees...`);
     
@@ -113,26 +120,33 @@ async function fixAllJuly2Errors() {
             continue;
         }
         
-        // Map punches to their logical date (July 2nd)
-        // If a punch occurs on July 3rd before 10 AM, and the employee is on a night shift or day shift starting July 2nd:
-        // We resolve if it belongs to July 2nd logical date.
-        const hasJuly2CheckIn = await db('attendance')
-            .where({ employee_id: emp.id })
-            .whereRaw('DATE(check_in) = ?', ['2026-07-02'])
-            .first();
+        // Determine allowed shift window for July 2nd shift
+        const shiftStart = emp.start_time || '09:00';
+        const shiftEnd = emp.end_time || '18:00';
+        const terminateHour = emp.terminate_hour !== null && emp.terminate_hour !== undefined 
+            ? parseFloat(emp.terminate_hour) 
+            : 2;
+        const inMargin = emp.session1_in_margin !== null && emp.session1_in_margin !== undefined 
+            ? parseInt(emp.session1_in_margin) 
+            : 30;
+
+        const [sH, sM] = shiftStart.split(':').map(Number);
+        const [eH, eM] = shiftEnd.split(':').map(Number);
+
+        const shiftStartActual = new Date(`2026-07-02T${String(sH).padStart(2,'0')}:${String(sM).padStart(2,'0')}:00+05:30`);
+        let shiftEndActual = new Date(`2026-07-02T${String(eH).padStart(2,'0')}:${String(eM).padStart(2,'0')}:00+05:30`);
+        if (shiftEndActual < shiftStartActual) {
+            // midnight crossing (night shift)
+            shiftEndActual = new Date(shiftEndActual.getTime() + 24 * 60 * 60 * 1000);
+        }
+
+        const earliestAllowedIn = new Date(shiftStartActual.getTime() - inMargin * 60 * 1000);
+        const latestAllowedOut = new Date(shiftEndActual.getTime() + terminateHour * 60 * 60 * 1000);
 
         const july2Punches = [];
         for (const p of rawPunches) {
             const punchTime = dbDateToUTC(p.punch_time);
-            const logicalDate = getLogicalDateStr(punchTime, emp);
-            
-            // Fallback for night shifts or late checkouts:
-            // Any punch on July 3rd morning (before 10 AM) is logically July 2nd checkout 
-            // ONLY if the employee actually has a check-in on July 2nd.
-            const pTimeStr = formatLocalYYYYMMDDHHmmss(punchTime);
-            const isJuly3Morning = hasJuly2CheckIn && pTimeStr.startsWith('2026-07-03') && punchTime.getHours() < 10;
-            
-            if (logicalDate === '2026-07-02' || isJuly3Morning) {
+            if (punchTime >= earliestAllowedIn && punchTime <= latestAllowedOut) {
                 july2Punches.push(p);
             }
         }
@@ -157,7 +171,10 @@ async function fixAllJuly2Errors() {
         console.log(`  Calculated: check_in = ${checkInTimeStr} | check_out = ${checkOutTimeStr}`);
         
         // Find existing attendance record for July 2nd
-        let attRecord = hasJuly2CheckIn;
+        let attRecord = await db('attendance')
+            .where({ employee_id: emp.id })
+            .whereRaw('DATE(check_in) = ?', ['2026-07-02'])
+            .first();
             
         // Calculate new status
         let newStatus = 'present';
