@@ -11,7 +11,7 @@ async function debugAllNightShifts() {
         .whereNull('a.check_out')
         .select(
             'a.id as attendance_id', 'a.check_in', 'a.status', 'a.punch_source',
-            'e.id as employee_id', 'e.first_name', 'e.last_name', 'e.employee_id_number',
+            'e.id as employee_id', 'e.first_name', 'e.last_name', 'e.employee_id_number', 'e.company_id',
             's.start_time', 's.end_time', 's.terminate_hour'
         );
         
