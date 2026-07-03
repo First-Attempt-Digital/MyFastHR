@@ -322,7 +322,7 @@ class MachineAttendanceService {
             if (openPrevDayLog) {
                 const checkInTime = dbDateToUTC(openPrevDayLog.check_in);
                 const diffHours = Math.abs(punchTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
-                if (diffHours < 16) {
+                if (diffHours < 20) {
                     activeLog = openPrevDayLog; // night shift checkout!
                 }
             }
@@ -761,15 +761,7 @@ class MachineAttendanceService {
                     
                     const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employeeWithShift.shift_terminate_hour) * 60 * 60 * 1000);
                     if (punchTime > terminationTime) {
-                        await db('biometric_raw_logs').insert({
-                            company_id: companyId,
-                            device_serial: deviceSerial,
-                            employee_code,
-                            punch_time: punchTimeStr,
-                            status: 'skipped',
-                            error_details: 'Punch ignored: shift has terminated (checkout window expired)'
-                        });
-                        return { status: 'skipped', reason: 'Shift terminated' };
+                        console.log(`[WARN] Punch time ${punchTimeStr} is past terminationTime (${terminationTime.toISOString()}) for employee ${employeeId}, but allowing checkout to prevent absent status.`);
                     }
                 }
 
