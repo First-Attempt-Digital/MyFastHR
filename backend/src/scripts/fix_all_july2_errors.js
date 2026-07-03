@@ -166,7 +166,8 @@ async function fixAllJuly2Errors() {
         const latestPunch = july2Punches[july2Punches.length - 1];
         
         const checkInTimeStr = formatLocalYYYYMMDDHHmmss(dbDateToUTC(earliestPunch.punch_time));
-        const checkOutTimeStr = earliestPunch.id === latestPunch.id ? null : formatLocalYYYYMMDDHHmmss(dbDateToUTC(latestPunch.punch_time));
+        const diffMins = (dbDateToUTC(latestPunch.punch_time) - dbDateToUTC(earliestPunch.punch_time)) / 60000;
+        const checkOutTimeStr = diffMins < 5 ? null : formatLocalYYYYMMDDHHmmss(dbDateToUTC(latestPunch.punch_time));
         
         console.log(`  Calculated: check_in = ${checkInTimeStr} | check_out = ${checkOutTimeStr}`);
         
