@@ -58,25 +58,42 @@ async function cleanupAndFix() {
         .where('punch_source', 'biometric')
         .del();
 
-    console.log("Resetting July 3rd raw biometric logs to pending...");
-    await db('biometric_raw_logs')
-        .where({ company_id: 27 })
-        .whereRaw('DATE(punch_time) = ?', ['2026-07-03'])
-        .update({ status: 'pending' });
-
     console.log("Fetching raw biometric logs for July 3rd...");
     const rawLogs = await db('biometric_raw_logs')
         .where({ company_id: 27 })
         .whereRaw('DATE(punch_time) = ?', ['2026-07-03'])
         .orderBy('punch_time', 'asc');
 
-    console.log(`Found ${rawLogs.length} raw logs for July 3rd. Re-processing...`);
+    console.log(`Found ${rawLogs.length} raw logs for July 3rd in memory.`);
+
+    console.log("Deleting July 3rd raw biometric logs from database to bypass duplicate transmission check...");
+    await db('biometric_raw_logs')
+        .where({ company_id: 27 })
+        .whereRaw('DATE(punch_time) = ?', ['2026-07-03'])
+        .del();
+
+    console.log(`Re-processing ${rawLogs.length} raw logs...`);
     const machineAttendanceService = require('../services/machineAttendanceService');
+    
+    // Explicit helper to format Date object into YYYY-MM-DD HH:mm:ss local string
+    function formatToLocalString(dateVal) {
+        const d = dbDateToUTC(dateVal);
+        if (!d || isNaN(d.getTime())) return null;
+        const yr = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const dy = String(d.getDate()).padStart(2, '0');
+        const hr = String(d.getHours()).padStart(2, '0');
+        const mi = String(d.getMinutes()).padStart(2, '0');
+        const sc = String(d.getSeconds()).padStart(2, '0');
+        return `${yr}-${mo}-${dy} ${hr}:${mi}:${sc}`;
+    }
+
     for (const log of rawLogs) {
-        console.log(`  -> Processing punch: Code ${log.employee_code} at ${log.punch_time}`);
+        const localPunchTimeStr = formatToLocalString(log.punch_time);
+        console.log(`  -> Processing punch: Code ${log.employee_code} at ${localPunchTimeStr}`);
         const punchPayload = {
             employee_code: log.employee_code,
-            timestamp: log.punch_time,
+            timestamp: localPunchTimeStr,
             device_serial: log.device_serial || 'BIOMETRIC_DEV'
         };
         try {
