@@ -888,7 +888,18 @@ class MachineAttendanceService {
                         isEarly = true;
                     }
                 }
-
+                // Check for half-day limit skip for ALL shift types
+                if (workedHours < halfDayLimit) {
+                    await db('biometric_raw_logs').insert({
+                        company_id: companyId,
+                        device_serial: deviceSerial,
+                        employee_code,
+                        punch_time: punchTimeStr,
+                        status: 'skipped',
+                        error_details: `Punch ignored: worked hours (${workedHours.toFixed(2)}) is less than the half-day threshold (${halfDayLimit.toFixed(2)} hours).`
+                    });
+                    return { status: 'skipped', reason: 'Punch ignored: before half-day limit' };
+                }
 
                     // 2. Determine if we should generate an early out regularization request
                     let triggersEarlyOutRequest = false;
