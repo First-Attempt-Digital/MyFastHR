@@ -106,15 +106,21 @@ async function fixAllJuly2Errors() {
         // Map punches to their logical date (July 2nd)
         // If a punch occurs on July 3rd before 10 AM, and the employee is on a night shift or day shift starting July 2nd:
         // We resolve if it belongs to July 2nd logical date.
+        const hasJuly2CheckIn = await db('attendance')
+            .where({ employee_id: emp.id })
+            .whereRaw('DATE(check_in) = ?', ['2026-07-02'])
+            .first();
+
         const july2Punches = [];
         for (const p of rawPunches) {
             const punchTime = dbDateToUTC(p.punch_time);
             const logicalDate = getLogicalDateStr(punchTime, emp);
             
             // Fallback for night shifts or late checkouts:
-            // Any punch on July 3rd morning (before 10 AM) is logically July 2nd checkout if they have no other logical assignment
+            // Any punch on July 3rd morning (before 10 AM) is logically July 2nd checkout 
+            // ONLY if the employee actually has a check-in on July 2nd.
             const pTimeStr = formatLocalYYYYMMDDHHmmss(punchTime);
-            const isJuly3Morning = pTimeStr.startsWith('2026-07-03') && punchTime.getHours() < 10;
+            const isJuly3Morning = hasJuly2CheckIn && pTimeStr.startsWith('2026-07-03') && punchTime.getHours() < 10;
             
             if (logicalDate === '2026-07-02' || isJuly3Morning) {
                 july2Punches.push(p);
@@ -141,10 +147,7 @@ async function fixAllJuly2Errors() {
         console.log(`  Calculated: check_in = ${checkInTimeStr} | check_out = ${checkOutTimeStr}`);
         
         // Find existing attendance record for July 2nd
-        let attRecord = await db('attendance')
-            .where({ employee_id: emp.id })
-            .whereRaw('DATE(check_in) = ?', ['2026-07-02'])
-            .first();
+        let attRecord = hasJuly2CheckIn;
             
         // Calculate new status
         let newStatus = 'present';
@@ -160,7 +163,10 @@ async function fixAllJuly2Errors() {
             const [eH, eM] = shiftEnd.split(':').map(Number);
             
             const checkInMins = checkInTime.getHours() * 60 + checkInTime.getMinutes();
-            const checkOutMins = checkOutTime.getHours() * 60 + checkOutTime.getMinutes();
+            let checkOutMins = checkOutTime.getHours() * 60 + checkOutTime.getMinutes();
+            if (checkOutTime.getDate() !== checkInTime.getDate()) {
+                checkOutMins += 24 * 60;
+            }
             
             const s1StartMins = sH * 60 + sM;
             let s1EndMins = eH * 60 + eM;
