@@ -152,7 +152,7 @@ class RegularizationService {
                 }
             }
 
-            const checkInTime = request.check_in ? `${dateStr} ${request.check_in}` : `${dateStr} 09:00:00`;
+            const checkInTime = request.check_in ? `${dateStr} ${request.check_in}` : `${dateStr} 12:00:00`;
             const checkOutTime = request.check_out ? `${dateStr} ${request.check_out}` : `${dateStr} 18:00:00`;
             const attendanceStatus = request.regularization_type === 'half_day' ? 'half-day' : 'present';
 

@@ -1576,7 +1576,7 @@ class AttendanceService {
                 employee_id,
                 company_id: companyId,
                 status: dbStatus,
-                check_in: check_in || `${date} 09:00:00`,
+                check_in: check_in || `${date} 12:00:00`,
                 check_out: check_out || `${date} 18:00:00`,
                 punch_source: 'manual',
                 created_at: db.fn.now()
@@ -1856,7 +1856,7 @@ class AttendanceService {
                         const [id] = await trx('attendance').insert({
                             employee_id: empId,
                             company_id: companyId,
-                            check_in: `${dateStr} 09:00:00`,
+                            check_in: `${dateStr} 12:00:00`,
                             check_out: `${dateStr} 18:00:00`,
                             status: 'present',
                             created_at: db.fn.now()
@@ -2075,7 +2075,7 @@ class AttendanceService {
                 await trx('attendance').insert({
                     employee_id,
                     company_id: companyId,
-                    check_in: `${date} 09:00:00`,
+                    check_in: `${date} 12:00:00`,
                     check_out: `${date} 18:00:00`,
                     status: dbStatus,
                     punch_source: 'manual',
@@ -3643,7 +3643,7 @@ class AttendanceService {
                     await db('attendance').insert({
                         employee_id: request.employee_id,
                         company_id: companyId,
-                        check_in: punchTimeStr || `${dateStr} 09:00:00`,
+                        check_in: punchTimeStr || `${dateStr} 12:00:00`,
                         check_out: punchTimeStr || `${dateStr} 18:00:00`,
                         status: dbStatus,
                         punch_source: 'entry_request',
