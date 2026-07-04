@@ -2042,7 +2042,8 @@ class AttendanceService {
             const empAssignments = await trx('employee_shift_assignments as esa')
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', employee_id)
-                .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time');
+                .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+                .orderBy('esa.id', 'desc');
 
             const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000);
             const nextDateStr = nextDate.toISOString().split('T')[0];
@@ -2068,6 +2069,8 @@ class AttendanceService {
                     .where({ id: existing.id })
                     .update({
                         status: dbStatus,
+                        check_in: `${date} 12:00:00`,
+                        check_out: `${date} 18:00:00`,
                         punch_source: 'manual',
                         updated_at: db.fn.now()
                     });
