@@ -1170,10 +1170,16 @@ class AttendanceService {
             }
         });
         
-        // Sort each array
+        // Sort each array (manual override first, then by time)
         Object.keys(attendanceMap).forEach(empId => {
             Object.keys(attendanceMap[empId]).forEach(day => {
-                attendanceMap[empId][day].sort((a, b) => a.time - b.time);
+                attendanceMap[empId][day].sort((a, b) => {
+                    const aManual = a.punch_source === 'manual' || a.punch_source === 'manual_override';
+                    const bManual = b.punch_source === 'manual' || b.punch_source === 'manual_override';
+                    if (aManual && !bManual) return -1;
+                    if (!aManual && bManual) return 1;
+                    return a.time - b.time;
+                });
             });
         });
 
@@ -1903,6 +1909,15 @@ class AttendanceService {
                 const logLogicalDate = getLogicalDateStr(a.check_in, shifts, employee);
                 return logLogicalDate === dateStr;
             });
+            dayLogs.sort((a, b) => {
+                const aTime = dbDateToUTC(a.check_in).getTime();
+                const bTime = dbDateToUTC(b.check_in).getTime();
+                const aManual = a.punch_source === 'manual' || a.punch_source === 'manual_override';
+                const bManual = b.punch_source === 'manual' || b.punch_source === 'manual_override';
+                if (aManual && !bManual) return -1;
+                if (!aManual && bManual) return 1;
+                return aTime - bTime;
+            });
             const record = dayLogs[0]; // fallback/primary status record
             const shift = shifts.find(s => {
                 const fromStr = toLocalYMD(s.from_date);
@@ -2002,6 +2017,15 @@ class AttendanceService {
                 
                 const logLogicalDate = getLogicalDateStr(a.check_in, formattedAssignments, defaultShift);
                 return logLogicalDate === date;
+            });
+            empLogs.sort((a, b) => {
+                const aTime = dbDateToUTC(a.check_in).getTime();
+                const bTime = dbDateToUTC(b.check_in).getTime();
+                const aManual = a.punch_source === 'manual' || a.punch_source === 'manual_override';
+                const bManual = b.punch_source === 'manual' || b.punch_source === 'manual_override';
+                if (aManual && !bManual) return -1;
+                if (!aManual && bManual) return 1;
+                return aTime - bTime;
             });
             const record = empLogs[0];
             const shiftName = activeAssignment?.shift_name || defaultShift?.name || '---';
