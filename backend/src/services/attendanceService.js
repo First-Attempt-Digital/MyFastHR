@@ -1501,7 +1501,7 @@ class AttendanceService {
                 grid[d] = status;
                 grid_timings[d] = { in1, out1, in2, out2 };
                 grid_meta[d] = {
-                    is_override: dayLogs.length > 0 && (dayLogs[0].punch_source === 'manual' || dayLogs[0].punch_source === 'manual_override'),
+                    is_override: dayLogs.some(a => a.punch_source === 'manual' || a.punch_source === 'manual_override'),
                     is_grace: isGrace && status !== 'L' && status !== 'A' && status !== '-'
                 };
             }
