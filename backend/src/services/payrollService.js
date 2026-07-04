@@ -193,7 +193,7 @@ class PayrollService {
                 let erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
-                    const pfCeiling = 15000 * prorationFactor;
+                    const pfCeiling = 15000;
                     const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
                     
                     if (pfExcess) {
@@ -515,7 +515,7 @@ class PayrollService {
                 let erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
-                    const pfCeiling = 15000 * prorationFactor;
+                    const pfCeiling = 15000;
                     const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
                     
                     if (pfExcess) {
