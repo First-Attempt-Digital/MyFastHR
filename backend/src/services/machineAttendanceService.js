@@ -545,6 +545,110 @@ class MachineAttendanceService {
                 }
             }
 
+            // If activeLog exists and is open (check_out is null), check if its shift has terminated.
+            // If it has terminated, we treat this punch as a new check-in attempt for today instead of a check-out.
+            const isSession1Checkout = (reqPunches === 4 && !isSession2);
+            if (activeLog && activeLog.check_out === null && employeeWithShift && employeeWithShift.shift_terminate_hour && !isSession1Checkout) {
+                const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
+                const shiftStartStr = employeeWithShift.shift_start || '09:00';
+                const shiftEndStr = employeeWithShift.shift_end || '18:00';
+                
+                const [sHours, sMins] = shiftStartStr.split(':').map(Number);
+                const [eHours, eMins] = shiftEndStr.split(':').map(Number);
+                const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                let shiftEndDate = new Date(`${checkInDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                if (shiftEndDate < shiftStartDate) {
+                    shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                }
+                
+                const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employeeWithShift.shift_terminate_hour) * 60 * 60 * 1000);
+                if (punchTime > terminationTime) {
+                    // Shift has terminated! Reset activeLog to null so it forces a check-in today
+                    activeLog = null;
+                    
+                    // Recalculate targetShiftDate and reload shift details for today's date
+                    const istHourStr = punchTime.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
+                    const hour = parseInt(istHourStr, 10);
+                    targetShiftDate = dateStr;
+                    if (hour >= 0 && hour < 10) {
+                        const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
+                        const prevDateStr = dateToISTDateString(prevDateObj);
+                        
+                        let prevShift = null;
+                        const activeAssignment = await db('employee_shift_assignments as esa')
+                            .join('shifts as s', 'esa.shift_id', 's.id')
+                            .where('esa.employee_id', employeeId)
+                            .where('esa.from_date', '<=', prevDateStr)
+                            .andWhere(qb => {
+                                qb.where('esa.to_date', '>=', prevDateStr).orWhereNull('esa.to_date');
+                            })
+                            .select('s.*')
+                            .orderBy('esa.id', 'desc')
+                            .first();
+                        
+                        if (activeAssignment) {
+                            prevShift = activeAssignment;
+                        } else {
+                            prevShift = await db('shifts').where('id', employeeWithShift.shift_id).first();
+                        }
+                        
+                        if (prevShift && isNightShift(prevShift)) {
+                            targetShiftDate = prevDateStr;
+                        }
+                    }
+                    
+                    // Reload the active shift assignment for the new targetShiftDate
+                    const activeAssignment = await db('employee_shift_assignments as esa')
+                        .join('shifts as s', 'esa.shift_id', 's.id')
+                        .where('esa.employee_id', employeeId)
+                        .where('esa.from_date', '<=', targetShiftDate)
+                        .andWhere(qb => {
+                            qb.where('esa.to_date', '>=', targetShiftDate).orWhereNull('esa.to_date');
+                        })
+                        .select(
+                            's.is_flexi',
+                            's.min_hours',
+                            's.start_time',
+                            's.end_time',
+                            's.grace_period as shift_grace',
+                            's.grace_count_limit as shift_grace_count_limit',
+                            's.total_punches_required as shift_total_punches',
+                            's.session1_in_margin as shift_in_margin',
+                            's.session1_out_margin as shift_out_margin',
+                            's.session2_start_time',
+                            's.session2_end_time',
+                            's.session2_in_margin',
+                            's.session2_out_margin',
+                            's.session1_grace_out',
+                            's.session2_grace_in',
+                            's.session2_grace_out',
+                            's.terminate_hour as shift_terminate_hour'
+                        )
+                        .orderBy('esa.id', 'desc')
+                        .first();
+
+                    if (activeAssignment) {
+                        employeeWithShift.shift_is_flexi = activeAssignment.is_flexi;
+                        employeeWithShift.min_hours = activeAssignment.min_hours;
+                        employeeWithShift.shift_start = activeAssignment.start_time;
+                        employeeWithShift.shift_end = activeAssignment.end_time;
+                        employeeWithShift.shift_grace = activeAssignment.shift_grace;
+                        employeeWithShift.shift_grace_count_limit = activeAssignment.shift_grace_count_limit;
+                        employeeWithShift.shift_total_punches = activeAssignment.shift_total_punches;
+                        employeeWithShift.shift_in_margin = activeAssignment.shift_in_margin;
+                        employeeWithShift.shift_out_margin = activeAssignment.shift_out_margin;
+                        employeeWithShift.session2_start_time = activeAssignment.session2_start_time;
+                        employeeWithShift.session2_end_time = activeAssignment.session2_end_time;
+                        employeeWithShift.session2_in_margin = activeAssignment.session2_in_margin;
+                        employeeWithShift.session2_out_margin = activeAssignment.session2_out_margin;
+                        employeeWithShift.session1_grace_out = activeAssignment.session1_grace_out;
+                        employeeWithShift.session2_grace_in = activeAssignment.session2_grace_in;
+                        employeeWithShift.session2_grace_out = activeAssignment.session2_grace_out;
+                        employeeWithShift.shift_terminate_hour = activeAssignment.shift_terminate_hour;
+                    }
+                }
+            }
+
             // Overwrite/map shift parameters for Session 2 if active
             if (isSession2 && employeeWithShift) {
                 employeeWithShift.shift_start = employeeWithShift.session2_start_time || '14:00';
