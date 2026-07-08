@@ -464,7 +464,23 @@ class AttendanceService {
             }
             
             if (prevShift && isNightShift(prevShift)) {
-                dateStr = prevDateStr;
+                const prevShiftStartStr = prevShift.start_time || '09:00';
+                const prevShiftEndStr = prevShift.end_time || '18:00';
+                const prevTerminateHour = parseInt(prevShift.terminate_hour || 2);
+
+                const [sHours, sMins] = prevShiftStartStr.split(':').map(Number);
+                const [eHours, eMins] = prevShiftEndStr.split(':').map(Number);
+
+                const prevShiftStartDate = new Date(`${prevDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
+                let prevShiftEndDate = new Date(`${prevDateStr} ${String(eHours).padStart(2, '0')}:${String(eMins).padStart(2, '0')}:00 +05:30`);
+                if (prevShiftEndDate < prevShiftStartDate) {
+                    prevShiftEndDate = new Date(prevShiftEndDate.getTime() + 24 * 60 * 60 * 1000);
+                }
+                const prevTerminationTime = new Date(prevShiftEndDate.getTime() + prevTerminateHour * 60 * 60 * 1000);
+
+                if (now <= prevTerminationTime) {
+                    dateStr = prevDateStr;
+                }
             }
         }
 
