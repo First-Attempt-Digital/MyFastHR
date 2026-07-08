@@ -536,6 +536,41 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        if (employeesData.length === 0) return;
+
+        // Filter employee list based on active filters
+        const matches = employeesData.filter(emp => {
+            const matchesOutlet = matchText(emp.office_location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation, selectedDesignation);
+            
+            const shift = shifts.find(s => s.id === emp.shift_id);
+            const matchesShift = matchText(shift ? shift.name : null, selectedShift);
+            
+            return matchesOutlet && matchesDept && matchesDesignation && matchesShift;
+        });
+
+        if (matches.length === 1) {
+            setSelectedEmp(matches[0]);
+            setShowDropdown(false);
+        } else if (matches.length > 1) {
+            // If the currently selected employee does not match the new filters, clear it
+            if (selectedEmp) {
+                const stillMatches = matches.some(m => m.id === selectedEmp.id);
+                if (!stillMatches) {
+                    setSelectedEmp(null);
+                    setShowDropdown(true);
+                }
+            } else {
+                setShowDropdown(true);
+            }
+        } else {
+            setSelectedEmp(null);
+            setShowDropdown(false);
+        }
+    }, [selectedOutlet, selectedDept, selectedDesignation, selectedShift, employeesData, shifts]);
+
     const fetchAllEmployees = async () => {
         try {
             const res = await api.get('/employees');
@@ -764,10 +799,7 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Outlet</label>
                         <select 
                             value={selectedOutlet}
-                            onChange={(e) => {
-                                setSelectedOutlet(e.target.value);
-                                if (selectedEmp) setSelectedEmp(null);
-                            }}
+                            onChange={(e) => setSelectedOutlet(e.target.value)}
                             className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
                         >
                             {uniqueLocations.map(loc => (
@@ -782,10 +814,7 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Department</label>
                         <select 
                             value={selectedDept}
-                            onChange={(e) => {
-                                setSelectedDept(e.target.value);
-                                if (selectedEmp) setSelectedEmp(null);
-                            }}
+                            onChange={(e) => setSelectedDept(e.target.value)}
                             className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
                         >
                             {uniqueDepartments.map(dept => (
@@ -800,10 +829,7 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Designation</label>
                         <select 
                             value={selectedDesignation}
-                            onChange={(e) => {
-                                setSelectedDesignation(e.target.value);
-                                if (selectedEmp) setSelectedEmp(null);
-                            }}
+                            onChange={(e) => setSelectedDesignation(e.target.value)}
                             className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
                         >
                             {uniqueDesignations.map(desg => (
@@ -818,10 +844,7 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Shift</label>
                         <select 
                             value={selectedShift}
-                            onChange={(e) => {
-                                setSelectedShift(e.target.value);
-                                if (selectedEmp) setSelectedEmp(null);
-                            }}
+                            onChange={(e) => setSelectedShift(e.target.value)}
                             className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
                         >
                             {uniqueShifts.map(sh => (
