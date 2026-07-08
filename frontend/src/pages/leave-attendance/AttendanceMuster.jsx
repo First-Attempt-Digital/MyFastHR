@@ -71,6 +71,7 @@ const AttendanceMuster = () => {
     const [selectedOutlet, setSelectedOutlet] = useState('all');
     const [selectedDept, setSelectedDept] = useState('all');
     const [selectedDesignation, setSelectedDesignation] = useState('all');
+    const [selectedShift, setSelectedShift] = useState('all');
     const [matrix, setMatrix] = useState([]);
     const [totalDays, setTotalDays] = useState(30);
     const [loading, setLoading] = useState(true);
@@ -444,6 +445,29 @@ const AttendanceMuster = () => {
         return ['all', ...Array.from(map.values()).sort()];
     }, [matrix, entryRequests, entryHistory, notCheckedIn]);
 
+    const uniqueShifts = React.useMemo(() => {
+        const map = new Map();
+        matrix.forEach(emp => {
+            const val = emp.shift_name;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        notCheckedIn.forEach(emp => {
+            const val = emp.shift_name;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [matrix, notCheckedIn]);
+
     // Filter employees
     const filteredEmployees = React.useMemo(() => {
         return matrix.filter(emp => {
@@ -452,9 +476,10 @@ const AttendanceMuster = () => {
             const matchesOutlet = matchText(emp.location, selectedOutlet);
             const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
             const matchesDesignation = matchText(emp.role || emp.designation, selectedDesignation);
-            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+            const matchesShift = matchText(emp.shift_name, selectedShift);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation && matchesShift;
         });
-    }, [matrix, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [matrix, searchQuery, selectedOutlet, selectedDept, selectedDesignation, selectedShift]);
 
     // Filter entry requests, history, and not checked-in today lists
     const filteredEntryRequests = React.useMemo(() => {
@@ -466,9 +491,10 @@ const AttendanceMuster = () => {
             const matchesOutlet = matchText(req.office_location, selectedOutlet);
             const matchesDept = matchText(req.department_name || req.department, selectedDept);
             const matchesDesignation = matchText(req.designation || req.role, selectedDesignation);
-            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+            const matchesShift = !req.shift_name || matchText(req.shift_name, selectedShift);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation && matchesShift;
         });
-    }, [entryRequests, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [entryRequests, searchQuery, selectedOutlet, selectedDept, selectedDesignation, selectedShift]);
 
     const filteredEntryHistory = React.useMemo(() => {
         return entryHistory.filter(req => {
@@ -479,9 +505,10 @@ const AttendanceMuster = () => {
             const matchesOutlet = matchText(req.office_location, selectedOutlet);
             const matchesDept = matchText(req.department_name || req.department, selectedDept);
             const matchesDesignation = matchText(req.designation || req.role, selectedDesignation);
-            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+            const matchesShift = !req.shift_name || matchText(req.shift_name, selectedShift);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation && matchesShift;
         });
-    }, [entryHistory, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [entryHistory, searchQuery, selectedOutlet, selectedDept, selectedDesignation, selectedShift]);
 
     const filteredNotCheckedIn = React.useMemo(() => {
         return notCheckedIn.filter(emp => {
@@ -491,9 +518,10 @@ const AttendanceMuster = () => {
             const matchesOutlet = matchText(emp.office_location, selectedOutlet);
             const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
             const matchesDesignation = matchText(emp.designation || emp.role, selectedDesignation);
-            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation;
+            const matchesShift = matchText(emp.shift_name, selectedShift);
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation && matchesShift;
         });
-    }, [notCheckedIn, searchQuery, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [notCheckedIn, searchQuery, selectedOutlet, selectedDept, selectedDesignation, selectedShift]);
 
     // Grid Cell Styling configuration
     const getStatusStyle = (status) => {
@@ -675,6 +703,21 @@ const AttendanceMuster = () => {
                                 <option value="all">All Designations</option>
                                 {uniqueDesignations.filter(d => d !== 'all').map(d => (
                                     <option key={d} value={d}>{d}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+
+                        {/* Shift Selector */}
+                        <div className="relative">
+                            <select 
+                                value={selectedShift} 
+                                onChange={(e) => setSelectedShift(e.target.value)}
+                                className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                            >
+                                <option value="all">All Shifts</option>
+                                {uniqueShifts.filter(s => s !== 'all').map(s => (
+                                    <option key={s} value={s}>{s}</option>
                                 ))}
                             </select>
                             <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -1015,6 +1058,21 @@ const AttendanceMuster = () => {
                                     <option value="all">All Designations</option>
                                     {uniqueDesignations.filter(d => d !== 'all').map(d => (
                                         <option key={d} value={d}>{d}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+
+                            {/* Shift Selector */}
+                            <div className="relative">
+                                <select 
+                                    value={selectedShift} 
+                                    onChange={(e) => setSelectedShift(e.target.value)}
+                                    className="appearance-none bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none pr-10 shadow-inner cursor-pointer"
+                                >
+                                    <option value="all">All Shifts</option>
+                                    {uniqueShifts.filter(s => s !== 'all').map(s => (
+                                        <option key={s} value={s}>{s}</option>
                                     ))}
                                 </select>
                                 <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />

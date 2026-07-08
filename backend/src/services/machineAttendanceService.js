@@ -14,27 +14,27 @@ function checkIfLogUsedGrace(log, employee, rules) {
     if (!log.check_in) return false;
     const logCheckIn = dbDateToUTC(log.check_in);
     if (!logCheckIn) return false;
-    
+
     const shiftStart = employee?.shift_start || rules.shift_start || '09:00';
     const grace = employee?.scheme_grace ?? employee?.shift_grace ?? rules.grace_period ?? 15;
-    
+
     const [sHours, sMins] = shiftStart.split(':').map(Number);
     const istStr = logCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
     const hour = parseInt(istStr, 10);
-    
+
     let logicalDateStr = logCheckIn.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
     const [sH, sM] = shiftStart.split(':').map(Number);
     const [eH, eM] = (employee?.shift_end || '18:00').split(':').map(Number);
     const isNight = eH * 60 + eM < sH * 60 + sM;
-    
+
     if (isNight && hour >= 0 && hour < 10) {
         const prevDate = new Date(logCheckIn.getTime() - 24 * 60 * 60 * 1000);
         logicalDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
     }
-    
+
     const shiftStartActual = new Date(`${logicalDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
     const shiftStartLimit = new Date(shiftStartActual.getTime() + grace * 60 * 1000);
-    
+
     return logCheckIn > shiftStartActual && logCheckIn <= shiftStartLimit;
 }
 
@@ -196,7 +196,7 @@ class MachineAttendanceService {
             await db('employee_biometric_mapping')
                 .where({ id: existing.id })
                 .update({ employee_id, created_at: db.fn.now() });
-                
+
             return { message: 'Mapping updated successfully.', mapping: { ...existing, employee_id } };
         }
 
@@ -333,8 +333,8 @@ class MachineAttendanceService {
                 .leftJoin('attendance_schemes', 'employees.attendance_scheme_id', 'attendance_schemes.id')
                 .where('employees.id', employeeId)
                 .select(
-                    'employees.*', 
-                    'shifts.start_time as shift_start', 
+                    'employees.*',
+                    'shifts.start_time as shift_start',
                     'shifts.end_time as shift_end',
                     'shifts.grace_period as shift_grace',
                     'shifts.grace_count_limit as shift_grace_count_limit',
@@ -363,7 +363,7 @@ class MachineAttendanceService {
             if (!activeLog && hour >= 0 && hour < 10) {
                 const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
                 const prevDateStr = dateToISTDateString(prevDateObj);
-                
+
                 let prevShift = null;
                 if (employeeWithShift) {
                     const activeAssignment = await db('employee_shift_assignments as esa')
@@ -376,14 +376,14 @@ class MachineAttendanceService {
                         .select('s.*')
                         .orderBy('esa.id', 'desc')
                         .first();
-                    
+
                     if (activeAssignment) {
                         prevShift = activeAssignment;
                     } else {
                         prevShift = await db('shifts').where('id', employeeWithShift.shift_id).first();
                     }
                 }
-                
+
                 if (prevShift && isNightShift(prevShift)) {
                     targetShiftDate = prevDateStr;
                 }
@@ -454,7 +454,7 @@ class MachineAttendanceService {
             // Fetch the latest attendance record (to see if one exists, open or closed for targetShiftDate)
             const nextShiftDateObj = new Date(new Date(targetShiftDate).getTime() + 24 * 60 * 60 * 1000);
             const nextShiftDateStr = dateToISTDateString(nextShiftDateObj);
-            
+
             let cutoffHour = 6;
             if (employeeWithShift && employeeWithShift.shift_start) {
                 const [sHours, sMins] = employeeWithShift.shift_start.split(':').map(Number);
@@ -465,7 +465,7 @@ class MachineAttendanceService {
                     cutoffHour = Math.floor(Math.max(0, earliestCheckInMins) / 60);
                 }
             }
-            
+
             const latestLog = await db('attendance')
                 .where({ employee_id: employeeId, company_id: companyId })
                 .andWhere(qb => {
@@ -552,7 +552,7 @@ class MachineAttendanceService {
                 const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
                 const shiftStartStr = employeeWithShift.shift_start || '09:00';
                 const shiftEndStr = employeeWithShift.shift_end || '18:00';
-                
+
                 const [sHours, sMins] = shiftStartStr.split(':').map(Number);
                 const [eHours, eMins] = shiftEndStr.split(':').map(Number);
                 const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -560,12 +560,12 @@ class MachineAttendanceService {
                 if (shiftEndDate < shiftStartDate) {
                     shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
                 }
-                
+
                 const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employeeWithShift.shift_terminate_hour) * 60 * 60 * 1000);
                 if (punchTime > terminationTime) {
                     // Shift has terminated! Reset activeLog to null so it forces a check-in today
                     activeLog = null;
-                    
+
                     // Recalculate targetShiftDate and reload shift details for today's date
                     const istHourStr = punchTime.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false });
                     const hour = parseInt(istHourStr, 10);
@@ -573,7 +573,7 @@ class MachineAttendanceService {
                     if (hour >= 0 && hour < 10) {
                         const prevDateObj = new Date(punchTime.getTime() - 24 * 60 * 60 * 1000);
                         const prevDateStr = dateToISTDateString(prevDateObj);
-                        
+
                         let prevShift = null;
                         const activeAssignment = await db('employee_shift_assignments as esa')
                             .join('shifts as s', 'esa.shift_id', 's.id')
@@ -585,18 +585,18 @@ class MachineAttendanceService {
                             .select('s.*')
                             .orderBy('esa.id', 'desc')
                             .first();
-                        
+
                         if (activeAssignment) {
                             prevShift = activeAssignment;
                         } else {
                             prevShift = await db('shifts').where('id', employeeWithShift.shift_id).first();
                         }
-                        
+
                         if (prevShift && isNightShift(prevShift)) {
                             targetShiftDate = prevDateStr;
                         }
                     }
-                    
+
                     // Reload the active shift assignment for the new targetShiftDate
                     const activeAssignment = await db('employee_shift_assignments as esa')
                         .join('shifts as s', 'esa.shift_id', 's.id')
@@ -747,9 +747,9 @@ class MachineAttendanceService {
                             .where('esa.employee_id', employeeId)
                             .where(qb => {
                                 qb.where('esa.from_date', '<=', targetShiftDate)
-                                  .andWhere(qb2 => {
-                                      qb2.where('esa.to_date', '>=', startOfMonth).orWhereNull('esa.to_date');
-                                  });
+                                    .andWhere(qb2 => {
+                                        qb2.where('esa.to_date', '>=', startOfMonth).orWhereNull('esa.to_date');
+                                    });
                             })
                             .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time', 's.grace_period', 's.is_night_shift');
 
@@ -777,8 +777,8 @@ class MachineAttendanceService {
                             }
                         }
 
-                        const allowedGraceLimit = employeeWithShift?.max_late_allowed !== undefined && employeeWithShift?.max_late_allowed !== null 
-                            ? parseInt(employeeWithShift.max_late_allowed) 
+                        const allowedGraceLimit = employeeWithShift?.max_late_allowed !== undefined && employeeWithShift?.max_late_allowed !== null
+                            ? parseInt(employeeWithShift.max_late_allowed)
                             : (employeeWithShift?.shift_grace_count_limit !== undefined && employeeWithShift?.shift_grace_count_limit !== null
                                 ? parseInt(employeeWithShift.shift_grace_count_limit)
                                 : 3);
@@ -834,7 +834,7 @@ class MachineAttendanceService {
                 return { status: 'check-in', record_status: status };
             } else {
                 // --- CHECK-OUT ROUTINE / RE-PUNCH DEDUPLICATION ---
-                
+
                 // If 4-punch and already checked out of Session 1, and not yet in Session 2, ignore punch
                 if (reqPunches === 4 && activeLog.check_out && !isSession2) {
                     await db('biometric_raw_logs').insert({
@@ -854,7 +854,7 @@ class MachineAttendanceService {
                     const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
                     const shiftStartStr = employeeWithShift.shift_start || '09:00';
                     const shiftEndStr = employeeWithShift.shift_end || '18:00';
-                    
+
                     const [sHours, sMins] = shiftStartStr.split(':').map(Number);
                     const [eHours, eMins] = shiftEndStr.split(':').map(Number);
                     const shiftStartDate = new Date(`${checkInDateStr} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
@@ -862,7 +862,7 @@ class MachineAttendanceService {
                     if (shiftEndDate < shiftStartDate) {
                         shiftEndDate = new Date(shiftEndDate.getTime() + 24 * 60 * 60 * 1000);
                     }
-                    
+
                     const terminationTime = new Date(shiftEndDate.getTime() + parseInt(employeeWithShift.shift_terminate_hour) * 60 * 60 * 1000);
                     if (punchTime > terminationTime) {
                         await db('biometric_raw_logs').insert({
@@ -949,7 +949,7 @@ class MachineAttendanceService {
                     const shiftStart = employee?.shift_start || '09:00';
                     const shiftEnd = employee?.shift_end || '18:00';
                     const outMargin = employee?.shift_out_margin !== undefined ? parseInt(employee.shift_out_margin) : 0;
-                    
+
                     const checkInDateStr = dateToISTDateString(checkIn);
                     const [sHours, sMins] = shiftStart.split(':').map(Number);
                     const [eHours, eMins] = shiftEnd.split(':').map(Number);
@@ -1005,61 +1005,61 @@ class MachineAttendanceService {
                     return { status: 'skipped', reason: 'Punch ignored: before half-day limit' };
                 }
 
-                    // 2. Determine if we should generate an early out regularization request
-                    let triggersEarlyOutRequest = false;
+                // 2. Determine if we should generate an early out regularization request
+                let triggersEarlyOutRequest = false;
 
-                    if (isEarly && workedHours >= halfDayLimit) {
-                        if (punchTime < outMarginThreshold) {
-                            // If they are punching out BEFORE the out margin window, triggers early out request
-                            triggersEarlyOutRequest = true;
-                        }
+                if (isEarly && workedHours >= halfDayLimit) {
+                    if (punchTime < outMarginThreshold) {
+                        // If they are punching out BEFORE the out margin window, triggers early out request
+                        triggersEarlyOutRequest = true;
                     }
+                }
 
-                    // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
-                    const approvedRequest = await db('attendance_entry_requests')
-                        .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out', status: 'approved' })
+                // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
+                const approvedRequest = await db('attendance_entry_requests')
+                    .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out', status: 'approved' })
+                    .first();
+
+                if (!approvedRequest && triggersEarlyOutRequest) {
+                    // Biometric machine punch - log checkout anyway, just create a regularization request
+                    const existingRequest = await db('attendance_entry_requests')
+                        .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out' })
                         .first();
-
-                    if (!approvedRequest && triggersEarlyOutRequest) {
-                        // Biometric machine punch - log checkout anyway, just create a regularization request
-                        const existingRequest = await db('attendance_entry_requests')
-                            .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out' })
-                            .first();
-                        if (!existingRequest) {
-                            await db('attendance_entry_requests').insert({
-                                company_id: companyId,
-                                employee_id: employeeId,
-                                date: dateStr,
-                                request_type: 'early_out',
-                                punch_time: punchTimeStr,
-                                location_data: JSON.stringify({ source: 'biometric', device_serial: deviceSerial }),
-                                status: 'pending',
-                                created_at: db.fn.now(),
-                                updated_at: db.fn.now()
-                            });
-                        }
-                        // Update check_out and set status to 'pending' because it requires approval
-                        await db('attendance')
-                            .where({ id: activeLog.id })
-                            .update({
-                                check_out: punchTimeStr,
-                                status: 'pending',
-                                punch_source: 'biometric',
-                                device_id: deviceIdString(deviceSerial),
-                                updated_at: db.fn.now()
-                            });
-
-                        // Record audit log
-                        await db('biometric_raw_logs').insert({
+                    if (!existingRequest) {
+                        await db('attendance_entry_requests').insert({
                             company_id: companyId,
-                            device_serial: deviceSerial,
-                            employee_code,
+                            employee_id: employeeId,
+                            date: dateStr,
+                            request_type: 'early_out',
                             punch_time: punchTimeStr,
-                            status: 'synced'
+                            location_data: JSON.stringify({ source: 'biometric', device_serial: deviceSerial }),
+                            status: 'pending',
+                            created_at: db.fn.now(),
+                            updated_at: db.fn.now()
+                        });
+                    }
+                    // Update check_out and set status to 'pending' because it requires approval
+                    await db('attendance')
+                        .where({ id: activeLog.id })
+                        .update({
+                            check_out: punchTimeStr,
+                            status: 'pending',
+                            punch_source: 'biometric',
+                            device_id: deviceIdString(deviceSerial),
+                            updated_at: db.fn.now()
                         });
 
-                        return { status: 'check-out', record_status: 'pending' };
-                    }
+                    // Record audit log
+                    await db('biometric_raw_logs').insert({
+                        company_id: companyId,
+                        device_serial: deviceSerial,
+                        employee_code,
+                        punch_time: punchTimeStr,
+                        status: 'synced'
+                    });
+
+                    return { status: 'check-out', record_status: 'pending' };
+                }
 
                 // Normal/non-blocked checkout: Update check_out
                 await db('attendance')

@@ -115,7 +115,7 @@ const ManualOverride = () => {
                         <ShiftOverrideTab key="shift" shifts={shifts} setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
                     )}
                     {activeTab === 'employee_wise' && (
-                        <EmployeeWiseTab key="emp" setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
+                        <EmployeeWiseTab key="emp" shifts={shifts} setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
                     )}
                     {activeTab === 'date_wise' && (
                         <DateWiseTab key="date" setLoading={setLoading} loading={loading} setSuccess={setSuccess} setError={setError} />
@@ -512,26 +512,112 @@ const ShiftOverrideTab = ({ shifts, setLoading, loading, setSuccess, setError })
     );
 };
 
-const EmployeeWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
+const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) => {
     const [employeeQuery, setEmployeeQuery] = useState('');
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [dateRange, setDateRange] = useState({ from: '', to: '' });
     const [attendance, setAttendance] = useState([]);
-    const [employees, setEmployees] = useState([]);
-    const [searching, setSearching] = useState(false);
+    const [employeesData, setEmployeesData] = useState([]);
+    const [selectedOutlet, setSelectedOutlet] = useState('all');
+    const [selectedDept, setSelectedDept] = useState('all');
+    const [selectedDesignation, setSelectedDesignation] = useState('all');
+    const [selectedShift, setSelectedShift] = useState('all');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const searchContainerRef = React.useRef(null);
 
-    const fetchEmployees = async (query) => {
-        if (!query) return setEmployees([]);
+    useEffect(() => {
+        fetchAllEmployees();
+        const handleClickOutside = (event) => {
+            if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const fetchAllEmployees = async () => {
         try {
-            setSearching(true);
-            const res = await api.get('/employees/search', { params: { q: query } });
-            setEmployees(res || []);
+            const res = await api.get('/employees');
+            setEmployeesData(res || []);
         } catch (err) {
-            console.error(err);
-        } finally {
-            setSearching(false);
+            console.error('Failed to fetch employees', err);
         }
     };
+
+    const uniqueLocations = React.useMemo(() => {
+        const map = new Map();
+        employeesData.forEach(e => {
+            const val = e.office_location;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employeesData]);
+
+    const uniqueDepartments = React.useMemo(() => {
+        const map = new Map();
+        employeesData.forEach(e => {
+            const val = e.department_name || e.department;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employeesData]);
+
+    const uniqueDesignations = React.useMemo(() => {
+        const map = new Map();
+        employeesData.forEach(e => {
+            const val = e.designation;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employeesData]);
+
+    const uniqueShifts = React.useMemo(() => {
+        const map = new Map();
+        employeesData.forEach(e => {
+            const shift = shifts.find(s => s.id === e.shift_id);
+            const val = shift ? shift.name : null;
+            if (val) {
+                const clean = val.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+                if (!map.has(clean)) {
+                    map.set(clean, formatLabel(val));
+                }
+            }
+        });
+        return ['all', ...Array.from(map.values()).sort()];
+    }, [employeesData, shifts]);
+
+    const filteredSearchList = React.useMemo(() => {
+        return employeesData.filter(emp => {
+            const matchesQuery = !employeeQuery || 
+                `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase().includes(employeeQuery.toLowerCase()) ||
+                (emp.employee_id_number || '').toLowerCase().includes(employeeQuery.toLowerCase());
+            
+            const matchesOutlet = matchText(emp.office_location, selectedOutlet);
+            const matchesDept = matchText(emp.department_name || emp.department, selectedDept);
+            const matchesDesignation = matchText(emp.designation, selectedDesignation);
+            
+            const shift = shifts.find(s => s.id === emp.shift_id);
+            const matchesShift = matchText(shift ? shift.name : null, selectedShift);
+            
+            return matchesQuery && matchesOutlet && matchesDept && matchesDesignation && matchesShift;
+        });
+    }, [employeesData, employeeQuery, selectedOutlet, selectedDept, selectedDesignation, selectedShift, shifts]);
 
     const handleShow = async () => {
         if (!selectedEmp || !dateRange.from || !dateRange.to) {
@@ -607,66 +693,143 @@ const EmployeeWiseTab = ({ setLoading, loading, setSuccess, setError }) => {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
         >
-            <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-                <div className="md:col-span-2 space-y-2 relative">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Search Employees</label>
-                    <div className="relative">
-                        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Employee Name or ID..."
-                            value={selectedEmp ? `${selectedEmp.first_name} ${selectedEmp.last_name} [${selectedEmp.employee_id_number}]` : employeeQuery}
-                            onChange={(e) => {
-                                setEmployeeQuery(e.target.value);
-                                if (selectedEmp) setSelectedEmp(null);
-                                fetchEmployees(e.target.value);
-                            }}
-                            className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500"
-                        />
-                        {employees.length > 0 && !selectedEmp && (
-                            <div className="absolute top-14 left-0 right-0 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 space-y-1">
-                                {employees.map(emp => (
-                                    <div 
-                                        key={emp.id}
-                                        onClick={() => {
-                                            setSelectedEmp(emp);
-                                            setEmployees([]);
-                                        }}
-                                        className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer flex items-center justify-between group"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-slate-100 text-[10px] font-black text-slate-400 flex items-center justify-center">
-                                                {emp.first_name[0]}{emp.last_name[0]}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+                    <div ref={searchContainerRef} className="md:col-span-2 space-y-2 relative">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Search Employees</label>
+                        <div className="relative">
+                            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input 
+                                type="text" 
+                                placeholder="Employee Name or ID..."
+                                value={selectedEmp ? `${selectedEmp.first_name} ${selectedEmp.last_name} [${selectedEmp.employee_id_number}]` : employeeQuery}
+                                onFocus={() => setShowDropdown(true)}
+                                onChange={(e) => {
+                                    setEmployeeQuery(e.target.value);
+                                    if (selectedEmp) setSelectedEmp(null);
+                                    setShowDropdown(true);
+                                }}
+                                className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500"
+                            />
+                            {showDropdown && filteredSearchList.length > 0 && !selectedEmp && (
+                                <div className="absolute top-14 left-0 right-0 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 p-2 space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                                    {filteredSearchList.map(emp => (
+                                        <div 
+                                            key={emp.id}
+                                            onClick={() => {
+                                                setSelectedEmp(emp);
+                                                setShowDropdown(false);
+                                            }}
+                                            className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer flex items-center justify-between group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-slate-100 text-[10px] font-black text-slate-400 flex items-center justify-center">
+                                                    {emp.first_name?.[0]}{emp.last_name?.[0]}
+                                                </div>
+                                                <div>
+                                                    <p className="text-[11px] font-black text-slate-800 uppercase">{emp.first_name} {emp.last_name}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">ID: {emp.employee_id_number} | {emp.designation}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="text-[11px] font-black text-slate-800 uppercase">{emp.first_name} {emp.last_name}</p>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">ID: {emp.employee_id_number}</p>
-                                            </div>
+                                            <ChevronRight size={14} className="text-slate-300 group-hover:text-indigo-600 transition-colors" />
                                         </div>
-                                        <ChevronRight size={14} className="text-slate-300 group-hover:text-indigo-600 transition-colors" />
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 md:col-span-2">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date From</label>
+                            <input type="date" value={dateRange.from} onChange={(e) => setDateRange({...dateRange, from: e.target.value})} className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500" />
+                        </div>
+                        <div className="space-y-2 relative">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date To</label>
+                            <div className="flex gap-2">
+                                <input type="date" value={dateRange.to} onChange={(e) => setDateRange({...dateRange, to: e.target.value})} className="flex-1 h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500" />
+                                <button 
+                                    onClick={handleShow}
+                                    className="h-12 w-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                                >
+                                    <ArrowRight size={20} />
+                                </button>
                             </div>
-                        )}
+                        </div>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 md:col-span-2">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date From</label>
-                        <input type="date" value={dateRange.from} onChange={(e) => setDateRange({...dateRange, from: e.target.value})} className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-slate-50">
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Outlet</label>
+                        <select 
+                            value={selectedOutlet}
+                            onChange={(e) => {
+                                setSelectedOutlet(e.target.value);
+                                if (selectedEmp) setSelectedEmp(null);
+                            }}
+                            className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                        >
+                            {uniqueLocations.map(loc => (
+                                <option key={loc} value={loc}>
+                                    {loc === 'all' ? 'All Outlets' : loc}
+                                </option>
+                            ))}
+                        </select>
                     </div>
-                    <div className="space-y-2 relative">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date To</label>
-                        <div className="flex gap-2">
-                            <input type="date" value={dateRange.to} onChange={(e) => setDateRange({...dateRange, to: e.target.value})} className="flex-1 h-12 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500" />
-                            <button 
-                                onClick={handleShow}
-                                className="h-12 w-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-                            >
-                                <ArrowRight size={20} />
-                            </button>
-                        </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Department</label>
+                        <select 
+                            value={selectedDept}
+                            onChange={(e) => {
+                                setSelectedDept(e.target.value);
+                                if (selectedEmp) setSelectedEmp(null);
+                            }}
+                            className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                        >
+                            {uniqueDepartments.map(dept => (
+                                <option key={dept} value={dept}>
+                                    {dept === 'all' ? 'All Depts' : dept}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Designation</label>
+                        <select 
+                            value={selectedDesignation}
+                            onChange={(e) => {
+                                setSelectedDesignation(e.target.value);
+                                if (selectedEmp) setSelectedEmp(null);
+                            }}
+                            className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                        >
+                            {uniqueDesignations.map(desg => (
+                                <option key={desg} value={desg}>
+                                    {desg === 'all' ? 'All Designations' : desg}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Shift</label>
+                        <select 
+                            value={selectedShift}
+                            onChange={(e) => {
+                                setSelectedShift(e.target.value);
+                                if (selectedEmp) setSelectedEmp(null);
+                            }}
+                            className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500"
+                        >
+                            {uniqueShifts.map(sh => (
+                                <option key={sh} value={sh}>
+                                    {sh === 'all' ? 'All Shifts' : sh}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                 </div>
             </div>
