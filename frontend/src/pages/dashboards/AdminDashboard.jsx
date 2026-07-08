@@ -70,7 +70,7 @@ const BirthdayCard = ({ birthdayEmps = [], upcomingBirthdays = [] }) => {
     }
 
     return (
-        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden relative flex flex-col min-h-[420px] animate-in fade-in duration-1000">
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden relative flex flex-col min-h-[320px] animate-in fade-in duration-1000">
             {/* Festive Background Decorations */}
             <div className="absolute inset-x-0 top-0 h-40 pointer-events-none opacity-80">
                 <svg viewBox="0 0 400 150" className="w-full h-full">
@@ -91,26 +91,22 @@ const BirthdayCard = ({ birthdayEmps = [], upcomingBirthdays = [] }) => {
                 <ArrowUpRight size={24} />
             </div>
 
-            <div className="flex-1 flex flex-col items-center justify-center p-8 pt-16 z-10">
-                <div className="relative mb-8">
-                    <div className="w-28 h-28 rounded-full bg-indigo-50 border-4 border-white shadow-md flex items-center justify-center overflow-hidden">
-                        <span className="text-3xl font-black text-indigo-600 tracking-tighter uppercase">{initials}</span>
+            <div className="flex-1 flex flex-col items-center justify-center p-6 pt-10 z-10">
+                <div className="relative mb-5">
+                    <div className="w-24 h-24 rounded-full bg-indigo-50 border-4 border-white shadow-md flex items-center justify-center overflow-hidden">
+                        <span className="text-2xl font-black text-indigo-600 tracking-tighter uppercase">{initials}</span>
                     </div>
-                    <div className="absolute -bottom-2 -right-2 bg-white p-2 rounded-full shadow-lg border border-slate-50">
-                        <Cake size={20} className={isToday ? "text-rose-500 animate-bounce" : "text-indigo-400"} />
+                    <div className="absolute -bottom-1 -right-1 bg-white p-1.5 rounded-full shadow-lg border border-slate-50">
+                        <Cake size={16} className={isToday ? "text-rose-500 animate-bounce" : "text-indigo-400"} />
                     </div>
                 </div>
 
-                <div className={`${isToday ? 'bg-rose-50/50 border border-rose-100/50' : 'bg-[#f4fbfe]'} rounded-[24px] p-8 w-full text-center space-y-6`}>
-                    <span className="text-2xl">{isToday ? '🧁' : '🎉'}</span>
-                    <h4 className="text-[12px] font-black text-slate-400 uppercase tracking-widest leading-none">{titleText}</h4>
-                    <h3 className="text-[17px] font-bold text-[#2d3436] leading-tight px-2">
+                <div className={`${isToday ? 'bg-rose-50/50 border border-rose-100/50' : 'bg-[#f4fbfe]'} rounded-[24px] p-5 w-full text-center space-y-3`}>
+                    <span className="text-xl">{isToday ? '🧁' : '🎉'}</span>
+                    <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest leading-none">{titleText}</h4>
+                    <h3 className="text-[15px] font-bold text-[#2d3436] leading-tight px-1">
                         {subTitleText}
                     </h3>
-
-                    <button className={`${isToday ? 'bg-rose-500 hover:bg-rose-600' : 'bg-[#4834d4] hover:bg-[#3c2bb3]'} text-white px-8 py-3 rounded-full text-[15px] font-bold shadow-lg shadow-indigo-100 transition-all transform active:scale-95`}>
-                        {btnText}
-                    </button>
                 </div>
             </div>
         </div>
