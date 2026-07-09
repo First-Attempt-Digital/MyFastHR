@@ -780,9 +780,16 @@ class PayrollService {
             .where({ company_id: companyId, month, year });
         const savedMap = new Map(savedEntries.map(e => [e.employee_id, e]));
 
+        // Fetch employee bank and payment details
+        const employeesList = await db('employees')
+            .where('company_id', companyId)
+            .select('id', 'bank_name', 'bank_branch', 'account_number', 'ifsc_code', 'payment_type');
+        const empMap = new Map(employeesList.map(e => [e.id, e]));
+
         const register = [];
 
         for (const empRecord of matrix) {
+            const empDetails = empMap.get(empRecord.id) || {};
             const saved = savedMap.get(empRecord.id);
             const otBonus = saved ? parseFloat(saved.overtime_bonus || 0) : 0;
             const manDeduction = saved ? parseFloat(saved.manual_deduction_override || 0) : 0;
@@ -855,7 +862,12 @@ class PayrollService {
                 remaining_loan: remainingLoan,
                 statutory_rules_breakdown: comp.statutory_rules_breakdown,
                 net_salary: saved ? saved.net_salary : parseFloat(comp.net_salary).toFixed(2),
-                status: saved ? saved.status : 'draft'
+                status: saved ? saved.status : 'draft',
+                payment_type: empDetails.payment_type || '',
+                bank_name: empDetails.bank_name || '',
+                bank_branch: empDetails.bank_branch || '',
+                account_number: empDetails.account_number || '',
+                ifsc_code: empDetails.ifsc_code || '',
             });
         }
 
