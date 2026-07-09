@@ -315,10 +315,11 @@ const AttendanceAdmin = () => {
                                             <div className={`w-full h-full py-3 text-[10px] font-black border-b-2 transition-all cursor-pointer ${
                                                     status === 'P' ? 'text-green-600 border-transparent hover:bg-green-50' :
                                                     status === 'A' ? 'text-rose-600 border-rose-400 bg-rose-50/30' :
-                                                    status === 'L' ? 'text-amber-600 border-amber-400 bg-amber-50/30' : // Late
                                                     status === 'PL' ? 'text-indigo-600 border-indigo-400 bg-indigo-50/30' : // Paid Leave
                                                     status === 'UL' ? 'text-slate-500 border-slate-400 bg-slate-50/30 font-bold' : // Unpaid Leave
-                                                    status === 'OFF' ? 'text-slate-300 border-transparent bg-slate-50/10' : 'text-slate-200'
+                                                    status === 'OFF' ? 'text-slate-500 border-transparent bg-slate-50/10' :
+                                                    (status === 'L' || status === 'CI' || status === 'E' || status === 'HD') ? 'text-slate-500 border-transparent bg-slate-50/10' :
+                                                    'text-slate-200'
                                                 }`}>
                                                 {status}
                                             </div>
