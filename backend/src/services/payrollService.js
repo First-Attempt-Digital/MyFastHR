@@ -783,17 +783,25 @@ class PayrollService {
         const register = [];
 
         for (const empRecord of matrix) {
+            const saved = savedMap.get(empRecord.id);
+            const otBonus = saved ? parseFloat(saved.overtime_bonus || 0) : 0;
+            const manDeduction = saved ? parseFloat(saved.manual_deduction_override || 0) : 0;
+
             // --- DETECT ACTIVE LOANS & EMIs ---
             const activeLoans = await db('loans')
                 .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
             let loanEmi = 0;
-            for (const loan of activeLoans) {
-                loanEmi += Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+            if (saved) {
+                loanEmi = parseFloat(saved.loan_emi_deduction || 0);
+            } else {
+                for (const loan of activeLoans) {
+                    loanEmi += Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
+                }
             }
 
-            const saved = savedMap.get(empRecord.id);
-            const otBonus = saved ? parseFloat(saved.overtime_bonus || 0) : 0;
-            const manDeduction = saved ? parseFloat(saved.manual_deduction_override || 0) : 0;
+            const totalOutstandingBefore = activeLoans.reduce((sum, loan) => sum + parseFloat(loan.remaining_balance || 0), 0);
+            const isProcessed = saved && (saved.status === 'generated' || saved.status === 'paid');
+            const remainingLoan = isProcessed ? totalOutstandingBefore : Math.max(0, totalOutstandingBefore - loanEmi);
 
             const comp = await this.calculateSingleEmployeePayrollComponents(
                 empRecord.id,
@@ -844,6 +852,7 @@ class PayrollService {
                 overtime_bonus: otBonus,
                 manual_deduction_override: manDeduction,
                 loan_emi_deduction: comp.loan_emi_deduction,
+                remaining_loan: remainingLoan,
                 statutory_rules_breakdown: comp.statutory_rules_breakdown,
                 net_salary: saved ? saved.net_salary : parseFloat(comp.net_salary).toFixed(2),
                 status: saved ? saved.status : 'draft'

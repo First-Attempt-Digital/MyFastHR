@@ -1054,6 +1054,7 @@ const Payroll = () => {
 
             row.total_deductions = reg.total_deductions || 0;
             row.loan_emi_deduction = reg.loan_emi_deduction || 0;
+            row.remaining_loan = reg.remaining_loan || 0;
             row.net_salary = reg.net_salary || 0;
             row.status = reg.status || 'draft';
 
@@ -1084,10 +1085,90 @@ const Payroll = () => {
 
         headers.total_deductions = 'Other Deductions';
         headers.loan_emi_deduction = 'Loan EMI';
+        headers.remaining_loan = 'Outstanding Loan';
         headers.net_salary = 'Projected Net Salary';
         headers.status = 'Status';
 
         exportToCSV(dataToExport, `Pay_Register_${selectedMonth.replace(' ', '_')}.csv`, headers);
+    };
+
+    const handleExportLoansCSV = () => {
+        if (!searchedLoans || searchedLoans.length === 0) {
+            alert("No loan data available to export.");
+            return;
+        }
+
+        // 1. Loans Ledger Section
+        const loanHeaders = ['Employee ID', 'Employee Name', 'Title / Purpose', 'Loan Date', 'Loan Amount', 'Repayment EMI', 'Outstanding Balance', 'Progress', 'Status'];
+        const loanRows = searchedLoans.map(loan => {
+            const principal = parseFloat(loan.amount) || 1;
+            const remaining = parseFloat(loan.remaining_balance) || 0;
+            const pctPaid = Math.min(100, Math.max(0, ((principal - remaining) / principal) * 100));
+            const loanDateStr = loan.loan_date 
+                ? new Date(loan.loan_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) 
+                : new Date(loan.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+            return [
+                loan.employee_id_number || '',
+                `${loan.first_name || ''} ${loan.last_name || ''}`.trim(),
+                loan.title || '',
+                loanDateStr,
+                loan.amount || 0,
+                loan.monthly_emi || 0,
+                loan.remaining_balance || 0,
+                `${pctPaid.toFixed(0)}% Repaid`,
+                loan.status || ''
+            ];
+        });
+
+        // 2. Repayment Logs Section
+        const repaymentHeaders = ['Employee ID', 'Employee Name', 'Loan Title', 'Repayment Date & Time', 'Amount Settled', 'Method', 'Notes / Reason'];
+        const repaymentRows = searchedRepayments.map(repay => {
+            const repayDateStr = new Date(repay.payment_date).toLocaleString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            return [
+                repay.employee_id_number || '',
+                `${repay.first_name || ''} ${repay.last_name || ''}`.trim(),
+                repay.loan_title || '',
+                repayDateStr,
+                repay.amount_paid || 0,
+                repay.payment_method || '',
+                repay.notes || '-'
+            ];
+        });
+
+        // Format to CSV string with section headers
+        const csvRows = [];
+        csvRows.push('"AMORTIZED ADVANCES & LOAN LEDGER"');
+        csvRows.push(loanHeaders.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','));
+        loanRows.forEach(row => {
+            csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+        });
+
+        csvRows.push('');
+        csvRows.push('');
+        
+        csvRows.push('"REPAYMENT LOGS"');
+        csvRows.push(repaymentHeaders.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','));
+        repaymentRows.forEach(row => {
+            csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+        });
+
+        const csvContent = csvRows.join('\r\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `Loans_Report_${selectedMonth.replace(' ', '_')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const handleExportInputsCSV = () => {
@@ -2799,6 +2880,7 @@ const Payroll = () => {
                                             ))}
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Other Deductions</th>
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Loan EMI</th>
+                                            <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Outstanding Loan</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-[#4361ee] uppercase tracking-widest bg-indigo-50/10">Projected Net</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Status</th>
                                         </tr>
@@ -3044,6 +3126,9 @@ const Payroll = () => {
                                                 </td>
                                                 <td className="px-3 py-3.5 text-xs font-bold text-rose-500/90">
                                                     {reg.loan_emi_deduction > 0 ? `-₹${Number(reg.loan_emi_deduction).toFixed(2)}` : '0.00'}
+                                                </td>
+                                                <td className="px-3 py-3.5 text-xs font-bold text-rose-500/90">
+                                                    {reg.remaining_loan > 0 ? `₹${Number(reg.remaining_loan).toFixed(2)}` : '0.00'}
                                                 </td>
                                                 <td className="px-3 py-3.5 text-xs font-black text-[#4361ee] bg-indigo-50/15">₹{Number(reg.net_salary).toLocaleString()}</td>
                                                 <td className="px-3 py-3.5 text-right">
@@ -4711,24 +4796,32 @@ const Payroll = () => {
                         </div>
 
                         {/* Sub-navigation for Loans */}
-                        <div className="flex gap-2 border-b border-slate-100 pb-2">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-2 mb-4">
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setActiveLoanSubTab('ledger')}
+                                    className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${activeLoanSubTab === 'ledger'
+                                        ? 'border-indigo-600 text-indigo-600'
+                                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                                        }`}
+                                >
+                                    Active Ledger
+                                </button>
+                                <button
+                                    onClick={() => setActiveLoanSubTab('repayments')}
+                                    className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${activeLoanSubTab === 'repayments'
+                                        ? 'border-indigo-600 text-indigo-600'
+                                        : 'border-transparent text-slate-400 hover:text-slate-600'
+                                        }`}
+                                >
+                                    Repayment Logs
+                                </button>
+                            </div>
                             <button
-                                onClick={() => setActiveLoanSubTab('ledger')}
-                                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${activeLoanSubTab === 'ledger'
-                                    ? 'border-indigo-600 text-indigo-600'
-                                    : 'border-transparent text-slate-400 hover:text-slate-600'
-                                    }`}
+                                onClick={handleExportLoansCSV}
+                                className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1.5 active:scale-95 shadow-sm mb-1"
                             >
-                                Active Ledger
-                            </button>
-                            <button
-                                onClick={() => setActiveLoanSubTab('repayments')}
-                                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all ${activeLoanSubTab === 'repayments'
-                                    ? 'border-indigo-600 text-indigo-600'
-                                    : 'border-transparent text-slate-400 hover:text-slate-600'
-                                    }`}
-                            >
-                                Repayment Logs
+                                <Download size={13} /> Export Loans
                             </button>
                         </div>
 
