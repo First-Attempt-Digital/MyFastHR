@@ -1008,6 +1008,11 @@ const Payroll = () => {
                 designation: reg.designation,
                 department: reg.department || reg.department_name || '',
                 location: reg.location || reg.office_location || '',
+                payment_type: reg.payment_type || '',
+                bank_name: reg.bank_name || '',
+                bank_branch: reg.bank_branch || '',
+                account_number: reg.account_number || '',
+                ifsc_code: reg.ifsc_code || '',
                 presents: reg.stats?.P || 0,
                 leaves: reg.stats?.L || 0,
                 absents: reg.stats?.A || 0,
@@ -1067,6 +1072,11 @@ const Payroll = () => {
             designation: 'Designation',
             department: 'Department',
             location: 'Location',
+            payment_type: 'Payment Mode',
+            bank_name: 'Bank Name',
+            bank_branch: 'Bank Branch',
+            account_number: 'Account Number',
+            ifsc_code: 'IFSC Code',
             presents: 'Presents (P)',
             leaves: 'Leaves (L)',
             absents: 'Absents (A)',
@@ -1084,8 +1094,8 @@ const Payroll = () => {
         });
 
         headers.total_deductions = 'Other Deductions';
-        headers.loan_emi_deduction = 'Loan EMI';
         headers.remaining_loan = 'Outstanding Loan';
+        headers.loan_emi_deduction = 'Loan EMI';
         headers.net_salary = 'Projected Net Salary';
         headers.status = 'Status';
 
@@ -2879,8 +2889,8 @@ const Payroll = () => {
                                                 <th key={rule.id} className="px-3 py-3 text-indigo-600 text-[9px] font-black uppercase tracking-widest">{rule.rule_name}</th>
                                             ))}
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Other Deductions</th>
-                                            <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Loan EMI</th>
                                             <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Outstanding Loan</th>
+                                            <th className="px-3 py-3 text-rose-600 text-[9px] font-black uppercase tracking-widest">Loan EMI</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-[#4361ee] uppercase tracking-widest bg-indigo-50/10">Projected Net</th>
                                             <th className="px-3 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Status</th>
                                         </tr>
@@ -3125,10 +3135,10 @@ const Payroll = () => {
                                                     {reg.total_deductions > 0 ? `-₹${Number(reg.total_deductions).toFixed(2)}` : '0.00'}
                                                 </td>
                                                 <td className="px-3 py-3.5 text-xs font-bold text-rose-500/90">
-                                                    {reg.loan_emi_deduction > 0 ? `-₹${Number(reg.loan_emi_deduction).toFixed(2)}` : '0.00'}
+                                                    {reg.remaining_loan > 0 ? `₹${Number(reg.remaining_loan).toFixed(2)}` : '0.00'}
                                                 </td>
                                                 <td className="px-3 py-3.5 text-xs font-bold text-rose-500/90">
-                                                    {reg.remaining_loan > 0 ? `₹${Number(reg.remaining_loan).toFixed(2)}` : '0.00'}
+                                                    {reg.loan_emi_deduction > 0 ? `-₹${Number(reg.loan_emi_deduction).toFixed(2)}` : '0.00'}
                                                 </td>
                                                 <td className="px-3 py-3.5 text-xs font-black text-[#4361ee] bg-indigo-50/15">₹{Number(reg.net_salary).toLocaleString()}</td>
                                                 <td className="px-3 py-3.5 text-right">
@@ -5853,7 +5863,28 @@ const Payroll = () => {
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50/75 border-b border-slate-100">
-                                            <th className="px-4 py-2.5 text-[8px] font-black text-slate-400 uppercase tracking-widest w-12 text-center">Deduct?</th>
+                                            <th className="px-4 py-2.5 text-[8px] font-black text-slate-400 uppercase tracking-widest w-12 text-center">
+                                                <div className="flex flex-col items-center gap-0.5 justify-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={previewDeductions.length > 0 && approvedLoanIds.length === previewDeductions.length}
+                                                        ref={(el) => {
+                                                            if (el) {
+                                                                el.indeterminate = approvedLoanIds.length > 0 && approvedLoanIds.length < previewDeductions.length;
+                                                            }
+                                                        }}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setApprovedLoanIds(previewDeductions.map(d => d.id));
+                                                            } else {
+                                                                setApprovedLoanIds([]);
+                                                            }
+                                                        }}
+                                                        className="w-3.5 h-3.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                                    />
+                                                    <span className="text-[7px] text-slate-400 font-black mt-0.5">ALL</span>
+                                                </div>
+                                            </th>
                                             <th className="px-4 py-2.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">Employee</th>
                                             <th className="px-4 py-2.5 text-[8px] font-black text-slate-400 uppercase tracking-widest">Advance Title</th>
                                             <th className="px-4 py-2.5 text-[8px] font-black text-slate-400 uppercase tracking-widest text-right">EMI Amount</th>

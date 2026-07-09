@@ -39,7 +39,7 @@ class PayrollRepository {
         return await db('payrolls as p')
             .join('employees as e', 'p.employee_id', 'e.id')
             .where({ 'p.company_id': companyId, 'p.month': month, 'p.year': year })
-            .select('p.*', 'e.first_name', 'e.last_name', 'e.employee_id_number', 'e.designation');
+            .select('p.*', 'e.first_name', 'e.last_name', 'e.employee_id_number', 'e.designation', 'e.office_location', 'e.department', 'e.bank_name', 'e.bank_branch', 'e.account_number', 'e.ifsc_code', 'e.payment_type');
     }
 }
 
