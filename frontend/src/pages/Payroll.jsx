@@ -1018,6 +1018,11 @@ const Payroll = () => {
         const activeRules = globalRules.filter(r => !!r.is_active);
 
         const dataToExport = filteredData.map(reg => {
+            const formatNum = (val) => {
+                const parsed = parseFloat(val);
+                return isNaN(parsed) ? '0.00' : parsed.toFixed(2);
+            };
+
             // 1. Employee Info & Bank Details
             const row = {
                 employee_id_number: reg.employee_id_number,
@@ -1036,24 +1041,22 @@ const Payroll = () => {
                 absents: reg.stats?.A || 0,
                 weekoffs_holidays: (reg.stats?.OFF || 0) + (reg.stats?.H || 0),
                 // 3. Structured / Base Salaries
-                base_salary: reg.full_base_salary !== undefined && reg.full_base_salary !== null ? reg.full_base_salary : (reg.base_salary || 0),
-                total_allowances: reg.full_total_allowances !== undefined && reg.full_total_allowances !== null ? reg.full_total_allowances : (reg.total_allowances || 0)
+                base_salary: formatNum(reg.full_base_salary !== undefined && reg.full_base_salary !== null ? reg.full_base_salary : (reg.base_salary || 0)),
+                total_allowances: formatNum(reg.full_total_allowances !== undefined && reg.full_total_allowances !== null ? reg.full_total_allowances : (reg.total_allowances || 0))
             };
 
             // Calculated fields: Total Gross (Structured Gross)
-            row.total_gross = (parseFloat(row.base_salary) || 0) + (parseFloat(row.total_allowances) || 0);
+            row.total_gross = formatNum((parseFloat(row.base_salary) || 0) + (parseFloat(row.total_allowances) || 0));
 
             // 4. Earned / Actual Salaries
-            row.actual_basic = reg.base_salary || 0;
-            row.actual_allowances = reg.total_allowances || 0;
-            row.actual_gross = (parseFloat(row.actual_basic) || 0) + (parseFloat(row.actual_allowances) || 0);
+            row.actual_basic = formatNum(reg.base_salary || 0);
+            row.actual_allowances = formatNum(reg.total_allowances || 0);
+            row.actual_gross = formatNum((parseFloat(row.actual_basic) || 0) + (parseFloat(row.actual_allowances) || 0));
 
             // 5. Deductions & Adjustments
-            row.late_mark_deduction = reg.late_mark_deduction || 0;
-            row.overtime_bonus = reg.overtime_bonus || 0;
-            row.manual_deduction_override = reg.manual_deduction_override || 0;
-
-            let totalEmployerShare = 0;
+            row.late_mark_deduction = formatNum(reg.late_mark_deduction || 0);
+            row.overtime_bonus = formatNum(reg.overtime_bonus || 0);
+            row.manual_deduction_override = formatNum(reg.manual_deduction_override || 0);
 
             // 6 & 7. Active statutory rules - Employee & Employer side
             activeRules.forEach(rule => {
@@ -1112,17 +1115,15 @@ const Payroll = () => {
                     return 0;
                 })();
 
-                row[`rule_ee_${rule.id}`] = eeShareVal;
-                row[`rule_er_${rule.id}`] = erShareVal;
-                totalEmployerShare += erShareVal;
+                row[`rule_ee_${rule.id}`] = formatNum(eeShareVal);
+                row[`rule_er_${rule.id}`] = formatNum(erShareVal);
             });
 
             // 8. Summary Totals
-            row.total_deductions = reg.total_deductions || 0;
-            row.remaining_loan = reg.remaining_loan || 0;
-            row.loan_emi_deduction = reg.loan_emi_deduction || 0;
-            row.net_salary = reg.net_salary || 0;
-            row.total_ctc = (parseFloat(row.actual_gross) || 0) + totalEmployerShare;
+            row.total_deductions = formatNum(reg.total_deductions || 0);
+            row.remaining_loan = formatNum(reg.remaining_loan || 0);
+            row.loan_emi_deduction = formatNum(reg.loan_emi_deduction || 0);
+            row.net_salary = formatNum(reg.net_salary || 0);
             row.status = reg.status || 'draft';
 
             return row;
@@ -1163,7 +1164,6 @@ const Payroll = () => {
         headers.remaining_loan = 'Outstanding Loan';
         headers.loan_emi_deduction = 'Loan EMI';
         headers.net_salary = 'Net Payable';
-        headers.total_ctc = 'Total CTC';
         headers.status = 'Status';
 
         exportToCSV(dataToExport, `Pay_Salary_${selectedMonth.replace(' ', '_')}.csv`, headers);
