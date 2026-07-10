@@ -358,6 +358,8 @@ const Payroll = () => {
     // Pay Register states
     const [registerData, setRegisterData] = useState([]);
     const [registerLoading, setRegisterLoading] = useState(false);
+    const [showPaySalaryModal, setShowPaySalaryModal] = useState(false);
+    const [paySalaryFilters, setPaySalaryFilters] = useState({ bank: true, cheque: true, cash: true });
 
     // Salary Structures states
     const [employees, setEmployees] = useState([]);
@@ -990,6 +992,184 @@ const Payroll = () => {
         } catch (err) {
             alert('Failed to export ESIC CSV: ' + err.message);
         }
+    };
+
+    const handleExportPaySalaryCSV = () => {
+        const targetData = registerData;
+        if (!targetData || targetData.length === 0) {
+            alert("No data available to export.");
+            return;
+        }
+
+        // Filter based on selected options in the popup
+        const filteredData = targetData.filter(reg => {
+            const mode = (reg.payment_type || '').toLowerCase().trim();
+            if (paySalaryFilters.bank && (mode === 'bank' || mode === 'bank transfer')) return true;
+            if (paySalaryFilters.cheque && mode === 'cheque') return true;
+            if (paySalaryFilters.cash && mode === 'cash') return true;
+            return false;
+        });
+
+        if (filteredData.length === 0) {
+            alert("No employees match the selected payment modes.");
+            return;
+        }
+
+        const activeRules = globalRules.filter(r => !!r.is_active);
+
+        const dataToExport = filteredData.map(reg => {
+            // 1. Employee Info & Bank Details
+            const row = {
+                employee_id_number: reg.employee_id_number,
+                name: `${reg.first_name || ''} ${reg.last_name || ''}`.trim(),
+                designation: reg.designation,
+                department: reg.department || reg.department_name || '',
+                location: reg.location || reg.office_location || '',
+                payment_type: reg.payment_type || '',
+                bank_name: reg.bank_name || '',
+                bank_branch: reg.bank_branch || '',
+                account_number: reg.account_number || '',
+                ifsc_code: reg.ifsc_code || '',
+                // 2. Attendance Stats
+                presents: reg.stats?.P || 0,
+                leaves: reg.stats?.L || 0,
+                absents: reg.stats?.A || 0,
+                weekoffs_holidays: (reg.stats?.OFF || 0) + (reg.stats?.H || 0),
+                // 3. Structured / Base Salaries
+                base_salary: reg.full_base_salary !== undefined && reg.full_base_salary !== null ? reg.full_base_salary : (reg.base_salary || 0),
+                total_allowances: reg.full_total_allowances !== undefined && reg.full_total_allowances !== null ? reg.full_total_allowances : (reg.total_allowances || 0)
+            };
+
+            // Calculated fields: Total Gross (Structured Gross)
+            row.total_gross = (parseFloat(row.base_salary) || 0) + (parseFloat(row.total_allowances) || 0);
+
+            // 4. Earned / Actual Salaries
+            row.actual_basic = reg.base_salary || 0;
+            row.actual_allowances = reg.total_allowances || 0;
+            row.actual_gross = (parseFloat(row.actual_basic) || 0) + (parseFloat(row.actual_allowances) || 0);
+
+            // 5. Deductions & Adjustments
+            row.unpaid_leave_deduction = reg.unpaid_leave_deduction || 0;
+            row.late_mark_deduction = reg.late_mark_deduction || 0;
+            row.overtime_bonus = reg.overtime_bonus || 0;
+            row.manual_deduction_override = reg.manual_deduction_override || 0;
+
+            let totalEmployerShare = 0;
+
+            // 6 & 7. Active statutory rules - Employee & Employer side
+            activeRules.forEach(rule => {
+                const eeShareVal = (() => {
+                    if (reg.statutory_rules_breakdown) {
+                        try {
+                            const breakdown = typeof reg.statutory_rules_breakdown === 'string'
+                                ? JSON.parse(reg.statutory_rules_breakdown)
+                                : reg.statutory_rules_breakdown;
+                            if (breakdown && typeof breakdown === 'object') {
+                                const item = breakdown[rule.id] || breakdown[rule.rule_name] || (Array.isArray(breakdown) && breakdown.find(r => r.rule_name === rule.rule_name));
+                                if (item) {
+                                    if (item.employeeShare !== undefined) return parseFloat(item.employeeShare) || 0;
+                                    if (item.employee_share !== undefined) return parseFloat(item.employee_share) || 0;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    
+                    const nameLower = rule.rule_name.toLowerCase();
+                    if (nameLower.includes('pf') || nameLower.includes('provident')) {
+                        return parseFloat(reg.employee_pf) || 0;
+                    }
+                    if (nameLower.includes('esic') || nameLower.includes('esi') || nameLower.includes('insurance')) {
+                        return parseFloat(reg.employee_esic) || 0;
+                    }
+                    if (nameLower.includes('gratuity')) {
+                        return parseFloat(reg.gratuity_share) || 0;
+                    }
+                    return 0;
+                })();
+
+                const erShareVal = (() => {
+                    if (reg.statutory_rules_breakdown) {
+                        try {
+                            const breakdown = typeof reg.statutory_rules_breakdown === 'string'
+                                ? JSON.parse(reg.statutory_rules_breakdown)
+                                : reg.statutory_rules_breakdown;
+                            if (breakdown && typeof breakdown === 'object') {
+                                const item = breakdown[rule.id] || breakdown[rule.rule_name] || (Array.isArray(breakdown) && breakdown.find(r => r.rule_name === rule.rule_name));
+                                if (item) {
+                                    if (item.employerShare !== undefined) return parseFloat(item.employerShare) || 0;
+                                    if (item.employer_share !== undefined) return parseFloat(item.employer_share) || 0;
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    
+                    const nameLower = rule.rule_name.toLowerCase();
+                    if (nameLower.includes('pf') || nameLower.includes('provident')) {
+                        return parseFloat(reg.employer_pf) || 0;
+                    }
+                    if (nameLower.includes('esic') || nameLower.includes('esi') || nameLower.includes('insurance')) {
+                        return parseFloat(reg.employer_esic) || 0;
+                    }
+                    return 0;
+                })();
+
+                row[`rule_ee_${rule.id}`] = eeShareVal;
+                row[`rule_er_${rule.id}`] = erShareVal;
+                totalEmployerShare += erShareVal;
+            });
+
+            // 8. Summary Totals
+            row.total_deductions = reg.total_deductions || 0;
+            row.remaining_loan = reg.remaining_loan || 0;
+            row.loan_emi_deduction = reg.loan_emi_deduction || 0;
+            row.net_salary = reg.net_salary || 0;
+            row.total_ctc = (parseFloat(row.actual_gross) || 0) + totalEmployerShare;
+            row.status = reg.status || 'draft';
+
+            return row;
+        });
+
+        const headers = {
+            employee_id_number: 'Employee ID',
+            name: 'Employee Name',
+            designation: 'Designation',
+            department: 'Department',
+            location: 'Location',
+            payment_type: 'Payment Mode',
+            bank_name: 'Bank Name',
+            bank_branch: 'Bank Branch',
+            account_number: 'Account Number',
+            ifsc_code: 'IFSC Code',
+            presents: 'Presents (P)',
+            leaves: 'Leaves (L)',
+            absents: 'Absents (A)',
+            weekoffs_holidays: 'Weekoffs/Holidays (OFF/H)',
+            base_salary: 'Base Salary',
+            total_allowances: 'Allowances',
+            total_gross: 'Total Gross',
+            actual_basic: 'Actual Basic',
+            actual_allowances: 'Actual Allowances',
+            actual_gross: 'Actual Gross',
+            unpaid_leave_deduction: 'Leaves Cut',
+            late_mark_deduction: 'Late Penalty',
+            overtime_bonus: 'Bonus / Incentives',
+            manual_deduction_override: 'Manual Deductions'
+        };
+
+        activeRules.forEach(rule => {
+            headers[`rule_ee_${rule.id}`] = `${rule.rule_name} (Employee)`;
+            headers[`rule_er_${rule.id}`] = `${rule.rule_name} (Employer)`;
+        });
+
+        headers.total_deductions = 'Other Deductions';
+        headers.remaining_loan = 'Outstanding Loan';
+        headers.loan_emi_deduction = 'Loan EMI';
+        headers.net_salary = 'Projected Net Salary';
+        headers.total_ctc = 'Total CTC';
+        headers.status = 'Status';
+
+        exportToCSV(dataToExport, `Pay_Salary_${selectedMonth.replace(' ', '_')}.csv`, headers);
+        setShowPaySalaryModal(false);
     };
 
     const handleExportRegisterCSV = () => {
@@ -2849,6 +3029,12 @@ const Payroll = () => {
                                 <p className="text-slate-400 text-xs mt-0.5">Real-time attendance matrices combined with live projected take-home pay sheets.</p>
                             </div>
                             <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowPaySalaryModal(true)}
+                                    className="px-3.5 py-2 bg-[#4361ee] hover:bg-indigo-700 text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1.5 active:scale-95 shadow-sm"
+                                >
+                                    <Coins size={13} /> Pay Salary
+                                </button>
                                 <button
                                     onClick={handleExportRegisterCSV}
                                     className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1.5 active:scale-95 shadow-sm"
@@ -5833,6 +6019,85 @@ const Payroll = () => {
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* Pay Salary Export Modal */}
+            {showPaySalaryModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col gap-5 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-indigo-600" />
+
+                        <button
+                            onClick={() => setShowPaySalaryModal(false)}
+                            className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-50 transition-all font-black text-xs w-7 h-7 flex items-center justify-center border border-slate-200/50"
+                        >
+                            ✕
+                        </button>
+
+                        <div>
+                            <h3 className="text-base font-black text-slate-900 tracking-tight">Pay Salary Export</h3>
+                            <p className="text-[10px] font-bold text-slate-400 mt-1">
+                                Select payment modes to filter employees and download the payroll sheet for {selectedMonth}.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-3 py-2">
+                            <label className="flex items-center gap-3 cursor-pointer bg-slate-50 border border-slate-200/60 rounded-xl px-4 py-3 hover:border-indigo-500/30 transition-all select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={paySalaryFilters.bank}
+                                    onChange={(e) => setPaySalaryFilters({ ...paySalaryFilters, bank: e.target.checked })}
+                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                />
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Bank Transfer</span>
+                                    <span className="text-[9px] text-slate-400 font-semibold">Include employees paid directly to bank accounts</span>
+                                </div>
+                            </label>
+
+                            <label className="flex items-center gap-3 cursor-pointer bg-slate-50 border border-slate-200/60 rounded-xl px-4 py-3 hover:border-indigo-500/30 transition-all select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={paySalaryFilters.cheque}
+                                    onChange={(e) => setPaySalaryFilters({ ...paySalaryFilters, cheque: e.target.checked })}
+                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                />
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Cheque</span>
+                                    <span className="text-[9px] text-slate-400 font-semibold">Include employees paid by company cheques</span>
+                                </div>
+                            </label>
+
+                            <label className="flex items-center gap-3 cursor-pointer bg-slate-50 border border-slate-200/60 rounded-xl px-4 py-3 hover:border-indigo-500/30 transition-all select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={paySalaryFilters.cash}
+                                    onChange={(e) => setPaySalaryFilters({ ...paySalaryFilters, cash: e.target.checked })}
+                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                />
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Cash</span>
+                                    <span className="text-[9px] text-slate-400 font-semibold">Include employees paid in physical currency</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div className="flex gap-2 justify-end border-t border-slate-50 pt-4 mt-2">
+                            <button
+                                onClick={() => setShowPaySalaryModal(false)}
+                                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 text-slate-500 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleExportPaySalaryCSV}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
+                            >
+                                <Download size={12} /> Download CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Process Payroll Confirmation Modal */}
             {showProcessConfirmation && (
