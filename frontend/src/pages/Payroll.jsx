@@ -1264,7 +1264,7 @@ const Payroll = () => {
             uan_number: 'UAN Number',
             esi_number: 'ESIC Number',
             presents: 'Presents (P)',
-            leaves: 'Leaves (L)',
+            leaves: 'Late In',
             absents: 'Absents (A)',
             weekoffs_holidays: 'Weekoffs/Holidays (OFF/H)',
             base_salary: 'Base Salary',
@@ -1282,7 +1282,7 @@ const Payroll = () => {
         headers.total_deductions = 'Other Deductions';
         headers.remaining_loan = 'Outstanding Loan';
         headers.loan_emi_deduction = 'Loan EMI';
-        headers.net_salary = 'Projected Net Salary';
+        headers.net_salary = 'Net Payable';
         headers.status = 'Status';
 
         exportToCSV(dataToExport, `Pay_Register_${selectedMonth.replace(' ', '_')}.csv`, headers);
