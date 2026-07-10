@@ -783,7 +783,8 @@ class PayrollService {
         // Fetch employee bank and payment details
         const employeesList = await db('employees')
             .where('company_id', companyId)
-            .select('id', 'bank_name', 'bank_branch', 'account_number', 'ifsc_code', 'payment_type');
+            .select('id', 'bank_name', 'bank_branch', 'account_number', 'ifsc_code', 'payment_type', 'uan_number', 'esi_number', 'pf_number');
+
         const empMap = new Map(employeesList.map(e => [e.id, e]));
 
         const register = [];
@@ -868,6 +869,9 @@ class PayrollService {
                 bank_branch: empDetails.bank_branch || '',
                 account_number: empDetails.account_number || '',
                 ifsc_code: empDetails.ifsc_code || '',
+                uan_number: empDetails.uan_number || '',
+                pf_number: empDetails.pf_number || '',
+                esi_number: empDetails.esi_number || '',
             });
         }
 
