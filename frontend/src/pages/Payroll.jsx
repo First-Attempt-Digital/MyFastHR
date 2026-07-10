@@ -1049,7 +1049,6 @@ const Payroll = () => {
             row.actual_gross = (parseFloat(row.actual_basic) || 0) + (parseFloat(row.actual_allowances) || 0);
 
             // 5. Deductions & Adjustments
-            row.unpaid_leave_deduction = reg.unpaid_leave_deduction || 0;
             row.late_mark_deduction = reg.late_mark_deduction || 0;
             row.overtime_bonus = reg.overtime_bonus || 0;
             row.manual_deduction_override = reg.manual_deduction_override || 0;
@@ -1141,7 +1140,7 @@ const Payroll = () => {
             account_number: 'Account Number',
             ifsc_code: 'IFSC Code',
             presents: 'Presents (P)',
-            leaves: 'Leaves (L)',
+            leaves: 'Late In',
             absents: 'Absents (A)',
             weekoffs_holidays: 'Weekoffs/Holidays (OFF/H)',
             base_salary: 'Base Salary',
@@ -1150,7 +1149,6 @@ const Payroll = () => {
             actual_basic: 'Actual Basic',
             actual_allowances: 'Actual Allowances',
             actual_gross: 'Actual Gross',
-            unpaid_leave_deduction: 'Leaves Cut',
             late_mark_deduction: 'Late Penalty',
             overtime_bonus: 'Bonus / Incentives',
             manual_deduction_override: 'Manual Deductions'
@@ -1164,7 +1162,7 @@ const Payroll = () => {
         headers.total_deductions = 'Other Deductions';
         headers.remaining_loan = 'Outstanding Loan';
         headers.loan_emi_deduction = 'Loan EMI';
-        headers.net_salary = 'Projected Net Salary';
+        headers.net_salary = 'Net Payable';
         headers.total_ctc = 'Total CTC';
         headers.status = 'Status';
 
