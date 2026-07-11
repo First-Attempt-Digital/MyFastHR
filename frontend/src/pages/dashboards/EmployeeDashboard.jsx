@@ -157,6 +157,13 @@ const EmployeeDashboard = () => {
             setLocationError("Geolocation is not supported by this browser.");
             return;
         }
+        
+        // Geolocation requires HTTPS to prompt user, except on localhost
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            setLocationError("Security Block: Geolocation requires a secure HTTPS connection. Please access the site using https:// (e.g., https://myfasthr.com) to enable location.");
+            return;
+        }
+
         setLocationLoading(true);
         setLocationError(null);
         setLocationCoords(null);
@@ -190,7 +197,7 @@ const EmployeeDashboard = () => {
             setLocationLoading(false);
             switch (error.code) {
                 case error.PERMISSION_DENIED:
-                    setLocationError("Location permission denied. Please allow location access in your browser settings to proceed.");
+                    setLocationError("Location permission denied. Please click the Lock 🔒 or Settings icon in your browser's address bar (next to the URL), change Location permission to 'Allow', and refresh this page.");
                     break;
                 case error.POSITION_UNAVAILABLE:
                     setLocationError("Location information is unavailable. Please verify GPS settings and retry.");
