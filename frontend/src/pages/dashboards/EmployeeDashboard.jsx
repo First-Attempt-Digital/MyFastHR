@@ -458,17 +458,13 @@ const EmployeeDashboard = () => {
 
 
     const submitPunch = async () => {
-        if (!locationCoords) {
-            alert("Valid live location is required to proceed. Please enable browser location permissions.");
-            return;
-        }
         try {
             const payload = {
                 location: punchLocation,
                 remarks: punchRemarks,
-                latitude: locationCoords.latitude,
-                longitude: locationCoords.longitude,
-                accuracy: locationAccuracy
+                latitude: locationCoords ? locationCoords.latitude : null,
+                longitude: locationCoords ? locationCoords.longitude : null,
+                accuracy: locationAccuracy || null
             };
             if (punchFlowState === 'in') {
                 await api.post('/attendance/check-in', payload);
@@ -1749,21 +1745,17 @@ const EmployeeDashboard = () => {
 
                             <div className="mt-auto pt-8">
                                 <button 
-                                    disabled={!punchLocation || locationLoading || !!locationError || !locationCoords}
+                                    disabled={!punchLocation || locationLoading}
                                     onClick={submitPunch}
                                     className={`w-full py-3.5 rounded-full font-bold text-[17px] text-white transition-all duration-300 active:scale-[0.98] ${
-                                        (!punchLocation || locationLoading || !!locationError || !locationCoords)
+                                        (!punchLocation || locationLoading)
                                             ? 'bg-slate-300 cursor-not-allowed shadow-none' 
                                             : 'bg-[#4361EE] shadow-lg shadow-blue-200 hover:brightness-105 active:scale-[0.97]'
                                     }`}
                                 >
                                     {locationLoading 
                                         ? 'Fetching Location...' 
-                                        : locationError 
-                                            ? 'Location Permission Required' 
-                                            : !locationCoords 
-                                                ? 'Acquiring GPS Lock...'
-                                                : `Sign ${punchFlowState === 'in' ? 'In' : 'Out'}`
+                                        : `Sign ${punchFlowState === 'in' ? 'In' : 'Out'}`
                                     }
                                 </button>
                             </div>

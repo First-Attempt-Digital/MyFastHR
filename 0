@@ -1,0 +1,3 @@
+[main 1c44e4d] fix: cap loan deductions by net salary so net salary stays , and distribute capped deductions to repayments so unrecovered amount remains outstanding
+ 3 files changed, 31 insertions(+), 6 deletions(-)
+ create mode 100644 0
