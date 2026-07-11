@@ -3166,7 +3166,7 @@ const Payroll = () => {
                                                                         }
 
                                                                         const net = base + allowances - deductions - late - statutoryDeductionsTotal - loan - manualDeduct + numBonus;
-                                                                        const newNet = Math.max(0, net).toFixed(2);
+                                                                        const newNet = net.toFixed(2);
                                                                         return { ...item, overtime_bonus: val, net_salary: newNet };
                                                                     }
                                                                     return item;
@@ -3248,7 +3248,7 @@ const Payroll = () => {
                                                                         }
 
                                                                         const net = base + allowances - deductions - late - statutoryDeductionsTotal - loan - numDeduct + bonus;
-                                                                        const newNet = Math.max(0, net).toFixed(2);
+                                                                        const newNet = net.toFixed(2);
                                                                         return { ...item, manual_deduction_override: val, net_salary: newNet };
                                                                     }
                                                                     return item;

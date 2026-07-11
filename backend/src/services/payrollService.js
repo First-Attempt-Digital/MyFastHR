@@ -409,23 +409,6 @@ class PayrollService {
         let actualLoanEmi = parseFloat(loanEmi || 0);
 
         if (activeRevision.isRevision) {
-            // First calculate net salary before loan EMI to cap the EMI deduction
-            const tempComp = this.calculateProratedSalaryComponents(
-                activeRevision,
-                paidDays,
-                daysInMonth,
-                empRecord.stats,
-                activeRules,
-                manualDeduction,
-                0, // 0 loan EMI
-                overtimeBonus,
-                unpaidLeaveDaysForDeduction,
-                emp,
-                globalRules
-            );
-            const netBeforeLoan = parseFloat(tempComp.netSalary) || 0;
-            actualLoanEmi = Math.min(actualLoanEmi, Math.max(0, netBeforeLoan));
-
             const comp = this.calculateProratedSalaryComponents(
                 activeRevision,
                 paidDays,
@@ -451,7 +434,7 @@ class PayrollService {
             employeeEsic = comp.employeeEsic;
             employerEsic = comp.employerEsic;
             breakdown = comp.breakdown;
-            netSalary = Math.max(0, parseFloat(comp.netSalary)).toFixed(2);
+            netSalary = parseFloat(comp.netSalary).toFixed(2);
             
             fullBaseSalary = parseFloat(activeRevision.basic) || 0;
             fullTotalAllowances = (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0);
@@ -574,8 +557,7 @@ class PayrollService {
             totalDeductions = earnedDeductions + totalOtherStatutoryDeductions;
             
             const netBeforeLoan = earnedBase + earnedAllowances - earnedDeductions - lateDeduction - employeePf - employeeEsic - totalOtherStatutoryDeductions - manualDeduction + overtimeBonus;
-            actualLoanEmi = Math.min(actualLoanEmi, Math.max(0, netBeforeLoan));
-            netSalary = Math.max(0, netBeforeLoan - actualLoanEmi).toFixed(2);
+            netSalary = (netBeforeLoan - actualLoanEmi).toFixed(2);
         }
 
         return {
