@@ -995,7 +995,7 @@ const Payroll = () => {
     };
 
     const handleExportPaySalaryCSV = () => {
-        const targetData = registerData;
+        const targetData = filteredRegisterData;
         if (!targetData || targetData.length === 0) {
             alert("No data available to export.");
             return;
