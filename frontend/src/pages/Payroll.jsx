@@ -1001,14 +1001,17 @@ const Payroll = () => {
             return;
         }
 
-        // Filter based on selected options in the popup
-        const filteredData = targetData.filter(reg => {
-            const mode = (reg.payment_type || '').toLowerCase().trim();
-            if (paySalaryFilters.bank && (mode === 'bank' || mode === 'bank transfer')) return true;
-            if (paySalaryFilters.cheque && mode === 'cheque') return true;
-            if (paySalaryFilters.cash && mode === 'cash') return true;
-            return false;
-        });
+        // If all three modes selected (i.e. "All" effectively chosen), skip filtering
+        const allSelected = paySalaryFilters.bank && paySalaryFilters.cheque && paySalaryFilters.cash;
+        const filteredData = allSelected
+            ? targetData
+            : targetData.filter(reg => {
+                const mode = (reg.payment_type || '').toLowerCase().trim();
+                if (paySalaryFilters.bank && (mode === 'bank' || mode === 'bank transfer')) return true;
+                if (paySalaryFilters.cheque && mode === 'cheque') return true;
+                if (paySalaryFilters.cash && mode === 'cash') return true;
+                return false;
+              });
 
         if (filteredData.length === 0) {
             alert("No employees match the selected payment modes.");
@@ -6047,6 +6050,27 @@ const Payroll = () => {
                         </div>
 
                         <div className="flex flex-col gap-3 py-2">
+                            {/* ALL option */}
+                            <label className="flex items-center gap-3 cursor-pointer bg-indigo-50 border-2 border-indigo-200 rounded-xl px-4 py-3 hover:border-indigo-400 transition-all select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={paySalaryFilters.bank && paySalaryFilters.cheque && paySalaryFilters.cash}
+                                    ref={(el) => {
+                                        if (el) {
+                                            const anyChecked = paySalaryFilters.bank || paySalaryFilters.cheque || paySalaryFilters.cash;
+                                            const allChecked = paySalaryFilters.bank && paySalaryFilters.cheque && paySalaryFilters.cash;
+                                            el.indeterminate = anyChecked && !allChecked;
+                                        }
+                                    }}
+                                    onChange={(e) => setPaySalaryFilters({ bank: e.target.checked, cheque: e.target.checked, cash: e.target.checked })}
+                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                />
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-black text-indigo-700 uppercase tracking-wide">All</span>
+                                    <span className="text-[9px] text-indigo-400 font-semibold">Include all employees regardless of payment mode</span>
+                                </div>
+                            </label>
+
                             <label className="flex items-center gap-3 cursor-pointer bg-slate-50 border border-slate-200/60 rounded-xl px-4 py-3 hover:border-indigo-500/30 transition-all select-none">
                                 <input
                                     type="checkbox"

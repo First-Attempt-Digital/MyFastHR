@@ -9,7 +9,7 @@ class PayrollRepository {
 
     async upsertSalaryStructure(employeeId, companyId, data) {
         const existing = await this.getSalaryStructure(employeeId, companyId);
-        
+
         const payload = {
             employee_id: employeeId,
             company_id: companyId,
