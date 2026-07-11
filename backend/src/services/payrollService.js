@@ -409,6 +409,23 @@ class PayrollService {
         let actualLoanEmi = parseFloat(loanEmi || 0);
 
         if (activeRevision.isRevision) {
+            // First calculate net salary before loan EMI to cap the EMI deduction
+            const tempComp = this.calculateProratedSalaryComponents(
+                activeRevision,
+                paidDays,
+                daysInMonth,
+                empRecord.stats,
+                activeRules,
+                manualDeduction,
+                0, // 0 loan EMI
+                overtimeBonus,
+                unpaidLeaveDaysForDeduction,
+                emp,
+                globalRules
+            );
+            const netBeforeLoan = parseFloat(tempComp.netSalary) || 0;
+            actualLoanEmi = Math.min(actualLoanEmi, Math.max(0, netBeforeLoan));
+
             const comp = this.calculateProratedSalaryComponents(
                 activeRevision,
                 paidDays,
@@ -434,7 +451,7 @@ class PayrollService {
             employeeEsic = comp.employeeEsic;
             employerEsic = comp.employerEsic;
             breakdown = comp.breakdown;
-            netSalary = parseFloat(comp.netSalary).toFixed(2);
+            netSalary = Math.max(0, parseFloat(comp.netSalary)).toFixed(2);
             
             fullBaseSalary = parseFloat(activeRevision.basic) || 0;
             fullTotalAllowances = (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0);
@@ -557,7 +574,8 @@ class PayrollService {
             totalDeductions = earnedDeductions + totalOtherStatutoryDeductions;
             
             const netBeforeLoan = earnedBase + earnedAllowances - earnedDeductions - lateDeduction - employeePf - employeeEsic - totalOtherStatutoryDeductions - manualDeduction + overtimeBonus;
-            netSalary = (netBeforeLoan - actualLoanEmi).toFixed(2);
+            actualLoanEmi = Math.min(actualLoanEmi, Math.max(0, netBeforeLoan));
+            netSalary = Math.max(0, netBeforeLoan - actualLoanEmi).toFixed(2);
         }
 
         return {
@@ -706,8 +724,13 @@ class PayrollService {
                         .first();
 
                     if (savedPayroll) {
+                        let remainingToDeduct = parseFloat(comp.loan_emi_deduction || 0);
                         for (const item of deductionsToApply) {
-                            const newBalance = Math.max(0, item.remaining_balance - item.amount);
+                            if (remainingToDeduct <= 0) break;
+                            const thisDeduction = Math.min(item.amount, remainingToDeduct);
+                            if (thisDeduction <= 0) continue;
+
+                            const newBalance = Math.max(0, item.remaining_balance - thisDeduction);
                             const newStatus = newBalance === 0 ? 'completed' : 'active';
                             
                             await trx('loans').where({ id: item.loanId }).update({
@@ -718,12 +741,14 @@ class PayrollService {
                             await trx('loan_repayments').insert({
                                 company_id: companyId,
                                 loan_id: item.loanId,
-                                amount_paid: item.amount,
+                                amount_paid: thisDeduction,
                                 payment_method: 'payroll',
                                 payment_date: trx.fn.now(),
                                 payroll_id: savedPayroll.id,
                                 notes: `Auto-EMI deducted via payroll for ${month}/${year}`
                             });
+
+                            remainingToDeduct -= thisDeduction;
                         }
                     }
 
