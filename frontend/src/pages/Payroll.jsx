@@ -1178,7 +1178,7 @@ const Payroll = () => {
     };
 
     const handleExportRegisterCSV = () => {
-        const targetData = registerData; // Export all employees for completeness
+        const targetData = filteredRegisterData; // Export only the currently filtered/visible employees
         if (!targetData || targetData.length === 0) {
             alert("No data available to export.");
             return;
