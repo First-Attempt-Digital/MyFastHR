@@ -162,36 +162,49 @@ const EmployeeDashboard = () => {
         setLocationCoords(null);
         setLocationAccuracy(null);
 
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const { latitude, longitude, accuracy } = position.coords;
-                setLocationCoords({ latitude, longitude });
-                setLocationAccuracy(accuracy);
-                setLocationLoading(false);
-            },
-            (error) => {
-                setLocationLoading(false);
-                switch (error.code) {
-                    case error.PERMISSION_DENIED:
-                        setLocationError("Location permission denied. Please allow location access in your browser settings to proceed.");
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        setLocationError("Location information is unavailable. Please verify GPS settings and retry.");
-                        break;
-                    case error.TIMEOUT:
-                        setLocationError("Location request timed out. Please check your signal and retry.");
-                        break;
-                    default:
-                        setLocationError("An unknown error occurred while fetching your location.");
-                        break;
-                }
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        };
+
+        const successCallback = (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            setLocationCoords({ latitude, longitude });
+            setLocationAccuracy(accuracy);
+            setLocationLoading(false);
+        };
+
+        const errorCallback = (error) => {
+            if (options.enableHighAccuracy) {
+                console.warn("High accuracy geolocation failed. Trying low accuracy fallback...");
+                options.enableHighAccuracy = false;
+                // Try again with low accuracy
+                navigator.geolocation.getCurrentPosition(successCallback, finalErrorCallback, options);
+            } else {
+                finalErrorCallback(error);
             }
-        );
+        };
+
+        const finalErrorCallback = (error) => {
+            setLocationLoading(false);
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    setLocationError("Location permission denied. Please allow location access in your browser settings to proceed.");
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    setLocationError("Location information is unavailable. Please verify GPS settings and retry.");
+                    break;
+                case error.TIMEOUT:
+                    setLocationError("Location request timed out. Please check your signal and retry.");
+                    break;
+                default:
+                    setLocationError("An unknown error occurred while fetching your location.");
+                    break;
+            }
+        };
+
+        navigator.geolocation.getCurrentPosition(successCallback, errorCallback, options);
     };
 
     const handlePunchClick = () => {
@@ -458,13 +471,17 @@ const EmployeeDashboard = () => {
 
 
     const submitPunch = async () => {
+        if (!locationCoords) {
+            alert("Valid live location is required to proceed. Please enable browser location permissions.");
+            return;
+        }
         try {
             const payload = {
                 location: punchLocation,
                 remarks: punchRemarks,
-                latitude: locationCoords ? locationCoords.latitude : null,
-                longitude: locationCoords ? locationCoords.longitude : null,
-                accuracy: locationAccuracy || null
+                latitude: locationCoords.latitude,
+                longitude: locationCoords.longitude,
+                accuracy: locationAccuracy
             };
             if (punchFlowState === 'in') {
                 await api.post('/attendance/check-in', payload);
@@ -1745,17 +1762,21 @@ const EmployeeDashboard = () => {
 
                             <div className="mt-auto pt-8">
                                 <button 
-                                    disabled={!punchLocation || locationLoading}
+                                    disabled={!punchLocation || locationLoading || !!locationError || !locationCoords}
                                     onClick={submitPunch}
                                     className={`w-full py-3.5 rounded-full font-bold text-[17px] text-white transition-all duration-300 active:scale-[0.98] ${
-                                        (!punchLocation || locationLoading)
+                                        (!punchLocation || locationLoading || !!locationError || !locationCoords)
                                             ? 'bg-slate-300 cursor-not-allowed shadow-none' 
                                             : 'bg-[#4361EE] shadow-lg shadow-blue-200 hover:brightness-105 active:scale-[0.97]'
                                     }`}
                                 >
                                     {locationLoading 
                                         ? 'Fetching Location...' 
-                                        : `Sign ${punchFlowState === 'in' ? 'In' : 'Out'}`
+                                        : locationError 
+                                            ? 'Location Permission Required' 
+                                            : !locationCoords 
+                                                ? 'Acquiring GPS Lock...'
+                                                : `Sign ${punchFlowState === 'in' ? 'In' : 'Out'}`
                                     }
                                 </button>
                             </div>
