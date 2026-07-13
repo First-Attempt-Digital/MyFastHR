@@ -521,7 +521,7 @@ class MachineAttendanceService {
                     // Checkout attempt: evaluate based on check-in time of the open log
                     const checkInDate = dbDateToUTC(activeLog.check_in);
                     const checkInMins = dateToISTMins(checkInDate);
-                    if (checkInMins >= s1EndMins) {
+                    if (checkInMins >= session2CutoffMins) {
                         isSession2 = true;
                     }
                 } else {
@@ -529,7 +529,7 @@ class MachineAttendanceService {
                     const punchMins = dateToISTMins(punchTime);
                     if (latestLog && latestLog.check_out !== null) {
                         isSession2 = true;
-                    } else if (punchMins >= s1EndMins) {
+                    } else if (punchMins >= session2CutoffMins) {
                         isSession2 = true;
                     }
 
@@ -566,8 +566,8 @@ class MachineAttendanceService {
             const isSession1Checkout = (reqPunches === 4 && !isSession2);
             if (activeLog && activeLog.check_out === null && employeeWithShift && employeeWithShift.shift_terminate_hour && !isSession1Checkout) {
                 const checkInDateStr = dateToISTDateString(dbDateToUTC(activeLog.check_in));
-                const shiftStartStr = employeeWithShift.shift_start || '09:00';
-                const shiftEndStr = employeeWithShift.shift_end || '18:00';
+                const shiftStartStr = isSession2 ? (employeeWithShift.session2_start_time || '14:00') : (employeeWithShift.shift_start || '09:00');
+                const shiftEndStr = isSession2 ? (employeeWithShift.session2_end_time || '18:00') : (employeeWithShift.shift_end || '18:00');
 
                 const [sHours, sMins] = shiftStartStr.split(':').map(Number);
                 const [eHours, eMins] = shiftEndStr.split(':').map(Number);

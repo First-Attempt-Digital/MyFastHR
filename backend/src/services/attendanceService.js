@@ -305,7 +305,7 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
             session1_status: s1Present ? (s1Late ? 'Late' : 'Present') : (s1Active ? 'Checked In' : 'Absent'),
             session2_status: s2Present ? (s2Late ? 'Late' : 'Present') : (s2Active ? 'Checked In' : 'Absent'),
             explanation: `${s1PunchText} | ${s2PunchText}`,
-            punch_count: dayLogs.length * 2
+            punch_count: dayLogs.reduce((acc, log) => acc + (log.check_in ? 1 : 0) + (log.check_out ? 1 : 0), 0)
         };
     } else {
         // Standard 2-punch shift
