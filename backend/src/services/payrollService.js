@@ -211,7 +211,7 @@ class PayrollService {
                     const structuredGross = parseFloat(activeRevision.gross_salary) 
                         || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
                     
-                    if (structuredGross >= 35000) {
+                    if (structuredGross > 35000) {
                         eeShare = 0;
                         erShare = 0;
                     }
@@ -533,7 +533,7 @@ class PayrollService {
                     const structuredGross = parseFloat(activeRevision.gross_salary) 
                         || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
                     
-                    if (structuredGross >= 35000) {
+                    if (structuredGross > 35000) {
                         eeShare = 0;
                         erShare = 0;
                     }
