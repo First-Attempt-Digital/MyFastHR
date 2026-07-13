@@ -77,8 +77,14 @@ const WeekendOverride = () => {
             if (rulesRes.status === 'fulfilled') {
                 let woffs = rulesRes.value?.weekoffs || [];
                 if (typeof woffs === 'string') {
-                    try { woffs = JSON.parse(woffs); } catch { woffs = []; }
+                    try { 
+                        woffs = JSON.parse(woffs); 
+                        if (typeof woffs === 'string') {
+                            woffs = JSON.parse(woffs); // Sometimes it is double stringified like '"[]"'
+                        }
+                    } catch { woffs = []; }
                 }
+                if (!Array.isArray(woffs)) woffs = [];
                 setWeekoffs(woffs);
             }
         } catch (err) {
