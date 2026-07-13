@@ -1845,6 +1845,7 @@ class PayrollService {
     }
 
     async previewLoanDeductions(companyId, month, year) {
+        // Fetch all active loans
         const activeLoans = await db('loans')
             .join('employees', 'loans.employee_id', '=', 'employees.id')
             .where({ 'loans.company_id': companyId, 'loans.status': 'active' })
@@ -1859,7 +1860,42 @@ class PayrollService {
                 'employees.employee_id_number'
             );
 
-        return activeLoans.map(loan => {
+        const activeMap = new Map(activeLoans.map(l => [l.id, l]));
+
+        // Fetch repayments made in the target month/year's payroll (if it was already processed)
+        const payrollRepayments = await db('loan_repayments')
+            .join('payrolls', 'loan_repayments.payroll_id', '=', 'payrolls.id')
+            .where({ 'payrolls.company_id': companyId, 'payrolls.month': month, 'payrolls.year': year })
+            .select('loan_repayments.loan_id', 'loan_repayments.amount_paid');
+
+        // Add repayments back to balances to simulate state before this payroll was run
+        const missingLoanIds = [];
+        for (const rep of payrollRepayments) {
+            if (activeMap.has(rep.loan_id)) {
+                const l = activeMap.get(rep.loan_id);
+                l.remaining_balance = parseFloat(l.remaining_balance) + parseFloat(rep.amount_paid);
+            } else {
+                missingLoanIds.push(rep.loan_id);
+            }
+        }
+
+        // Fetch any loans that were completed by this very payroll and thus aren't 'active' anymore
+        if (missingLoanIds.length > 0) {
+            const completedLoans = await db('loans')
+                .join('employees', 'loans.employee_id', '=', 'employees.id')
+                .whereIn('loans.id', missingLoanIds)
+                .select(
+                    'loans.id', 'loans.title', 'loans.amount', 'loans.monthly_emi', 'loans.remaining_balance',
+                    'employees.first_name', 'employees.last_name', 'employees.employee_id_number'
+                );
+            for (const loan of completedLoans) {
+                const rep = payrollRepayments.find(r => r.loan_id === loan.id);
+                loan.remaining_balance = parseFloat(loan.remaining_balance) + (rep ? parseFloat(rep.amount_paid) : 0);
+                activeMap.set(loan.id, loan);
+            }
+        }
+
+        return Array.from(activeMap.values()).map(loan => {
             const plannedEmi = Math.min(parseFloat(loan.monthly_emi), parseFloat(loan.remaining_balance));
             return {
                 id: loan.id,
