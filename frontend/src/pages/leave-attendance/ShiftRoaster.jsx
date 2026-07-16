@@ -395,14 +395,17 @@ const ShiftRoaster = () => {
 
                 <div className="p-5 flex flex-wrap items-center gap-4 bg-slate-50/30">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Employee:</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Outlet:</span>
                         <select 
-                            value={filters.employeeId}
-                            onChange={(e) => setFilters({...filters, employeeId: e.target.value})}
-                            className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500"
+                            value={selectedOutlet}
+                            onChange={(e) => setSelectedOutlet(e.target.value)}
+                            className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500 cursor-pointer"
                         >
-                            <option value="All">All Employees</option>
-                            {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                            {uniqueLocations.map(loc => (
+                                <option key={loc} value={loc}>
+                                    {loc === 'all' ? 'All Outlets' : loc}
+                                </option>
+                            ))}
                         </select>
                     </div>
 
@@ -421,21 +424,6 @@ const ShiftRoaster = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Outlet:</span>
-                        <select 
-                            value={selectedOutlet}
-                            onChange={(e) => setSelectedOutlet(e.target.value)}
-                            className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500 cursor-pointer"
-                        >
-                            {uniqueLocations.map(loc => (
-                                <option key={loc} value={loc}>
-                                    {loc === 'all' ? 'All Outlets' : loc}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="flex items-center gap-2">
                         <span className="text-[10px] font-bold text-slate-400 uppercase">Designation:</span>
                         <select 
                             value={selectedDesignation}
@@ -447,6 +435,18 @@ const ShiftRoaster = () => {
                                     {desg === 'All' ? 'All Designations' : desg}
                                 </option>
                             ))}
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Employee:</span>
+                        <select 
+                            value={filters.employeeId}
+                            onChange={(e) => setFilters({...filters, employeeId: e.target.value})}
+                            className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500"
+                        >
+                            <option value="All">All Employees</option>
+                            {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
                         </select>
                     </div>
 

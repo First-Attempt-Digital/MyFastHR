@@ -585,6 +585,20 @@ const Employees = () => {
                             exit={{ opacity: 0, height: 0 }}
                             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 overflow-hidden pt-4 mt-4 border-t border-slate-100"
                         >
+                            {/* Location Filter */}
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location/Outlet</label>
+                                <select
+                                    value={selectedLocation}
+                                    onChange={(e) => setSelectedLocation(e.target.value)}
+                                    className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 text-slate-700 cursor-pointer"
+                                >
+                                    {uniqueLocations.map(loc => (
+                                        <option key={loc} value={loc}>{loc}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {/* Department Filter */}
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Department</label>
@@ -624,20 +638,6 @@ const Employees = () => {
                                     <option value="All">All Statuses</option>
                                     <option value="Active">Active</option>
                                     <option value="Inactive">Inactive / Fired</option>
-                                </select>
-                            </div>
-
-                            {/* Location Filter */}
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location/Outlet</label>
-                                <select
-                                    value={selectedLocation}
-                                    onChange={(e) => setSelectedLocation(e.target.value)}
-                                    className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/10 text-slate-700 cursor-pointer"
-                                >
-                                    {uniqueLocations.map(loc => (
-                                        <option key={loc} value={loc}>{loc}</option>
-                                    ))}
                                 </select>
                             </div>
 

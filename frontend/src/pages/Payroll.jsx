@@ -437,6 +437,17 @@ const Payroll = () => {
         notes: ''
     });
     const [repaySubmitting, setRepaySubmitting] = useState(false);
+    const [loanFilterMonth, setLoanFilterMonth] = useState('All');
+    const generateLoanMonthOptions = useMemo(() => {
+        const options = ['All'];
+        const d = new Date();
+        const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        for (let i = -6; i <= 6; i++) {
+            const date = new Date(d.getFullYear(), d.getMonth() + i, 1);
+            options.push(`${mNames[date.getMonth()]} ${date.getFullYear()}`);
+        }
+        return options;
+    }, []);
 
     // Process Payroll Confirmation states
     const [showProcessConfirmation, setShowProcessConfirmation] = useState(false);
@@ -2260,9 +2271,25 @@ const Payroll = () => {
             const matchesOutlet = matchText(loan.office_location, selectedOutlet);
             const matchesDept = matchText(loan.department_name || loan.department, selectedDept);
             const matchesDesignation = matchText(loan.designation || loan.role, selectedDesignation);
-            return matchesOutlet && matchesDept && matchesDesignation;
+            
+            let matchesMonth = true;
+            if (loanFilterMonth !== 'All') {
+                const dString = loan.loan_date || loan.created_at;
+                if (dString) {
+                    const date = new Date(dString);
+                    if (!isNaN(date.getTime())) {
+                        const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const monthStr = `${mNames[date.getMonth()]} ${date.getFullYear()}`;
+                        if (monthStr !== loanFilterMonth) {
+                            matchesMonth = false;
+                        }
+                    }
+                }
+            }
+
+            return matchesOutlet && matchesDept && matchesDesignation && matchesMonth;
         });
-    }, [loans, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [loans, selectedOutlet, selectedDept, selectedDesignation, loanFilterMonth]);
 
     // Filter separations
     const filteredSeparations = useMemo(() => {
@@ -4949,6 +4976,17 @@ const Payroll = () => {
                         exit={{ opacity: 0, y: -5 }}
                         className="space-y-6"
                     >
+                        <div className="flex justify-end">
+                            <select
+                                value={loanFilterMonth}
+                                onChange={(e) => setLoanFilterMonth(e.target.value)}
+                                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-700 outline-none focus:border-[#4361ee] shadow-sm transition-all"
+                            >
+                                {generateLoanMonthOptions.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                        </div>
                         {/* Summary Stat Cards Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-white border border-slate-200/50 rounded-2xl p-4 shadow-sm flex items-center justify-between">

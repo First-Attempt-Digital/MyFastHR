@@ -609,12 +609,9 @@ class EmployeeService {
         
         let query = db('employees').where('onboarding_status', 'submitted');
         
-        // Temporarily comment out for debugging
-        /*
         if (user.role_name !== 'super_admin') {
             query = query.where('company_id', companyId);
         }
-        */
         
         const results = await query.select('*');
         console.log(`>>> [ONBOARDING]: Found ${results.length} pending records.`);
