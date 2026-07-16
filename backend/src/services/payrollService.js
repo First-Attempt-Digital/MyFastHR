@@ -367,6 +367,18 @@ class PayrollService {
             }
         }
 
+        // Respect late penalty effective date
+        if (activeRules.late_penalty_effective_date) {
+            const effDate = new Date(activeRules.late_penalty_effective_date);
+            if (!isNaN(effDate.getTime())) {
+                const payrollMonthEnd = new Date(year, month, 0); // last day of payroll month
+                if (payrollMonthEnd < effDate) {
+                    activeRules.late_deduction_type = 'none';
+                    activeRules.late_deduction_value = 0;
+                }
+            }
+        }
+
         // Dynamically resolve Grace Cap / Mo from assigned shift to sync Late Mark Policy
         let employeeGraceCap = null;
         try {

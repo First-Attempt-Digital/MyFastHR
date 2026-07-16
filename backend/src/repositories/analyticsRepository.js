@@ -222,8 +222,21 @@ class AnalyticsRepository {
             const dailyRate = base / daysInMonth;
             
             let deduction = 0;
-            if (rules.late_deduction_type === 'half_day') deduction = extraLates * (dailyRate * 0.5);
-            else if (rules.late_deduction_type === 'full_day') deduction = extraLates * dailyRate;
+            let deductionApplied = true;
+            if (rules.late_penalty_effective_date) {
+                const effDate = new Date(rules.late_penalty_effective_date);
+                if (!isNaN(effDate.getTime())) {
+                    const previewMonthEnd = new Date(currentYear, currentMonth, 0);
+                    if (previewMonthEnd < effDate) {
+                        deductionApplied = false;
+                    }
+                }
+            }
+
+            if (deductionApplied) {
+                if (rules.late_deduction_type === 'half_day') deduction = extraLates * (dailyRate * 0.5);
+                else if (rules.late_deduction_type === 'full_day') deduction = extraLates * dailyRate;
+            }
 
             projectedNet = (base - deduction).toFixed(2);
         }
