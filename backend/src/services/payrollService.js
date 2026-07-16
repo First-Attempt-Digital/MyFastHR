@@ -814,9 +814,65 @@ class PayrollService {
             const otBonus = saved ? parseFloat(saved.overtime_bonus || 0) : 0;
             const manDeduction = saved ? parseFloat(saved.manual_deduction_override || 0) : 0;
 
-            // --- DETECT ACTIVE LOANS & EMIs ---
-            const activeLoans = await db('loans')
-                .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
+            // --- DETECT ACTIVE LOANS & EMIs (HISTORICALLY CORRECT OUTSTANDING BALANCE) ---
+            const employeeLoans = await db('loans')
+                .where({ employee_id: empRecord.id, company_id: companyId })
+                .whereIn('status', ['active', 'completed']);
+
+            const targetMonth = parseInt(month);
+            const targetYear = parseInt(year);
+            const lastDayOfPayrollMonth = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${new Date(targetYear, targetMonth, 0).getDate()}`;
+
+            let activeLoans = [];
+            let totalOutstandingBefore = 0;
+
+            for (const loan of employeeLoans) {
+                // Skip loans created after the target month
+                const loanDateString = loan.loan_date || loan.created_at;
+                if (loanDateString) {
+                    const loanDate = new Date(loanDateString);
+                    const loanMonth = loanDate.getMonth() + 1;
+                    const loanYear = loanDate.getFullYear();
+                    if (loanYear > targetYear || (loanYear === targetYear && loanMonth > targetMonth)) {
+                        continue;
+                    }
+                }
+
+                // Sum repayments that occurred after this payroll month
+                const repaymentsAfter = await db('loan_repayments')
+                    .leftJoin('payrolls', 'loan_repayments.payroll_id', '=', 'payrolls.id')
+                    .where('loan_repayments.loan_id', loan.id)
+                    .andWhere(function() {
+                        this.where(function() {
+                            this.whereNotNull('loan_repayments.payroll_id')
+                                .andWhere(function() {
+                                    this.where('payrolls.year', '>', targetYear)
+                                        .orWhere(function() {
+                                            this.where('payrolls.year', '=', targetYear)
+                                                .andWhere('payrolls.month', '>', targetMonth);
+                                        });
+                                });
+                        })
+                        .orWhere(function() {
+                            this.whereNull('loan_repayments.payroll_id')
+                                .andWhere('loan_repayments.payment_date', '>', `${lastDayOfPayrollMonth} 23:59:59`);
+                        });
+                    })
+                    .sum('loan_repayments.amount_paid as total')
+                    .first();
+
+                const addedBack = parseFloat(repaymentsAfter?.total || 0);
+                const historicalOutstanding = parseFloat(loan.remaining_balance) + addedBack;
+
+                if (historicalOutstanding > 0) {
+                    totalOutstandingBefore += historicalOutstanding;
+                    activeLoans.push({
+                        ...loan,
+                        remaining_balance: historicalOutstanding
+                    });
+                }
+            }
+
             let loanEmi = 0;
             if (saved) {
                 loanEmi = parseFloat(saved.loan_emi_deduction || 0);
@@ -826,7 +882,6 @@ class PayrollService {
                 }
             }
 
-            const totalOutstandingBefore = activeLoans.reduce((sum, loan) => sum + parseFloat(loan.remaining_balance || 0), 0);
             const isProcessed = saved && (saved.status === 'generated' || saved.status === 'paid');
             const remainingLoan = isProcessed ? totalOutstandingBefore : Math.max(0, totalOutstandingBefore - loanEmi);
 
