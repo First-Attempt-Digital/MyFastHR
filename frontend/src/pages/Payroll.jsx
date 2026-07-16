@@ -4976,17 +4976,7 @@ const Payroll = () => {
                         exit={{ opacity: 0, y: -5 }}
                         className="space-y-6"
                     >
-                        <div className="flex justify-end">
-                            <select
-                                value={loanFilterMonth}
-                                onChange={(e) => setLoanFilterMonth(e.target.value)}
-                                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-700 outline-none focus:border-[#4361ee] shadow-sm transition-all"
-                            >
-                                {generateLoanMonthOptions.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                            </select>
-                        </div>
+
                         {/* Summary Stat Cards Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-white border border-slate-200/50 rounded-2xl p-4 shadow-sm flex items-center justify-between">
@@ -5060,12 +5050,6 @@ const Payroll = () => {
                                     Repayment Logs
                                 </button>
                             </div>
-                            <button
-                                onClick={handleExportLoansCSV}
-                                className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1.5 active:scale-95 shadow-sm mb-1"
-                            >
-                                <Download size={13} /> Export Loans
-                            </button>
                         </div>
 
                         {activeLoanSubTab === 'ledger' && (
@@ -5076,21 +5060,38 @@ const Payroll = () => {
                                         <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">Amortized Advances & Loan Ledger</h3>
                                         <p className="text-slate-400 text-xs mt-0.5">Approve employee advance requests, track repayment timelines, and audit active balances.</p>
                                     </div>
-                                    <button
-                                        disabled={controls.inputs_locked}
-                                        onClick={() => {
-                                            setModalOutlet(selectedOutlet);
-                                            setModalDept(selectedDept);
-                                            setModalDesignation(selectedDesignation);
-                                            setShowAddLoan(true);
-                                        }}
-                                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-1.5 ${controls.inputs_locked
-                                            ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
-                                            : 'bg-[#4361ee] hover:bg-indigo-700 text-white shadow-indigo-500/10'
-                                            }`}
-                                    >
-                                        <Plus size={14} /> Register Advance
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        <select
+                                            value={loanFilterMonth}
+                                            onChange={(e) => setLoanFilterMonth(e.target.value)}
+                                            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none focus:border-[#4361ee] shadow-sm transition-all"
+                                        >
+                                            {generateLoanMonthOptions.map(opt => (
+                                                <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            onClick={handleExportLoansCSV}
+                                            className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl transition-all text-[10px] uppercase tracking-widest font-black flex items-center gap-1.5 active:scale-95 shadow-sm"
+                                        >
+                                            <Download size={14} /> Export Loans
+                                        </button>
+                                        <button
+                                            disabled={controls.inputs_locked}
+                                            onClick={() => {
+                                                setModalOutlet(selectedOutlet);
+                                                setModalDept(selectedDept);
+                                                setModalDesignation(selectedDesignation);
+                                                setShowAddLoan(true);
+                                            }}
+                                            className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-1.5 ${controls.inputs_locked
+                                                ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                                                : 'bg-[#4361ee] hover:bg-indigo-700 text-white shadow-indigo-500/10'
+                                                }`}
+                                        >
+                                            <Plus size={14} /> Register Advance
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Loans Table */}
