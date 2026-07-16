@@ -394,7 +394,8 @@ const Payroll = () => {
         half_day_hours: 4,
         max_late_allowed: 3,
         late_deduction_type: 'half_day',
-        late_deduction_value: 0
+        late_deduction_value: 0,
+        late_penalty_effective_date: ''
     });
     const [shifts, setShifts] = useState([]);
     const [selectedShiftId, setSelectedShiftId] = useState(null);
@@ -438,6 +439,8 @@ const Payroll = () => {
     });
     const [repaySubmitting, setRepaySubmitting] = useState(false);
     const [loanFilterMonth, setLoanFilterMonth] = useState('All');
+    const [loanFilterStartDate, setLoanFilterStartDate] = useState('');
+    const [loanFilterEndDate, setLoanFilterEndDate] = useState('');
     const generateLoanMonthOptions = useMemo(() => {
         const options = ['All'];
         const d = new Date();
@@ -1938,6 +1941,7 @@ const Payroll = () => {
                 half_day_hours: businessRules.half_day_hours === '' ? 0 : (parseInt(businessRules.half_day_hours) || 0),
                 max_late_allowed: businessRules.max_late_allowed === '' ? 0 : (parseInt(businessRules.max_late_allowed) || 0),
                 late_deduction_value: businessRules.late_deduction_value === '' ? 0 : (parseFloat(businessRules.late_deduction_value) || 0),
+                late_penalty_effective_date: businessRules.late_penalty_effective_date || null
             };
             await api.post('/settings/working-rules', cleanedBusinessRules);
 
@@ -2287,9 +2291,21 @@ const Payroll = () => {
                 }
             }
 
-            return matchesOutlet && matchesDept && matchesDesignation && matchesMonth;
+            let matchesDateRange = true;
+            const dString = loan.loan_date || loan.created_at;
+            if (dString) {
+                const dateVal = String(dString).split(' ')[0].split('T')[0];
+                if (loanFilterStartDate && dateVal < loanFilterStartDate) {
+                    matchesDateRange = false;
+                }
+                if (loanFilterEndDate && dateVal > loanFilterEndDate) {
+                    matchesDateRange = false;
+                }
+            }
+
+            return matchesOutlet && matchesDept && matchesDesignation && matchesMonth && matchesDateRange;
         });
-    }, [loans, selectedOutlet, selectedDept, selectedDesignation, loanFilterMonth]);
+    }, [loans, selectedOutlet, selectedDept, selectedDesignation, loanFilterMonth, loanFilterStartDate, loanFilterEndDate]);
 
     // Filter separations
     const filteredSeparations = useMemo(() => {
@@ -2888,6 +2904,19 @@ const Payroll = () => {
                                                             onChange={(e) => setBusinessRules({ ...businessRules, late_deduction_value: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
                                                             className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-black outline-none focus:ring-2 focus:ring-rose-500/5 focus:border-rose-500 transition-all"
                                                             placeholder={businessRules.late_deduction_type === 'flat' ? 'e.g. 100' : 'e.g. 2.5'}
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* From Effective Date */}
+                                                {businessRules.late_deduction_type !== 'none' && (
+                                                    <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                                        <label className="text-[8px] font-black text-slate-500 uppercase tracking-wider">From Effective Date</label>
+                                                        <input
+                                                            type="date"
+                                                            value={businessRules.late_penalty_effective_date ? businessRules.late_penalty_effective_date.split('T')[0] : ''}
+                                                            onChange={(e) => setBusinessRules({ ...businessRules, late_penalty_effective_date: e.target.value })}
+                                                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-rose-500/5 focus:border-rose-500 transition-all"
                                                         />
                                                     </div>
                                                 )}
@@ -5061,6 +5090,40 @@ const Payroll = () => {
                                         <p className="text-slate-400 text-xs mt-0.5">Approve employee advance requests, track repayment timelines, and audit active balances.</p>
                                     </div>
                                     <div className="flex items-center gap-3">
+                                        {/* Date range filter */}
+                                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm">
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase">From</span>
+                                                <input
+                                                    type="date"
+                                                    value={loanFilterStartDate}
+                                                    onChange={(e) => setLoanFilterStartDate(e.target.value)}
+                                                    className="bg-transparent text-xs font-bold text-slate-700 outline-none w-[115px]"
+                                                />
+                                            </div>
+                                            <div className="h-3 w-[1px] bg-slate-350"></div>
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase">To</span>
+                                                <input
+                                                    type="date"
+                                                    value={loanFilterEndDate}
+                                                    onChange={(e) => setLoanFilterEndDate(e.target.value)}
+                                                    className="bg-transparent text-xs font-bold text-slate-700 outline-none w-[115px]"
+                                                />
+                                            </div>
+                                            {(loanFilterStartDate || loanFilterEndDate) && (
+                                                <button
+                                                    onClick={() => {
+                                                        setLoanFilterStartDate('');
+                                                        setLoanFilterEndDate('');
+                                                    }}
+                                                    className="text-slate-400 hover:text-slate-650 transition-all flex items-center justify-center pl-1"
+                                                    title="Clear Dates"
+                                                >
+                                                    <X size={12} />
+                                                </button>
+                                            )}
+                                        </div>
                                         <select
                                             value={loanFilterMonth}
                                             onChange={(e) => setLoanFilterMonth(e.target.value)}

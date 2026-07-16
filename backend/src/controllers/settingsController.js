@@ -123,6 +123,8 @@ class SettingsController {
                 late_marks_for_half_day: 3,
                 max_late_allowed: 3,
                 late_deduction_type: 'half_day',
+                late_deduction_value: 0,
+                late_penalty_effective_date: null,
                 ot_enabled: false,
                 ot_min_minutes: 60,
                 ot_rate_multiplier: 1.5,

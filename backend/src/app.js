@@ -489,10 +489,19 @@ const syncDatabaseSchema = async () => {
                     });
                     console.log('>>> [DB-SYNC]: late_deduction_value column added to working_rules table.');
                 }
+                const hasEffectiveDate = await db.schema.hasColumn('working_rules', 'late_penalty_effective_date');
+                if (!hasEffectiveDate) {
+                    console.log('>>> [DB-SYNC]: Adding late_penalty_effective_date column to working_rules table...');
+                    await db.schema.alterTable('working_rules', (table) => {
+                        table.date('late_penalty_effective_date').nullable();
+                    });
+                    console.log('>>> [DB-SYNC]: late_penalty_effective_date column added to working_rules table.');
+                }
             }
         } catch (e) {
             console.error('>>> [DB-SYNC-ERROR]: working_rules column sync failed:', e.message);
         }
+
 
     } catch (err) {
         console.error('>>> [DB-SYNC-ERROR]:', err.message);
