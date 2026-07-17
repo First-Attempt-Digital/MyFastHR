@@ -8,16 +8,17 @@ const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
-    } else if (req.query.token) {
-        token = req.query.token;
     }
 
     if (!token) {
         return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // Development Bypass for Multi-Role Demo
+    // Development Bypass for Multi-Role Demo — disabled in production
     if (token.startsWith('test.')) {
+        if (process.env.NODE_ENV === 'production') {
+            return res.status(403).json({ message: 'Invalid or expired token' });
+        }
         // Deterministic Mapping for Demo Stability
         const demoContexts = {
             'test.super.token': { email: 'super@myfasthr.com', role_name: 'super_admin', permissions: ['view_global_analytics', 'manage_tenants', 'configure_organization', 'manage_staff', 'process_payroll', 'approve_attendance', 'approve_leaves', 'view_self'] },
