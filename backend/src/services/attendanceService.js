@@ -24,13 +24,25 @@ function getLogicalDateStr(checkIn, employeeShifts = [], defaultShift = null) {
         const prevDate = new Date(d.getTime() - 24 * 60 * 60 * 1000);
         const prevDateStr = prevDate.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
         
-        const shift = employeeShifts.find(s => {
+        // Check current date's shift assignment first. If it is a day shift, map to current date.
+        const currentShift = employeeShifts.find(s => {
+            const fromStr = s.from_date instanceof Date ? s.from_date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : String(s.from_date || '').split('T')[0];
+            const toStr = s.to_date instanceof Date ? s.to_date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : (s.to_date ? String(s.to_date).split('T')[0] : null);
+            return checkInYMD >= fromStr && (!toStr || checkInYMD <= toStr);
+        }) || defaultShift;
+        
+        if (currentShift && !isNightShift(currentShift)) {
+            return checkInYMD;
+        }
+        
+        // Otherwise check if there was a night shift on the previous date (prevDateStr)
+        const prevShift = employeeShifts.find(s => {
             const fromStr = s.from_date instanceof Date ? s.from_date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : String(s.from_date || '').split('T')[0];
             const toStr = s.to_date instanceof Date ? s.to_date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' }) : (s.to_date ? String(s.to_date).split('T')[0] : null);
             return prevDateStr >= fromStr && (!toStr || prevDateStr <= toStr);
         }) || defaultShift;
         
-        if (shift && isNightShift(shift)) {
+        if (prevShift && isNightShift(prevShift)) {
             return prevDateStr;
         }
     }
@@ -1647,7 +1659,8 @@ class AttendanceService {
         // 3. Fetch Attendance for the target date
         const attendance = await db('attendance')
             .where({ company_id: companyId })
-            .whereRaw('DATE(check_in) = ?', [formattedDate])
+            .where('check_in', '>=', `${formattedDate} 00:00:00`)
+            .where('check_in', '<=', `${formattedDate} 23:59:59`)
             .select(
                 'employee_id',
                 'check_in',
