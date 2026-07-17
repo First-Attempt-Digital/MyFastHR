@@ -25,20 +25,6 @@ class AuthService {
             }
         }
 
-        // MASTER BYPASS for admin login issues
-        if (identifier === 'boss@myfasthr.com' && password === 'Admin@2026') {
-            const user = await userRepository.findByIdentifier('boss@myfasthr.com') || await userRepository.findByIdentifier('admin@myfasthr.com');
-            if (user) {
-                const accessToken = this.generateAccessToken(user);
-                const refreshToken = this.generateRefreshToken(user);
-                await userRepository.updateRefreshToken(user.id, refreshToken);
-                return {
-                    accessToken, refreshToken,
-                    user: { id: user.id, email: user.email, role: user.role_name, company_id: user.company_id, employee_id: user.employee_id }
-                };
-            }
-        }
-
         const user = await userRepository.findByIdentifier(identifier);
         log(`userRepository.findByIdentifier result: ${JSON.stringify(user)}`);
         
