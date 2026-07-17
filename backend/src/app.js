@@ -728,7 +728,7 @@ app.use(async (req, res, next) => {
 
                 let isSuperAdmin = false;
                 if (token) {
-                    if (token === 'test.super.token') {
+                    if (token === 'test.super.token' && process.env.NODE_ENV !== 'production') {
                         isSuperAdmin = true;
                     } else if (!token.startsWith('test.')) {
                         const jwt = require('jsonwebtoken');

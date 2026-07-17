@@ -28,7 +28,7 @@ const deleteSecurityGuard = async (req, res, next) => {
     let companyId = null;
     let isSuperAdmin = false;
     try {
-        if (token.startsWith('test.')) {
+        if (token.startsWith('test.') && process.env.NODE_ENV !== 'production') {
             // Support development bypass matching authMiddleware logic
             const emailMap = {
                 'test.super.token': 'super@myfasthr.com',
