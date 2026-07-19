@@ -55,7 +55,7 @@ const apiKeyAuth = async (req, res, next) => {
                 .first();
 
             if (!device) {
-                console.warn(`[BIOMETRIC-AUTH-WARN]: Access denied. Invalid API key: ${apiKey}`);
+                console.warn('[BIOMETRIC-AUTH-WARN]: Access denied. Invalid API key.');
                 return res.status(401).json({ message: 'Unauthorized. Invalid API key.' });
             }
         }
