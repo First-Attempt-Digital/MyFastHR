@@ -17,8 +17,6 @@ const deleteSecurityGuard = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
-    } else if (req.query.token) {
-        token = req.query.token;
     }
 
     if (!token) {
