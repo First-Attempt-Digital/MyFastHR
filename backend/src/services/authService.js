@@ -5,17 +5,6 @@ const userRepository = require('../repositories/userRepository');
 
 class AuthService {
     async login(identifier, password) {
-        const fs = require('fs');
-        const path = require('path');
-        const logFile = path.join(__dirname, '../../debug-auth.log');
-        const log = (msg) => {
-            const time = new Date().toISOString();
-            fs.writeFileSync(logFile, `[${time}] ${msg}\n`, { flag: 'a' });
-            console.log(msg);
-        };
-
-        log(`login called: identifier="${identifier}" (length: ${identifier?.length})`);
-
         // Check if system freeze is active
         const freezeRecord = await db.centralDb('global_settings').where({ key: 'system_freeze' }).first();
         if (freezeRecord && freezeRecord.value === 'true') {
@@ -26,10 +15,8 @@ class AuthService {
         }
 
         const user = await userRepository.findByIdentifier(identifier);
-        log(`userRepository.findByIdentifier result: ${JSON.stringify(user)}`);
-        
+
         if (!user) {
-            log(`[AUTH]: No user found for identifier: ${identifier}`);
             throw new Error('Invalid credentials');
         }
 
@@ -115,17 +102,6 @@ class AuthService {
     }
 
     async requestOTP(email) {
-        const fs = require('fs');
-        const path = require('path');
-        const logFile = path.join(__dirname, '../../debug-auth.log');
-        const log = (msg) => {
-            const time = new Date().toISOString();
-            fs.writeFileSync(logFile, `[${time}] ${msg}\n`, { flag: 'a' });
-            console.log(msg);
-        };
-
-        log(`requestOTP called: email="${email}" (length: ${email?.length})`);
-
         // Check if system freeze is active
         const freezeRecord = await db.centralDb('global_settings').where({ key: 'system_freeze' }).first();
         if (freezeRecord && freezeRecord.value === 'true') {
@@ -136,10 +112,8 @@ class AuthService {
         }
 
         const user = await userRepository.findByEmail(email);
-        log(`userRepository.findByEmail result: ${JSON.stringify(user)}`);
 
         if (!user) {
-            log(`[AUTH]: No user found for requestOTP with email: ${email}`);
             throw new Error('This email is not registered. No employee found.');
         }
 

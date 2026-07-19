@@ -694,14 +694,6 @@ app.use(limiter);
 // Global Request Logger for Debugging
 app.use((req, res, next) => {
     console.log(`>>> [NET]: ${req.method} ${req.url}`);
-    try {
-        const fs = require('fs');
-        const path = require('path');
-        const logPath = path.join(__dirname, '../request.log');
-        fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${req.method} ${req.url} - Auth: ${req.headers.authorization}\n`);
-    } catch (e) {
-        // Ignore logging errors
-    }
     next();
 });
 
@@ -767,19 +759,7 @@ app.use('/api/v1/machine', machineRoutes);
 // Biometric vendor endpoint mapping (ZKTeco / Compatible machines)
 app.post('/Device/SaveDevice', async (req, res) => {
     try {
-        // Log every incoming biometric machine request for debugging
         console.log('>>> [BIOMETRIC-MACHINE-HIT]: POST /Device/SaveDevice | IP:', req.ip);
-        console.log('>>> [BIOMETRIC-MACHINE-HEADERS]:', JSON.stringify(req.headers));
-        console.log('>>> [BIOMETRIC-MACHINE-BODY]:', JSON.stringify(req.body));
-
-        // Write to debug log file for persistent tracking
-        try {
-            const fs = require('fs');
-            const path = require('path');
-            const logFile = path.join(__dirname, '../biometric_machine_debug.log');
-            const logLine = `[${new Date().toISOString()}] IP:${req.ip} | Headers:${JSON.stringify(req.headers)} | Body:${JSON.stringify(req.body)}\n`;
-            fs.appendFileSync(logFile, logLine);
-        } catch (logErr) { /* ignore */ }
 
         // Accept ocp-apim-subscription-key (machine standard) OR x-api-key OR query param
         const apiKey = req.headers['ocp-apim-subscription-key'] 
@@ -1089,129 +1069,6 @@ app.get('/api/test-tasks', (req, res) => res.json({ message: 'Task API Mount Poi
 
 // Base API route
 app.get('/api', (req, res) => res.send('MyFastHR SaaS API is running...'));
-
-app.get('/api/debug-db', async (req, res) => {
-    try {
-        const rows = await db('system_settings').select('*');
-        res.json(rows);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-app.get('/api/syslogs', async (req, res) => {
-    const fs = require('fs');
-    const path = require('path');
-    const report = {
-        workingDir: process.cwd(),
-        dirname: __dirname,
-        env: {
-            NODE_ENV: process.env.NODE_ENV,
-            PORT: process.env.PORT
-        },
-        directories: {}
-    };
-
-    const dirsToCheck = {
-        uploads: path.join(__dirname, '../uploads'),
-        branding: path.join(__dirname, '../uploads/branding'),
-        kyc: path.join(__dirname, '../uploads/kyc'),
-        tenants: path.join(__dirname, '../uploads/tenants'),
-        profile_photos: path.join(__dirname, '../uploads/profile_photos'),
-        public: path.join(__dirname, '../public')
-    };
-
-    for (const [name, dirPath] of Object.entries(dirsToCheck)) {
-        const stats = {
-            path: dirPath,
-            exists: fs.existsSync(dirPath)
-        };
-        if (stats.exists) {
-            try {
-                const s = fs.statSync(dirPath);
-                stats.isDirectory = s.isDirectory();
-                stats.mode = s.mode.toString(8);
-                
-                // Test write permissions
-                const testFile = path.join(dirPath, `test-write-${Date.now()}.txt`);
-                try {
-                    fs.writeFileSync(testFile, 'write test');
-                    fs.unlinkSync(testFile);
-                    stats.writable = true;
-                } catch (writeErr) {
-                    stats.writable = false;
-                    stats.writeError = writeErr.message;
-                }
-            } catch (err) {
-                stats.statError = err.message;
-            }
-        } else {
-            // Try to create it
-            try {
-                fs.mkdirSync(dirPath, { recursive: true });
-                stats.created = true;
-                stats.existsAfterCreation = fs.existsSync(dirPath);
-                
-                const testFile = path.join(dirPath, `test-write-${Date.now()}.txt`);
-                fs.writeFileSync(testFile, 'write test');
-                fs.unlinkSync(testFile);
-                stats.writable = true;
-            } catch (createErr) {
-                stats.created = false;
-                stats.creationError = createErr.message;
-            }
-        }
-        report.directories[name] = stats;
-    }
-
-    // 1. Get files inside directories
-    report.directoryFiles = {};
-    for (const [name, dirPath] of Object.entries(dirsToCheck)) {
-        if (fs.existsSync(dirPath)) {
-            try {
-                report.directoryFiles[name] = fs.readdirSync(dirPath);
-            } catch (err) {
-                report.directoryFiles[name] = 'Error: ' + err.message;
-            }
-        } else {
-            report.directoryFiles[name] = 'Directory does not exist';
-        }
-    }
-
-    // 2. Query database settings
-    report.dbSettings = null;
-    report.companies = null;
-    try {
-        report.dbSettings = await db('system_settings').select('*');
-        report.companies = await db('companies').select('id', 'name', 'slug', 'logo_url', 'brand_color');
-    } catch (dbErr) {
-        report.dbError = dbErr.message;
-    }
-
-    // 3. Read request log
-    const requestLogPath = path.join(__dirname, '../request.log');
-    if (fs.existsSync(requestLogPath)) {
-        try {
-            report.requestLog = fs.readFileSync(requestLogPath, 'utf8').split('\n').slice(-30).join('\n');
-        } catch (err) {
-            report.requestLogErr = err.message;
-        }
-    } else {
-        report.requestLog = 'Not found';
-    }
-
-    const crashLogPath = path.join(__dirname, '../../crash.log');
-    if (fs.existsSync(crashLogPath)) {
-        try {
-            report.crashLog = fs.readFileSync(crashLogPath, 'utf8').split('\n').slice(-30).join('\n');
-        } catch (err) {
-            report.crashLogErr = err.message;
-        }
-    } else {
-        report.crashLog = 'Not found';
-    }
-
-    res.json(report);
-});
 
 // Catch-all for React Router (Using regex to avoid Express 5 path-to-regexp crash)
 app.get(/(.*)/, (req, res) => {

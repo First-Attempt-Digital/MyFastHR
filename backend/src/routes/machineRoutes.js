@@ -37,27 +37,11 @@ router.post('/register', flexibleAuth, machineController.register);
 // 2. Employee Biometric ID Mapping (JWT Session or Master API Key)
 router.post('/map-employee', flexibleAuth, machineController.mapEmployee);
 
-// Debug Request Logger for Biometric Machine Connection
-const fs = require('fs');
-const path = require('path');
-const logFile = path.join(__dirname, '../../biometric_debug_test.log');
-
-const debugLogger = (req, res, next) => {
-    try {
-        const logData = `[${new Date().toISOString()}] IP: ${req.ip} | URL: ${req.originalUrl} | Method: ${req.method} | Headers: ${JSON.stringify(req.headers)} | Body: ${JSON.stringify(req.body)}\n`;
-        fs.appendFileSync(logFile, logData);
-        console.log('>>> [BIOMETRIC-DEBUG-LOGGED]:', logData.trim());
-    } catch (err) {
-        console.error('Failed to write biometric debug log:', err.message);
-    }
-    next();
-};
-
 // 3. Single Attendance Sync Punch (Device x-api-key)
-router.post('/attendance', debugLogger, apiKeyAuth, machineController.attendance);
+router.post('/attendance', apiKeyAuth, machineController.attendance);
 
 // 4. Bulk Attendance Sync Punches (Device x-api-key)
-router.post('/attendance/bulk', debugLogger, apiKeyAuth, machineController.attendanceBulk);
+router.post('/attendance/bulk', apiKeyAuth, machineController.attendanceBulk);
 
 // 5. Get registered devices for a company (JWT Session or Master API Key)
 router.get('/devices', flexibleAuth, machineController.getDevices);
