@@ -20,9 +20,9 @@ class MachineController {
             } else {
                 // Check master key bypass
                 const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
-                const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
-                
-                if (apiKey && apiKey === masterKey) {
+                const masterKey = process.env.BIOMETRIC_API_KEY;
+
+                if (apiKey && !!masterKey && apiKey === masterKey) {
                     companyId = parseInt(req.body.company_id) || parseInt(req.query.company_id);
                 }
             }
@@ -60,9 +60,9 @@ class MachineController {
                 }
             } else {
                 const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
-                const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
+                const masterKey = process.env.BIOMETRIC_API_KEY;
 
-                if (apiKey && apiKey === masterKey) {
+                if (apiKey && !!masterKey && apiKey === masterKey) {
                     companyId = parseInt(req.body.company_id) || parseInt(req.query.company_id);
                 }
             }

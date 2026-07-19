@@ -1008,6 +1008,40 @@ const Payroll = () => {
         }
     };
 
+    const handleDownloadPayslip = async (id) => {
+        try {
+            const response = await api.get(`/payroll/download-slip/${id}`, { responseType: 'blob' });
+            const blob = new Blob([response], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `payslip-${id}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Failed to download payslip: ' + err.message);
+        }
+    };
+
+    const handleDownloadLoanSlip = async (id) => {
+        try {
+            const response = await api.get(`/payroll/loans/download-slip/${id}`, { responseType: 'blob' });
+            const blob = new Blob([response], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `loan-slip-${id}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Failed to download loan slip: ' + err.message);
+        }
+    };
+
     const handleExportPaySalaryCSV = () => {
         const targetData = filteredRegisterData;
         if (!targetData || targetData.length === 0) {
@@ -3052,15 +3086,13 @@ const Payroll = () => {
                                                             >
                                                                 <Eye size={14} />
                                                             </button>
-                                                            <a
-                                                                href={`${api.defaults.baseURL}/payroll/download-slip/${stmt.id}?token=${localStorage.getItem('auth_token') || 'test.admin.token'}`}
-                                                                target="_blank"
-                                                                rel="noreferrer"
+                                                            <button
+                                                                onClick={() => handleDownloadPayslip(stmt.id)}
                                                                 className="p-1.5 text-slate-400 hover:text-[#4361ee] hover:bg-slate-100 rounded-lg transition-all"
                                                                 title="Download Payslip PDF"
                                                             >
                                                                 <Download size={14} />
-                                                            </a>
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -5319,15 +5351,13 @@ const Payroll = () => {
                                                                                 </button>
                                                                             </>
                                                                         )}
-                                                                        <a
-                                                                            href={`${api.defaults.baseURL}/payroll/loans/download-slip/${loan.id}?token=${localStorage.getItem('auth_token') || 'test.admin.token'}`}
-                                                                            target="_blank"
-                                                                            rel="noreferrer"
+                                                                        <button
+                                                                            onClick={() => handleDownloadLoanSlip(loan.id)}
                                                                             className="p-1.5 text-slate-400 hover:text-[#4361ee] hover:bg-slate-100 rounded-lg transition-all flex items-center justify-center active:scale-95"
                                                                             title="Download Advance Slip PDF"
                                                                         >
                                                                             <Download size={14} />
-                                                                        </a>
+                                                                        </button>
                                                                     </div>
                                                                 </td>
                                                             </tr>

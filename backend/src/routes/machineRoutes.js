@@ -14,14 +14,14 @@ const tenantGuard = require('../middlewares/tenantMiddleware');
 const flexibleAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
-    const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
+    const masterKey = process.env.BIOMETRIC_API_KEY;
 
     if (authHeader && (authHeader.startsWith('Bearer ') || authHeader.startsWith('test.'))) {
         // Authenticate using standard JWT session
         return authenticateToken(req, res, () => {
             tenantGuard(req, res, next);
         });
-    } else if (apiKey && apiKey === masterKey) {
+    } else if (apiKey && !!masterKey && apiKey === masterKey) {
         // Authenticate using global master API key
         return next();
     } else {

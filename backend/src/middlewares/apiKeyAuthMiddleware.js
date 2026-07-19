@@ -11,7 +11,7 @@ const apiKeyAuth = async (req, res, next) => {
     let apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
     if (apiKey) apiKey = apiKey.trim();
     
-    const masterKey = process.env.BIOMETRIC_API_KEY || 'mfhr_master_fallback_950453de87fb5c4b6a434f7074413487bab73b4eb0ce3227e96d4877a745eb5a';
+    const masterKey = process.env.BIOMETRIC_API_KEY;
 
     if (!apiKey) {
         return res.status(401).json({ message: 'Authentication required. Missing x-api-key header.' });
@@ -20,7 +20,7 @@ const apiKeyAuth = async (req, res, next) => {
     try {
         let device = null;
 
-        if (apiKey === masterKey) {
+        if (!!masterKey && apiKey === masterKey) {
             // Master Key fallback - find device by serial number in payload
             let deviceSerial = req.body?.device_serial || 
                                req.body?.deviceId || 
