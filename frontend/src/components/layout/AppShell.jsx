@@ -473,11 +473,13 @@ const AppShell = ({ children }) => {
     }
   };
 
+  // Display metadata only (label/color/short). The old `token: 'test.*.token'` fields were
+  // never read anywhere and have been removed so no demo bypass tokens live in the client.
   const roles = {
-'super_admin': { label: 'Super Admin', token: 'test.super.token', color: 'bg-purple-600', short: 'SA' },
-    'company_admin': { label: 'Company Admin', token: 'test.admin.token', color: 'bg-indigo-600', short: 'AD' },
-    'manager': { label: 'Team Manager', token: 'test.manager.token', color: 'bg-emerald-600', short: 'TM' },
-    'employee': { label: 'Employee', token: 'test.employee.token', color: 'bg-rose-600', short: 'EM' }
+    'super_admin': { label: 'Super Admin', color: 'bg-purple-600', short: 'SA' },
+    'company_admin': { label: 'Company Admin', color: 'bg-indigo-600', short: 'AD' },
+    'manager': { label: 'Team Manager', color: 'bg-emerald-600', short: 'TM' },
+    'employee': { label: 'Employee', color: 'bg-rose-600', short: 'EM' }
   };
 
   const menuItems = [
