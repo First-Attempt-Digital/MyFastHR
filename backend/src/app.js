@@ -586,37 +586,48 @@ app.get('/uploads/kyc/:filename', (req, res, next) => {
     next();
 });
 
-app.get('/uploads/:filename', (req, res, next) => {
+// Task attachments (and legacy top-level files) are NOT public: they were previously
+// downloadable unauthenticated with guessable names, and the company-folder scan let any
+// caller read another tenant's files. Now require auth and scope the scan to the caller's
+// own company (super_admin may access any). No frontend renders these via <img>/<a>, so
+// gating them here breaks nothing.
+app.get('/uploads/:filename', authenticateToken, (req, res, next) => {
     const filename = req.params.filename;
     if (filename.includes('/') || filename.includes('\\')) {
         return next();
     }
-    
+
     const uploadsBase = path.join(__dirname, '../uploads');
-    
-    // 1. Try legacy path first
+    const isSuperAdmin = req.user && req.user.role_name === 'super_admin';
+    const userCompanyId = req.user ? req.user.company_id : null;
+
+    // 1. Legacy top-level file (backwards compatibility, now authenticated)
     const legacyPath = path.join(uploadsBase, filename);
     if (fs.existsSync(legacyPath) && fs.lstatSync(legacyPath).isFile()) {
         return res.sendFile(legacyPath);
     }
-    
-    // 2. Scan company-isolated folders for tasks
+
+    // 2. Task attachments in company-isolated folders — only the caller's own company.
     if (fs.existsSync(uploadsBase)) {
         const dirs = fs.readdirSync(uploadsBase);
         for (const dir of dirs) {
-            if (dir.startsWith('company_')) {
-                const filePath = path.join(uploadsBase, dir, 'tasks', filename);
-                if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
-                    return res.sendFile(filePath);
-                }
+            if (!dir.startsWith('company_')) continue;
+            if (!isSuperAdmin && dir !== `company_${userCompanyId}`) continue;
+            const filePath = path.join(uploadsBase, dir, 'tasks', filename);
+            if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
+                return res.sendFile(filePath);
             }
         }
     }
     next();
 });
 
-// 3. Serve uploads static directory (Fallback if not intercepted by Virtual Router)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// 3. Public static assets ONLY. The previous blanket express.static('/uploads') exposed
+// every file under uploads/ (profile_photos, per-company kyc/tasks folders, arbitrary
+// paths). Serve just the genuinely public subtrees; KYC is served by the dedicated route
+// above, task attachments by the authenticated route above.
+app.use('/uploads/branding', express.static(path.join(__dirname, '../uploads/branding')));
+app.use('/uploads/tenants', express.static(path.join(__dirname, '../uploads/tenants')));
 
 // 4. CORS Setup and allowed origins
 const allowedOrigins = [
