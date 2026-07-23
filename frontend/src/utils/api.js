@@ -64,13 +64,22 @@ api.interceptors.response.use(
         if (error.response?.status === 401 || error.response?.status === 403) {
             // Not a delete-key challenge (which also returns 403).
             if (error.response?.data?.code !== 'DELETE_KEY_REQUIRED') {
-                // 401 = not authenticated (missing/absent token) → always a logged-out state.
-                // 403 = treat as auth failure only when it's a token problem (expired/invalid);
-                // a plain permission-denied 403 should NOT kick the user out of the app.
+                // Failures of the auth endpoints themselves (wrong password / wrong OTP on a
+                // login page) are NOT a logged-out state — they must surface as an inline form
+                // error, not a redirect. The admin login is at /login and the employee login at
+                // /employee, so key off the request URL, not the current pathname.
+                const reqUrl = originalRequest?.url || '';
+                const isAuthEndpoint = /\/auth\/(login|request-otp|verify-otp)/.test(reqUrl);
+
+                // 401 = not authenticated (missing/absent token) → logged out.
+                // 403 = treat as auth failure only when it's a token problem (expired/invalid),
+                // detected via the "token" message; a plain permission-denied 403 (e.g.
+                // "Unauthorized to update ticket…") must NOT kick the user out of the app.
                 const isAuthFailure =
-                    error.response.status === 401 ||
-                    message.toLowerCase().includes('token') ||
-                    message.toLowerCase().includes('unauthorized');
+                    !isAuthEndpoint && (
+                        error.response.status === 401 ||
+                        message.toLowerCase().includes('token')
+                    );
 
                 if (isAuthFailure) {
                     localStorage.removeItem('auth_token');

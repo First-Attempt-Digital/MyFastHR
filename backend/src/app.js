@@ -800,7 +800,8 @@ app.post('/Device/SaveDevice', async (req, res) => {
             || req.body.serialno;
 
         if (!deviceSerial) {
-            console.warn('>>> [BIOMETRIC-MACHINE]: Missing device serial in payload:', req.body);
+            // Never log the raw body — it carries the device api_key. Log field names only.
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing device serial in payload. Fields:', Object.keys(req.body || {}));
             return res.status(400).json({ success: false, message: 'Missing deviceSerialno or deviceID in payload.' });
         }
 
@@ -811,7 +812,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
             || req.body.enrollNumber;
 
         if (!employeeID) {
-            console.warn('>>> [BIOMETRIC-MACHINE]: Missing employeeID in payload:', req.body);
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing employeeID in payload. Fields:', Object.keys(req.body || {}));
             return res.status(400).json({ success: false, message: 'Missing employeeID in payload.' });
         }
 
@@ -820,7 +821,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
         const timeStr = req.body.time || req.body.Time;
 
         if (!dateStr || !timeStr) {
-            console.warn('>>> [BIOMETRIC-MACHINE]: Missing date or time in payload:', req.body);
+            console.warn('>>> [BIOMETRIC-MACHINE]: Missing date or time in payload. Fields:', Object.keys(req.body || {}));
             return res.status(400).json({ success: false, message: 'Missing date or time in payload.' });
         }
 
@@ -871,7 +872,8 @@ app.post('/Device/SaveDevice', async (req, res) => {
         const configuredSubKey = process.env.BIOMETRIC_SUBSCRIPTION_KEY;
         const isValidKey = (!!masterKey && apiKey === masterKey) || (apiKey === device.api_key) || (!!configuredSubKey && apiKey === configuredSubKey);
         if (!isValidKey) {
-            console.warn(`>>> [BIOMETRIC-MACHINE]: Invalid key for device ${deviceSerial}. Received: ${apiKey}`);
+            // Do not log the received key value — only the device serial it was presented for.
+            console.warn(`>>> [BIOMETRIC-MACHINE]: Invalid key for device ${deviceSerial}.`);
             return res.status(401).json({ success: false, message: 'Unauthorized. Invalid subscription key for this device.' });
         }
 
@@ -901,8 +903,11 @@ app.post('/Device/SaveDevice', async (req, res) => {
         }
         res.status(200).json({ success: true, ...result });
     } catch (err) {
-        console.error('[BIOMETRIC-VENDOR-PUSH-ERROR]:', err.message, err.stack);
-        res.status(500).json({ success: false, message: 'Internal server error processing punch.', error: err.message });
+        // Never log the full error/message: Knex enriches a failed query's message with the
+        // compiled SQL (bound api_key/serial substituted in). Log codes only, and don't echo
+        // err.message back to the (pre-auth-on-DB-error) caller.
+        console.error('[BIOMETRIC-VENDOR-PUSH-ERROR]:', { code: err.code, errno: err.errno });
+        res.status(500).json({ success: false, message: 'Internal server error processing punch.' });
     }
 });
 
