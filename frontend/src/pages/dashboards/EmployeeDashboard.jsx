@@ -48,7 +48,7 @@ const EmployeeDashboard = () => {
 
     const handleDownloadSlip = async (id, monthName, year) => {
         try {
-            const token = localStorage.getItem('auth_token') || 'test.admin.token';
+            const token = localStorage.getItem('auth_token') || (import.meta.env.DEV ? 'test.admin.token' : '');
             const isProd = import.meta.env.PROD;
             const baseUrl = isProd ? '/api' : 'http://localhost:5000/api';
             const response = await fetch(`${baseUrl}/payroll/download-slip/${id}`, {

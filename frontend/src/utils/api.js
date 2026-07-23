@@ -11,11 +11,11 @@ const api = axios.create({
     }
 });
 
-// For "Real-World" implementation without login, we'll use a test strategy:
-// We'll inject a hardcoded token that corresponds to our seed data.
+// In development we fall back to a demo bypass token (matches the seed data) so the app
+// is usable without logging in. In production there is NO fallback — the backend rejects
+// test.* tokens there, so a missing token must surface as a real "logged out" flow.
 api.interceptors.request.use(config => {
-    // Default to test.admin.token for "Real-World" demo persistence if no token exists
-    const token = localStorage.getItem('auth_token') || 'test.admin.token';
+    const token = localStorage.getItem('auth_token') || (import.meta.env.DEV ? 'test.admin.token' : null);
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -60,14 +60,22 @@ api.interceptors.response.use(
         const message = error.response?.data?.message || 'Something went wrong';
         console.error('[API Error]:', message);
         
-        // Auto-logout if token is expired or invalid
+        // Auto-logout on auth failures.
         if (error.response?.status === 401 || error.response?.status === 403) {
-            // Only auto-logout if it's NOT a delete key error (since delete key returns 403)
+            // Not a delete-key challenge (which also returns 403).
             if (error.response?.data?.code !== 'DELETE_KEY_REQUIRED') {
-                if (message.toLowerCase().includes('token') || message.toLowerCase().includes('unauthorized')) {
+                // 401 = not authenticated (missing/absent token) → always a logged-out state.
+                // 403 = treat as auth failure only when it's a token problem (expired/invalid);
+                // a plain permission-denied 403 should NOT kick the user out of the app.
+                const isAuthFailure =
+                    error.response.status === 401 ||
+                    message.toLowerCase().includes('token') ||
+                    message.toLowerCase().includes('unauthorized');
+
+                if (isAuthFailure) {
                     localStorage.removeItem('auth_token');
                     localStorage.removeItem('user_data');
-                    
+
                     // Prevent infinite reload loops on login page
                     if (!window.location.pathname.includes('/login')) {
                         window.location.href = '/login';

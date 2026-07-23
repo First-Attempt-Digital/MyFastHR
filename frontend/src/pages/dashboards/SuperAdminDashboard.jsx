@@ -1122,7 +1122,7 @@ const DatabaseExplorerView = () => {
     };
 
     const triggerDownload = (filename) => {
-        const token = localStorage.getItem('auth_token') || 'test.admin.token';
+        const token = localStorage.getItem('auth_token') || (import.meta.env.DEV ? 'test.admin.token' : '');
         fetch(`${api.defaults.baseURL}/admin/system/backups/${filename}/download`, {
             headers: {
                 'Authorization': `Bearer ${token}`
