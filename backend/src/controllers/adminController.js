@@ -677,8 +677,8 @@ class AdminController {
             }
 
             const raw = query.trim();
-            // Strip a single trailing semicolon so a normal one-liner still passes the checks below.
-            const normalized = raw.replace(/;\s*$/, '');
+            // Strip trailing semicolons/whitespace so a normal one-liner still passes the checks below.
+            const normalized = raw.replace(/[;\s]+$/, '');
             const upper = normalized.toUpperCase();
 
             // 1. Read-only verbs only (this box is a super-admin DB explorer, not a write console).
