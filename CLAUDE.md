@@ -1,0 +1,57 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+MyFastHR is a multi-tenant HRMS/CRM SaaS platform: React (Vite) frontend + Express/Knex/MySQL backend. Core domains are attendance/biometric sync, payroll, leave management, employee records, org charts, document vault, and letter generation.
+
+## Commands
+
+There is no root-level build; the frontend and backend are run as two separate apps.
+
+**Backend** (from `backend/`):
+```bash
+npm install
+npm run dev      # nodemon src/server.js, http://localhost:5000
+npm start        # node src/server.js (production)
+```
+There is no backend test suite (`npm test` is a stub) and no lint script.
+
+**Frontend** (from `frontend/`):
+```bash
+npm install
+npm run dev       # vite, http://localhost:5173
+npm run build     # production build to frontend/dist
+npm run lint      # eslint .
+npm run cap:sync  # build + sync into the Capacitor Android shell (frontend/android)
+```
+There is no frontend test suite.
+
+**Database**: MySQL, database name `myfasthr_db`. There are no Knex migration files (`database/migrations` is referenced in `backend/knexfile.js` but does not exist) — schema is instead self-healing: `backend/src/app.js` runs `syncDatabaseSchema()` on every boot, which checks `hasTable`/`hasColumn` and applies missing tables/columns idempotently. **When you add a new column or table, add the corresponding `hasTable`/`hasColumn` + `alterTable`/`createTable` block in `syncDatabaseSchema()` in `backend/src/app.js`** — this is the only mechanism that keeps dev/staging/production schemas in sync since there's no formal migration runner. Only `database/seeds/01_initial_users.js` exists under `database/`.
+
+Root-level `package.json`, `purge_files.js`, `purge_screenshots.js`, and `deploy_prep.js` are referenced by `README.md` but are not present in the working tree (they're also gitignored) — don't assume they exist without checking first.
+
+## Architecture
+
+### Backend structure (`backend/src/`)
+Layered per-domain: `routes/` → `controllers/` → `services/` → `repositories/` → Knex query builder against `config/db.js`. Business logic lives in `services/`; `repositories/` are thin query modules. `backend/src/app.js` is unusually large — besides Express wiring, it contains the schema auto-sync routine, static/upload file serving with a "virtual router" for multi-tenant-isolated upload folders, CORS origin logic, a global system-freeze write-lock middleware, the ZKTeco/biometric-machine webhook handlers (`/Device/SaveDevice`, `/api/attendance/machine-log`), and public unauthenticated routes (branding, case studies, book-demo, onboarding). Read it before assuming route wiring lives only in `routes/`.
+
+### Multi-tenancy model
+Despite naming vestiges suggesting per-tenant databases (`db.centralDb`, `db.getTenantDb`, `db.initTenantDb` in `config/db.js`), the app actually uses a **single shared MySQL database** with row-level isolation via a `company_id` column on tenant-scoped tables. Those tenant-DB-shaped functions are now no-op aliases that all resolve to the same connection — don't try to wire up real per-tenant databases without confirming with the user first, since that would be a significant architecture change.
+
+Tenant isolation is enforced by middleware chain: `authenticateToken` (JWT → `req.user`) → `tenantMiddleware`/`tenantFilter` (resolves `req.company_id`, `req.user.employee_id`) → `tenantGuard` (blocks if `company.subscription_status === 'inactive'`). Routes are mounted in `app.js` as `app.use('/api/x', authenticateToken, tenantGuard, xRoutes)`. `super_admin` bypasses company scoping (`req.company_id = null` unless impersonating via `company_id` query/body param).
+
+### Auth dev-bypass tokens
+`authMiddleware.js` has hardcoded literal tokens (`test.super.token`, `test.admin.token`, `test.manager.token`, `test.employee.token`, `test.employee1.token`) that map to deterministic demo user contexts, **not gated behind `NODE_ENV`**. The frontend's `utils/api.js` defaults to `test.admin.token` when no `auth_token` is in localStorage. Be aware of this when reasoning about auth security or when a request behaves like a specific role unexpectedly.
+
+### Attendance/shift engine
+This is the most complex and bug-prone subsystem. Before touching `attendanceService.js`, `machineAttendanceService.js`, or shift/muster logic, **read `MyFastHR_Attendance_Master_Prompt.md` and `ATTENDANCE_TROUBLESHOOTING.md` in the repo root** — they document the shift resolution hierarchy, night-shift logical-date rules, the 3 shift types (standard 2-punch, split/session 4-punch, flexi), status-priority rules for the muster grid, and a list of previously-fixed bugs with root causes (e.g. shift-assignment ordering must be `.orderBy('esa.from_date', 'desc').orderBy('esa.id', 'desc')`, not creation order). Re-introducing one of these already-fixed bugs is the main risk when editing this code.
+
+All datetime handling in the attendance path must go through `dbDateToUTC()` and IST (`Asia/Kolkata`) conversions as done in `attendanceService.js` — don't use raw `Date` math, since DB timestamps and server timezone are not guaranteed to align with logical (Asia/Kolkata) day boundaries, especially for night shifts.
+
+### Frontend structure (`frontend/src/`)
+Route-based, role-gated via `ProtectedRoute` in `App.jsx`: reads `user_role` from localStorage and compares against `allowedRoles` arrays (`allRoles`, `exceptAdmin`, `exceptEmployee`, `restrictedBoth`). Role-specific dashboards live in `pages/dashboards/` (`SuperAdminDashboard`, `AdminDashboard`, `ManagerDashboard`, `EmployeeDashboard`). Attendance/leave admin screens are grouped under `pages/leave-attendance/` with their own layout (`LeaveAttendanceLayout.jsx`). All API calls go through the shared axios instance in `utils/api.js`, which auto-attaches the bearer token (defaulting to `test.admin.token`), auto-redirects to `/login` on 401/403, and intercepts a custom `DELETE_KEY_REQUIRED` response code to prompt for a delete-security PIN before retrying the original request.
+
+### Deployment
+Single-VPS PM2 + Nginx deployment (see `deployment_notes.md`). `ecosystem.config.js` points PM2 at `./backend/index.js` in cluster mode — confirm this still matches the real entry point (`backend/src/server.js` per `package.json`'s `start` script) before relying on it. Frontend is built and its `dist/` output is copied into `backend/public/`, which Express serves statically before hitting the API routes.
