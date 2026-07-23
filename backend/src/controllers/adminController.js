@@ -672,17 +672,43 @@ class AdminController {
     async executeSqlQuery(req, res) {
         try {
             const { query } = req.body;
-            if (!query) {
+            if (!query || typeof query !== 'string') {
                 return res.status(400).json({ message: 'SQL query content is required' });
             }
 
-            // Simple security check: enforce read-only SELECT operations for safety via DB explorer query box
-            const trimmed = query.trim().toUpperCase();
-            if (!trimmed.startsWith('SELECT') && !trimmed.startsWith('PRAGMA') && !trimmed.startsWith('EXPLAIN')) {
-                return res.status(403).json({ message: 'Security Policy Alert: Only SELECT, PRAGMA or EXPLAIN read-only queries are permitted inside SQL Sandbox.' });
+            const raw = query.trim();
+            // Strip a single trailing semicolon so a normal one-liner still passes the checks below.
+            const normalized = raw.replace(/;\s*$/, '');
+            const upper = normalized.toUpperCase();
+
+            // 1. Read-only verbs only (this box is a super-admin DB explorer, not a write console).
+            const allowedPrefixes = ['SELECT', 'EXPLAIN', 'SHOW', 'DESCRIBE', 'DESC '];
+            if (!allowedPrefixes.some(p => upper.startsWith(p))) {
+                return res.status(403).json({ message: 'Security Policy Alert: Only read-only SELECT / EXPLAIN / SHOW / DESCRIBE queries are permitted inside the SQL Sandbox.' });
             }
 
-            const results = await db.raw(query);
+            // 2. Reject stacked statements. mysql2 already disables multipleStatements, but fail
+            //    fast and clearly rather than surfacing a driver error.
+            if (normalized.includes(';')) {
+                return res.status(403).json({ message: 'Security Policy Alert: Only a single statement is allowed — remove any additional semicolon-separated statements.' });
+            }
+
+            // 3. Block SELECT constructs that break out of "read-only": file write/read to the DB
+            //    host (INTO OUTFILE/DUMPFILE, LOAD_FILE) and resource-exhaustion builtins.
+            const forbidden = [
+                /\bINTO\s+OUTFILE\b/i,
+                /\bINTO\s+DUMPFILE\b/i,
+                /\bLOAD_FILE\s*\(/i,
+                /\bSLEEP\s*\(/i,
+                /\bBENCHMARK\s*\(/i,
+                /\bGET_LOCK\s*\(/i
+            ];
+            const hit = forbidden.find(re => re.test(normalized));
+            if (hit) {
+                return res.status(403).json({ message: 'Security Policy Alert: The query uses a disallowed construct (file I/O or locking/sleep builtins are not permitted).' });
+            }
+
+            const results = await db.raw(normalized);
             res.json(results);
         } catch (error) {
             res.status(400).json({ message: 'SQL Execution Error', error: error.message });

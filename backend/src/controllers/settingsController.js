@@ -342,8 +342,8 @@ class SettingsController {
                 }
             }
 
-            // Fetch the platform global key
-            let globalKey = '123456';
+            // Fetch the platform global key (no hardcoded default — unconfigured must fail closed)
+            let globalKey = null;
             const globalKeySetting = await db('system_settings').where({ key_name: 'global_delete_security_key' }).first();
             if (globalKeySetting && globalKeySetting.value_text) {
                 globalKey = globalKeySetting.value_text;
@@ -351,6 +351,9 @@ class SettingsController {
 
             // If super admin and verifying their own configuration key (no URL context)
             if (isSuperAdmin && !url) {
+                if (!globalKey) {
+                    return res.status(400).json({ code: 'DELETE_KEY_NOT_CONFIGURED', message: 'No platform delete security key is configured. Set one before verifying.' });
+                }
                 if (globalKey !== inputKey) {
                     return res.status(400).json({ message: 'Invalid delete security key' });
                 }
@@ -363,10 +366,15 @@ class SettingsController {
             }
 
             const company = await db('companies').where({ id: companyId }).first();
-            const companyKey = company ? company.delete_security_key : '123456';
+            const companyKey = company && company.delete_security_key ? company.delete_security_key : null;
+
+            // Fail closed if neither a company key nor (for super admins) a global key is configured.
+            if (!companyKey && !(isSuperAdmin && globalKey)) {
+                return res.status(400).json({ code: 'DELETE_KEY_NOT_CONFIGURED', message: 'No delete security key is configured for this company. Set one in Settings first.' });
+            }
 
             // Super admins are allowed to verify using either the specific company key OR the global master key
-            const isMatched = (companyKey === inputKey) || (isSuperAdmin && globalKey === inputKey);
+            const isMatched = (!!companyKey && companyKey === inputKey) || (isSuperAdmin && !!globalKey && globalKey === inputKey);
 
             if (!isMatched) {
                 return res.status(400).json({ message: 'Invalid delete security key' });
@@ -393,9 +401,11 @@ class SettingsController {
             if (req.user.role_name === 'super_admin') {
                 // Super admin updating global delete security key
                 const globalKeySetting = await db('system_settings').where({ key_name: 'global_delete_security_key' }).first();
-                const expectedKey = globalKeySetting ? globalKeySetting.value_text : '123456';
+                const expectedKey = globalKeySetting && globalKeySetting.value_text ? globalKeySetting.value_text : null;
 
-                if (expectedKey !== oldKey) {
+                // If a key already exists, require the correct current key. If none is
+                // configured yet, allow first-time setup (no hardcoded default to match).
+                if (expectedKey && expectedKey !== oldKey) {
                     return res.status(400).json({ message: 'Current security key is incorrect' });
                 }
 
@@ -427,7 +437,8 @@ class SettingsController {
                 return res.status(404).json({ message: 'Company not found' });
             }
 
-            if (company.delete_security_key !== oldKey) {
+            // If a key already exists, require the correct current key; otherwise allow first-time setup.
+            if (company.delete_security_key && company.delete_security_key !== oldKey) {
                 return res.status(400).json({ message: 'Current security key is incorrect' });
             }
 

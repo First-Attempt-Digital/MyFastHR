@@ -94,9 +94,10 @@ const deleteSecurityGuard = async (req, res, next) => {
         }
     }
 
-    // Get expected keys (company-specific key and global platform key)
-    let expectedKey = '123456';
-    let globalKey = '123456';
+    // Get expected keys (company-specific key and global platform key).
+    // No hardcoded default: an unconfigured key must fail closed, never accept '123456'.
+    let expectedKey = null;
+    let globalKey = null;
     try {
         const globalKeySetting = await db('system_settings').where({ key_name: 'global_delete_security_key' }).first();
         if (globalKeySetting && globalKeySetting.value_text) {
@@ -113,6 +114,21 @@ const deleteSecurityGuard = async (req, res, next) => {
         }
     } catch (err) {
         console.error('Database query for delete security key failed:', err);
+        // Fail closed: never proceed with a deletion if we could not verify the key.
+        return res.status(500).json({
+            code: 'DELETE_KEY_ERROR',
+            message: 'Unable to verify the delete security key. Deletion aborted.'
+        });
+    }
+
+    // Fail closed: if no delete key has been configured, refuse the deletion instead of
+    // accepting a well-known default. An admin must set a real key in Settings first.
+    const hasConfiguredKey = !!expectedKey || (isSuperAdmin && !!globalKey);
+    if (!hasConfiguredKey) {
+        return res.status(403).json({
+            code: 'DELETE_KEY_NOT_CONFIGURED',
+            message: 'No delete security key is configured. An administrator must set one in Settings before deletions are permitted.'
+        });
     }
 
     const inputKey = req.headers['x-delete-security-key'];

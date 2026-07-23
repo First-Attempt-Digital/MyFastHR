@@ -638,18 +638,11 @@ if (process.env.FRONTEND_URL) {
 
 app.use(cors((req, callback) => {
     const origin = req.header('Origin');
-    const host = req.header('Host');
-    
-    let isSameOrigin = false;
-    if (origin && host) {
-        try {
-            const parsedOriginHost = new URL(origin).host;
-            isSameOrigin = parsedOriginHost.toLowerCase() === host.toLowerCase();
-        } catch (e) {
-            // Invalid URL format in Origin header
-        }
-    }
-    
+
+    // NOTE: we intentionally do NOT trust an Origin-matches-Host ("same origin") check here.
+    // Both the Origin and Host headers are fully attacker-controlled on a cross-site request,
+    // so comparing them would let any site have its origin reflected back with credentials.
+    // Allow only the explicit allowlist (+ private LAN IPs for on-prem/biometric access).
     const isLocalIP = origin && (
         origin.startsWith('http://192.168.') || 
         origin.startsWith('http://10.') || 
@@ -671,7 +664,7 @@ app.use(cors((req, callback) => {
         origin.startsWith('http://172.31.')
     );
     
-    const isAllowed = !origin || isSameOrigin || allowedOrigins.includes(origin) || isLocalIP;
+    const isAllowed = !origin || allowedOrigins.includes(origin) || isLocalIP;
     
     if (isAllowed) {
         callback(null, {
