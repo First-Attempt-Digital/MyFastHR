@@ -566,7 +566,7 @@ class SettingsController {
 
             let decoded;
             try {
-                decoded = jwt.verify(token, process.env.JWT_SECRET);
+                decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
             } catch (jwtErr) {
                 return res.status(401).json({ message: 'Invalid or expired reset token' });
             }

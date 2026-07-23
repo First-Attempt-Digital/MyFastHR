@@ -34,8 +34,8 @@ class AuthController {
         try {
             const { token, password } = req.body;
             const jwt = require('jsonwebtoken');
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            
+            const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
+
             if (decoded.purpose !== 'setup_password') {
                 throw new Error('Invalid token purpose');
             }

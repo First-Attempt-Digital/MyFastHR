@@ -439,7 +439,12 @@ class AdminController {
             const fs = require('fs');
             const path = require('path');
             const backupsDir = path.resolve(__dirname, '../../backups');
-            const backupFilePath = path.join(backupsDir, filename);
+            const backupFilePath = path.resolve(backupsDir, filename);
+
+            // Prevent path traversal: the resolved path must sit directly inside backupsDir
+            if (path.dirname(backupFilePath) !== backupsDir) {
+                return res.status(400).json({ message: 'Invalid backup filename' });
+            }
 
             if (!fs.existsSync(backupFilePath)) {
                 return res.status(404).json({ message: 'Backup file not found' });
@@ -498,13 +503,18 @@ class AdminController {
             const fs = require('fs');
             const path = require('path');
             const backupsDir = path.resolve(__dirname, '../../backups');
-            const filePath = path.join(backupsDir, filename);
+            const filePath = path.resolve(backupsDir, filename);
+
+            // Prevent path traversal: the resolved path must sit directly inside backupsDir
+            if (path.dirname(filePath) !== backupsDir) {
+                return res.status(400).json({ message: 'Invalid backup filename' });
+            }
 
             if (!fs.existsSync(filePath)) {
                 return res.status(404).json({ message: 'Backup file not found' });
             }
 
-            res.download(filePath, filename);
+            res.download(filePath, path.basename(filePath));
         } catch (error) {
             res.status(500).json({ message: 'Failed to download backup', error: error.message });
         }

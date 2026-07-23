@@ -68,7 +68,9 @@ const apiKeyAuth = async (req, res, next) => {
 
         next();
     } catch (err) {
-        console.error('[BIOMETRIC-AUTH-ERROR]:', err);
+        // Never log the full error: Knex enriches a failed query's message with the
+        // compiled SQL (bound values substituted in), which would embed the raw API key.
+        console.error('[BIOMETRIC-AUTH-ERROR]: device auth lookup failed', { code: err.code, errno: err.errno });
         res.status(500).json({ message: 'Internal authentication server error.' });
     }
 };

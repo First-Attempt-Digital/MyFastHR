@@ -4,6 +4,18 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
+// Fail fast in production on a missing/weak JWT secret. A guessable secret makes
+// tokens forgeable for any user/role, so we refuse to boot rather than run insecurely.
+if (process.env.NODE_ENV === 'production') {
+    const weakSecrets = ['dev_jwt_secret_change_me', 'secret', 'changeme'];
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret || jwtSecret.length < 32 || weakSecrets.includes(jwtSecret)) {
+        console.error('[BOOT-FATAL]: JWT_SECRET is missing or weak. Set a strong (>=32 char) random JWT_SECRET before starting in production.');
+        process.exit(1);
+    }
+}
+
 const db = require('./config/db');
 
 const authRoutes = require('./routes/authRoutes');
@@ -723,7 +735,7 @@ app.use(async (req, res, next) => {
                     } else if (!token.startsWith('test.')) {
                         const jwt = require('jsonwebtoken');
                         try {
-                            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                            const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
                             if (decoded.role_name === 'super_admin') {
                                 isSuperAdmin = true;
                             }

@@ -48,7 +48,7 @@ const deleteSecurityGuard = async (req, res, next) => {
             companyId = user ? user.company_id : 2; // Default to company 2 since company 1 does not exist
             isSuperAdmin = token === 'test.super.token' || (user && user.role_id === 1);
         } else {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
             companyId = decoded.company_id;
             
             // Resolve user role

@@ -67,7 +67,7 @@ class AuthService {
     }
 
     async refresh(refreshToken) {
-        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'] });
         const user = await userRepository.findById(decoded.id);
 
         if (!user || user.refresh_token !== refreshToken) {
