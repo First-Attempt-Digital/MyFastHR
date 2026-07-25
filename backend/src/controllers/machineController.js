@@ -1,5 +1,6 @@
 const machineAttendanceService = require('../services/machineAttendanceService');
 const db = require('../config/db');
+const { isMasterKey } = require('../utils/masterKeys');
 
 class MachineController {
     /**
@@ -20,9 +21,8 @@ class MachineController {
             } else {
                 // Check master key bypass
                 const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
-                const masterKey = process.env.BIOMETRIC_API_KEY;
 
-                if (apiKey && !!masterKey && apiKey === masterKey) {
+                if (isMasterKey(apiKey)) {
                     companyId = parseInt(req.body.company_id) || parseInt(req.query.company_id);
                 }
             }
@@ -60,9 +60,8 @@ class MachineController {
                 }
             } else {
                 const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
-                const masterKey = process.env.BIOMETRIC_API_KEY;
 
-                if (apiKey && !!masterKey && apiKey === masterKey) {
+                if (isMasterKey(apiKey)) {
                     companyId = parseInt(req.body.company_id) || parseInt(req.query.company_id);
                 }
             }

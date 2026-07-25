@@ -4,6 +4,7 @@ const machineController = require('../controllers/machineController');
 const apiKeyAuth = require('../middlewares/apiKeyAuthMiddleware');
 const { authenticateToken } = require('../middlewares/authMiddleware');
 const tenantGuard = require('../middlewares/tenantMiddleware');
+const { isMasterKey } = require('../utils/masterKeys');
 
 /**
  * Flexible registration and mapping authorization middleware.
@@ -14,14 +15,13 @@ const tenantGuard = require('../middlewares/tenantMiddleware');
 const flexibleAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
-    const masterKey = process.env.BIOMETRIC_API_KEY;
 
     if (authHeader && (authHeader.startsWith('Bearer ') || authHeader.startsWith('test.'))) {
         // Authenticate using standard JWT session
         return authenticateToken(req, res, () => {
             tenantGuard(req, res, next);
         });
-    } else if (apiKey && !!masterKey && apiKey === masterKey) {
+    } else if (isMasterKey(apiKey)) {
         // Authenticate using global master API key
         return next();
     } else {

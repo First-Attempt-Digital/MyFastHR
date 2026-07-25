@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { isMasterKey } = require('../utils/masterKeys');
 
 /**
  * Middleware to authenticate requests using x-api-key.
@@ -10,8 +11,6 @@ const db = require('../config/db');
 const apiKeyAuth = async (req, res, next) => {
     let apiKey = req.headers['x-api-key'] || req.query.api_key || req.body?.api_key;
     if (apiKey) apiKey = apiKey.trim();
-    
-    const masterKey = process.env.BIOMETRIC_API_KEY;
 
     if (!apiKey) {
         return res.status(401).json({ message: 'Authentication required. Missing x-api-key header.' });
@@ -20,7 +19,7 @@ const apiKeyAuth = async (req, res, next) => {
     try {
         let device = null;
 
-        if (!!masterKey && apiKey === masterKey) {
+        if (isMasterKey(apiKey)) {
             // Master Key fallback - find device by serial number in payload
             let deviceSerial = req.body?.device_serial || 
                                req.body?.deviceId || 

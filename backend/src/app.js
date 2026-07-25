@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+const { isMasterKey } = require('./utils/masterKeys');
 
 // Fail fast in production on a missing/weak JWT secret. A guessable secret makes
 // tokens forgeable for any user/role, so we refuse to boot rather than run insecurely.
@@ -785,8 +786,6 @@ app.post('/Device/SaveDevice', async (req, res) => {
             || req.query.api_key
             || req.body?.api_key;
 
-        const masterKey = process.env.BIOMETRIC_API_KEY;
-
         if (!apiKey) {
             console.warn('>>> [BIOMETRIC-MACHINE]: Missing subscription key from IP:', req.ip);
             return res.status(401).json({ success: false, message: 'Authentication required. Missing subscription key.' });
@@ -841,7 +840,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
         
         if (!device) {
             // If master key is used and device not registered, auto-register under default company (for testing)
-            if (apiKey === masterKey) {
+            if (isMasterKey(apiKey)) {
                 console.warn(`>>> [BIOMETRIC-MACHINE]: Device ${deviceSerial} not registered. Master key used - attempting auto-registration.`);
                 // Try to get first company as fallback
                 const firstCompany = await db('companies').orderBy('id', 'asc').first();
@@ -870,7 +869,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
 
         // Validate API key (allow master key OR device's own API key OR the subscription key from config)
         const configuredSubKey = process.env.BIOMETRIC_SUBSCRIPTION_KEY;
-        const isValidKey = (!!masterKey && apiKey === masterKey) || (apiKey === device.api_key) || (!!configuredSubKey && apiKey === configuredSubKey);
+        const isValidKey = isMasterKey(apiKey) || (apiKey === device.api_key) || (!!configuredSubKey && apiKey === configuredSubKey);
         if (!isValidKey) {
             // Do not log the received key value — only the device serial it was presented for.
             console.warn(`>>> [BIOMETRIC-MACHINE]: Invalid key for device ${deviceSerial}.`);
@@ -1044,9 +1043,8 @@ app.get('/api/attendance/machine-log', (req, res) => {
 app.post('/api/attendance/machine-log', async (req, res) => {
     try {
         const apiKey = req.headers['x-api-key'] || req.query.api_key || req.body.api_key;
-        const secretKey = process.env.BIOMETRIC_API_KEY;
-        
-        if (!apiKey || apiKey !== secretKey) {
+
+        if (!isMasterKey(apiKey)) {
             console.warn('>>> [BIOMETRIC]: Unauthorized machine punch attempt. Invalid API Key.');
             return res.status(401).json({ message: 'Unauthorized. Invalid or missing API key.' });
         }
