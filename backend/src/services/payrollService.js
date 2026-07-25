@@ -980,7 +980,7 @@ class PayrollService {
             const loanEmi = parseFloat(existing.loan_emi_deduction || 0);
             
             // For manual edits, we use the components directly
-            updateData.net_salary = (base + allow - ded - unpaid - loanEmi).toFixed(2);
+            updateData.net_salary = (base + allow - ded - loanEmi).toFixed(2);
         } else if (data.net_salary) {
             updateData.net_salary = data.net_salary;
         }
