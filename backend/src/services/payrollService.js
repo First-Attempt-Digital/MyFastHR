@@ -633,8 +633,8 @@ class PayrollService {
 
         const results = [];
 
-        for (const empRecord of matrix) {
-            await db.transaction(async (trx) => {
+        await db.transaction(async (trx) => {
+            for (const empRecord of matrix) {
                 // --- DYNAMIC OVERTIME BONUSES / MANUAL ADJUSTMENTS ---
                 const existingPayroll = await trx('payrolls')
                     .where({ employee_id: empRecord.id, month, year })
@@ -771,8 +771,8 @@ class PayrollService {
 
                     results.push({ ...payrollEntry, processed_at: new Date() });
                 }
-            });
-        }
+            }
+        });
 
         // Notify Admin
         try {
@@ -1884,8 +1884,8 @@ class PayrollService {
             const uan = stmt.employee_id_number || 'UAN1000000';
             const name = `${stmt.first_name} ${stmt.last_name}`.substring(0, 30).toUpperCase();
             const gross = parseFloat(stmt.base_salary) + (parseFloat(stmt.total_allowances) || 0);
-            const ncpDays = stmt.unpaid_leave_deduction > 0 ? 2 : 0; 
-            
+            const ncpDays = Math.round(parseFloat(stmt.unpaid_leave_days) || 0);
+
             ecrText += `${uan}#~#${name}#~#${Math.round(gross)}#~#${Math.round(pfWages)}#~#${Math.round(epsWages)}#~#${Math.round(edliWages)}#~#${Math.round(epfEmployee)}#~#${Math.round(epsEmployer)}#~#${Math.round(epfDiff)}#~#${ncpDays}#~#0\r\n`;
         });
         
@@ -1908,8 +1908,9 @@ class PayrollService {
             const ipNum = stmt.employee_id_number || 'IP1000000';
             const name = `${stmt.first_name} ${stmt.last_name}`.replace(/,/g, ' ').toUpperCase();
             const gross = parseFloat(stmt.base_salary) + (parseFloat(stmt.total_allowances) || 0);
-            const daysPaid = stmt.unpaid_leave_deduction > 0 ? 28 : 30;
-            
+            const daysInMonth = new Date(stmt.year, stmt.month, 0).getDate();
+            const daysPaid = Math.max(0, Math.round(daysInMonth - (parseFloat(stmt.unpaid_leave_days) || 0)));
+
             csvText += `${ipNum},${name},${daysPaid},${Math.round(gross)},0\n`;
         });
         
