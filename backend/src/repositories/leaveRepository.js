@@ -116,7 +116,7 @@ class LeaveRepository {
             const used = approvedLeaves.length > 0
                 ? approvedLeaves
                     .filter(l => l.leave_type_id === t.id)
-                    .reduce((acc, curr) => acc + curr.days, 0)
+                    .reduce((acc, curr) => acc + Number(curr.days), 0)
                 : 0;
 
             const typeAdjusts = adjustments.filter(a => a.leave_type_id === t.id);
@@ -172,7 +172,7 @@ class LeaveRepository {
 
                 const used = empLeaves
                     .filter(l => l.leave_type_id === t.id)
-                    .reduce((acc, curr) => acc + curr.days, 0);
+                    .reduce((acc, curr) => acc + Number(curr.days), 0);
 
                 const typeAdjusts = empAdjustments.filter(a => a.leave_type_id === t.id);
                 const credits = typeAdjusts.filter(a => a.adjustment_type === 'credit').reduce((acc, curr) => acc + Number(curr.days), 0);
@@ -193,7 +193,7 @@ class LeaveRepository {
             });
             
             const totalAllocated = empBalances.reduce((acc, b) => acc + b.allocated, 0);
-            const totalUsed = empLeaves.reduce((acc, l) => acc + l.days, 0);
+            const totalUsed = empLeaves.reduce((acc, l) => acc + Number(l.days), 0);
 
             return {
                 id: emp.id,

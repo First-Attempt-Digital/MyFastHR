@@ -237,6 +237,8 @@ class PayrollService {
                 });
             }
         } else {
+            const includePf = emp?.include_pf !== undefined ? !!emp.include_pf : true;
+            const includeEsi = emp?.include_esi !== undefined ? !!emp.include_esi : true;
             employeePf = includePf ? (parseFloat(activeRevision.employee_pf) * prorationFactor) : 0;
             employeeEsic = includeEsi ? (parseFloat(activeRevision.employee_esic) * prorationFactor) : 0;
             employerPf = includePf ? (parseFloat(activeRevision.employer_pf) * prorationFactor) : 0;
