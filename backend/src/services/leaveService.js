@@ -14,41 +14,47 @@ class LeaveService {
         const end = parseISO(data.end_date);
         if (start > end) throw new Error('Start date cannot be after end date');
 
-        // 2. Check for overlapping requests
-        const overlap = await leaveRepository.checkOverlap(user.employee_id, user.company_id, data.start_date, data.end_date);
-        if (overlap) throw new Error(`Operational conflict: You already have a ${overlap.status} leave request for these dates.`);
-
-        // 3. Calculate total days with session deductions
+        // 2. Calculate total days with session deductions
         const startSession = data.start_session || 'session_1';
         const endSession = data.end_session || 'session_2';
-        
+
         const startDeduction = startSession === 'session_2' ? 0.5 : 0.0;
         const endDeduction = endSession === 'session_1' ? 0.5 : 0.0;
-        
+
         const days = differenceInDays(end, start) + 1 - startDeduction - endDeduction;
         if (days <= 0) throw new Error('Invalid session selection: total leave days must be greater than 0');
 
-        // 4. Validate Balance
-        const balances = await this.getBalances(user);
-        const typeBalance = balances.find(b => b.id === parseInt(data.leave_type_id));
-        
-        if (!typeBalance) throw new Error('Invalid leave type selected.');
-        if (typeBalance.available_days < days) {
-            throw new Error(`Insufficient Balance: You requested ${days} days, but only have ${typeBalance.available_days} days remaining for ${typeBalance.name}.`);
-        }
+        // 3. Check overlap + balance + insert atomically: lock the employee row first so
+        // concurrent applyLeave calls for the same employee serialize instead of both
+        // reading the same pre-insert overlap/balance state.
+        const { leaveId, typeBalance } = await db.transaction(async (trx) => {
+            await trx('employees').where({ id: user.employee_id }).forUpdate();
 
-        // 5. Save
-        const leaveId = await leaveRepository.create({
-            employee_id: user.employee_id,
-            company_id: user.company_id,
-            leave_type_id: data.leave_type_id,
-            start_date: data.start_date,
-            end_date: data.end_date,
-            start_session: startSession,
-            end_session: endSession,
-            days: days,
-            reason: data.reason,
-            status: 'pending'
+            const overlap = await leaveRepository.checkOverlap(user.employee_id, user.company_id, data.start_date, data.end_date, trx);
+            if (overlap) throw new Error(`Operational conflict: You already have a ${overlap.status} leave request for these dates.`);
+
+            const balances = await leaveRepository.getBalances(user.employee_id, user.company_id, trx);
+            const typeBalance = balances.find(b => b.id === parseInt(data.leave_type_id));
+
+            if (!typeBalance) throw new Error('Invalid leave type selected.');
+            if (typeBalance.available_days < days) {
+                throw new Error(`Insufficient Balance: You requested ${days} days, but only have ${typeBalance.available_days} days remaining for ${typeBalance.name}.`);
+            }
+
+            const leaveId = await leaveRepository.create({
+                employee_id: user.employee_id,
+                company_id: user.company_id,
+                leave_type_id: data.leave_type_id,
+                start_date: data.start_date,
+                end_date: data.end_date,
+                start_session: startSession,
+                end_session: endSession,
+                days: days,
+                reason: data.reason,
+                status: 'pending'
+            }, trx);
+
+            return { leaveId, typeBalance };
         });
 
         // 6. Notify Manager and Admin

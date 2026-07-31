@@ -154,21 +154,22 @@ class PayrollService {
     }
 
     calculateProratedSalaryComponents(activeRevision, paidDays, daysInMonth, stats, rules, manDeduction, loanEmi, otBonus, unpaidLeaveDays = null, emp = null, globalRules = []) {
+        const round2 = (n) => parseFloat((n || 0).toFixed(2));
         const baseSalary = parseFloat(activeRevision.basic);
         const totalAllowances = parseFloat(activeRevision.hra) + parseFloat(activeRevision.special_allowance || 0) + parseFloat(activeRevision.medical_allowance || 0);
         let totalDeductions = 0;
 
         const prorationFactor = paidDays / daysInMonth;
-        const earnedBasic = baseSalary * prorationFactor;
-        const earnedHra = (parseFloat(activeRevision.hra) || 0) * prorationFactor;
-        const earnedSpecial = (parseFloat(activeRevision.special_allowance) || 0) * prorationFactor;
-        const earnedMedical = (parseFloat(activeRevision.medical_allowance) || 0) * prorationFactor;
+        const earnedBasic = round2(baseSalary * prorationFactor);
+        const earnedHra = round2((parseFloat(activeRevision.hra) || 0) * prorationFactor);
+        const earnedSpecial = round2((parseFloat(activeRevision.special_allowance) || 0) * prorationFactor);
+        const earnedMedical = round2((parseFloat(activeRevision.medical_allowance) || 0) * prorationFactor);
         const earnedGross = earnedBasic + earnedHra + earnedSpecial + earnedMedical;
 
         const dailyGross = parseFloat(activeRevision.gross_salary) / daysInMonth;
-        const unpaidLeaveDeduction = unpaidLeaveDays !== null 
-            ? unpaidLeaveDays * dailyGross 
-            : parseFloat(activeRevision.gross_salary) - earnedGross;
+        const unpaidLeaveDeduction = round2(unpaidLeaveDays !== null
+            ? unpaidLeaveDays * dailyGross
+            : parseFloat(activeRevision.gross_salary) - earnedGross);
 
         let employeePf = 0;
         let employerPf = 0;
@@ -189,28 +190,28 @@ class PayrollService {
 
                 const isFlat = rule.base_on === 'flat_amount';
                 const calcBaseEarned = rule.base_on === 'gross_salary' ? earnedGross : earnedBasic;
-                let eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
-                let erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
+                let eeShare = round2(isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100)));
+                let erShare = round2(isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100)));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
                     const pfCeiling = 15000;
                     const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
-                    
+
                     if (pfExcess) {
                         // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at 15000 (1800 cap)
-                        eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
-                        erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
+                        eeShare = round2(isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100)));
+                        erShare = round2(isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100)));
                     } else {
                         // Option 1: Both Employee and Employer PF capped at 15000 (1800 cap)
-                        eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employee_percentage) / 100));
-                        erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
+                        eeShare = round2(isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employee_percentage) / 100)));
+                        erShare = round2(isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100)));
                     }
                     employeePf = eeShare;
                     employerPf = erShare;
                 } else if (ruleNameLower.includes('esic') || ruleNameLower.includes('esi') || ruleNameLower.includes('insurance')) {
-                    const structuredGross = parseFloat(activeRevision.gross_salary) 
+                    const structuredGross = parseFloat(activeRevision.gross_salary)
                         || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
-                    
+
                     if (structuredGross > 35000) {
                         eeShare = 0;
                         erShare = 0;
@@ -222,7 +223,7 @@ class PayrollService {
                     if (!ruleNameLower.includes('gratuity')) {
                         otherDeductionsBreakdown.push({
                             name: rule.rule_name,
-                            amount: parseFloat(eeShare.toFixed(2))
+                            amount: eeShare
                         });
                     }
                 }
@@ -239,10 +240,10 @@ class PayrollService {
         } else {
             const includePf = emp?.include_pf !== undefined ? !!emp.include_pf : true;
             const includeEsi = emp?.include_esi !== undefined ? !!emp.include_esi : true;
-            employeePf = includePf ? (parseFloat(activeRevision.employee_pf) * prorationFactor) : 0;
-            employeeEsic = includeEsi ? (parseFloat(activeRevision.employee_esic) * prorationFactor) : 0;
-            employerPf = includePf ? (parseFloat(activeRevision.employer_pf) * prorationFactor) : 0;
-            employerEsic = includeEsi ? (parseFloat(activeRevision.employer_esic) * prorationFactor) : 0;
+            employeePf = includePf ? round2(parseFloat(activeRevision.employee_pf) * prorationFactor) : 0;
+            employeeEsic = includeEsi ? round2(parseFloat(activeRevision.employee_esic) * prorationFactor) : 0;
+            employerPf = includePf ? round2(parseFloat(activeRevision.employer_pf) * prorationFactor) : 0;
+            employerEsic = includeEsi ? round2(parseFloat(activeRevision.employer_esic) * prorationFactor) : 0;
 
             if (includePf) {
                 breakdown.push({
@@ -283,6 +284,8 @@ class PayrollService {
                 lateDeduction = extraLates * (baseSalary * (parseFloat(rules.late_deduction_value || 0) / 100));
             }
         }
+        lateDeduction = round2(lateDeduction);
+        totalOtherStatutoryDeductions = round2(totalOtherStatutoryDeductions);
 
         const netSalary = (earnedGross - lateDeduction - employeePf - employeeEsic - totalOtherStatutoryDeductions - parseFloat(manDeduction || 0) - parseFloat(loanEmi || 0) + parseFloat(otBonus || 0)).toFixed(2);
 

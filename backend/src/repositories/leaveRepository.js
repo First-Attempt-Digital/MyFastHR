@@ -37,8 +37,8 @@ class LeaveRepository {
         ).orderBy('l.created_at', 'desc');
     }
 
-    async create(data) {
-        return await db('leaves').insert(data);
+    async create(data, knexInstance = db) {
+        return await knexInstance('leaves').insert(data);
     }
 
     async findById(id, companyId) {
@@ -65,9 +65,9 @@ class LeaveRepository {
             .del();
     }
 
-    async getLeaveTypes(companyId, includeInactive = false) {
+    async getLeaveTypes(companyId, includeInactive = false, knexInstance = db) {
         // Leave types can be global or company-specific
-        let query = db('leave_types')
+        let query = knexInstance('leave_types')
             .where(function() {
                 this.whereNull('company_id')
                     .orWhere('company_id', companyId);
@@ -79,17 +79,17 @@ class LeaveRepository {
         return await query;
     }
 
-    async getBalances(employeeId, companyId) {
+    async getBalances(employeeId, companyId, knexInstance = db) {
         // 1. Get all active leave types available
-        const types = await this.getLeaveTypes(companyId, false);
-        
+        const types = await this.getLeaveTypes(companyId, false, knexInstance);
+
         // 2. Get approved leaves for the current year (Only if employee exists)
         let approvedLeaves = [];
         let adjustments = [];
         const currentYear = new Date().getFullYear();
 
         if (employeeId) {
-            approvedLeaves = await db('leaves')
+            approvedLeaves = await knexInstance('leaves')
                 .where({
                     employee_id: employeeId,
                     company_id: companyId,
@@ -98,7 +98,7 @@ class LeaveRepository {
                 .andWhereRaw('YEAR(start_date) = ?', [currentYear])
                 .select('leave_type_id', 'days');
 
-            adjustments = await db('leave_adjustments')
+            adjustments = await knexInstance('leave_adjustments')
                 .where({
                     employee_id: employeeId,
                     company_id: companyId
@@ -271,8 +271,8 @@ class LeaveRepository {
         });
     }
 
-    async checkOverlap(employeeId, companyId, startDate, endDate) {
-        return await db('leaves')
+    async checkOverlap(employeeId, companyId, startDate, endDate, knexInstance = db) {
+        return await knexInstance('leaves')
             .where({ employee_id: employeeId, company_id: companyId })
             .whereIn('status', ['pending', 'approved'])
             .andWhere(function() {
