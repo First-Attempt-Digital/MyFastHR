@@ -38,7 +38,8 @@ const announcementsRoutes = require('./routes/announcementsRoutes');
 console.log('>>> [BOOT]: Task Routes Module Loaded');
 
 const { authenticateToken } = require('./middlewares/authMiddleware');
-const tenantGuard = require('./middlewares/tenantMiddleware');
+const tenantFilter = require('./middlewares/tenantMiddleware');
+const tenantGuard = require('./middlewares/tenantGuard');
 
 // Database Schema Sync (Auto-Fix)
 const syncDatabaseSchema = async () => {
@@ -699,6 +700,7 @@ app.use(cors((req, callback) => {
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(require('./middlewares/errorResponseSanitizer'));
 
 // Rate Limiting - Increased for dashboard stability
 const limiter = rateLimit({
@@ -924,7 +926,7 @@ app.use('/api/auth', authRoutes);
 const employeeController = require('./controllers/employeeController');
 
 // High Priority Onboarding Token Route
-app.post('/api/employees/:id/generate-token', authenticateToken, tenantGuard, employeeController.generateToken);
+app.post('/api/employees/:id/generate-token', authenticateToken, tenantFilter, tenantGuard, employeeController.generateToken);
 
 // Public Branding Route
 const brandingController = require('./controllers/brandingController');
@@ -1057,30 +1059,30 @@ app.post('/api/attendance/machine-log', async (req, res) => {
     }
 });
 
-app.use('/api/document-categories', authenticateToken, tenantGuard, categoryRoutes);
+app.use('/api/document-categories', authenticateToken, tenantFilter, tenantGuard, categoryRoutes);
 
 const kudosRoutes = require('./routes/kudosRoutes');
 
 // Apply Tenancy Guards to all internal operations
-app.use('/api/kudos', authenticateToken, tenantGuard, kudosRoutes);
-app.use('/api/attendance', authenticateToken, tenantGuard, attendanceRoutes);
-app.use('/api/leaves', authenticateToken, tenantGuard, leaveRoutes);
-app.use('/api/regularizations', authenticateToken, tenantGuard, regularizationRoutes);
-app.use('/api/employees', authenticateToken, tenantGuard, employeeRoutes);
+app.use('/api/kudos', authenticateToken, tenantFilter, tenantGuard, kudosRoutes);
+app.use('/api/attendance', authenticateToken, tenantFilter, tenantGuard, attendanceRoutes);
+app.use('/api/leaves', authenticateToken, tenantFilter, tenantGuard, leaveRoutes);
+app.use('/api/regularizations', authenticateToken, tenantFilter, tenantGuard, regularizationRoutes);
+app.use('/api/employees', authenticateToken, tenantFilter, tenantGuard, employeeRoutes);
 app.use('/api/admin', authenticateToken, adminRoutes); // Admin routes often global or specific
-app.use('/api/org', authenticateToken, tenantGuard, orgRoutes);
-app.use('/api/documents', authenticateToken, tenantGuard, documentRoutes);
-app.use('/api/notifications', authenticateToken, tenantGuard, notificationRoutes);
-app.use('/api/compliance', authenticateToken, tenantGuard, complianceRoutes);
-app.use('/api/payroll', authenticateToken, tenantGuard, payrollRoutes);
-app.use('/api/analytics', authenticateToken, tenantGuard, analyticsRoutes);
-app.use('/api/settings', authenticateToken, tenantGuard, settingsRoutes);
-app.use('/api/tasks', authenticateToken, tenantGuard, taskRoutes);
+app.use('/api/org', authenticateToken, tenantFilter, tenantGuard, orgRoutes);
+app.use('/api/documents', authenticateToken, tenantFilter, tenantGuard, documentRoutes);
+app.use('/api/notifications', authenticateToken, tenantFilter, tenantGuard, notificationRoutes);
+app.use('/api/compliance', authenticateToken, tenantFilter, tenantGuard, complianceRoutes);
+app.use('/api/payroll', authenticateToken, tenantFilter, tenantGuard, payrollRoutes);
+app.use('/api/analytics', authenticateToken, tenantFilter, tenantGuard, analyticsRoutes);
+app.use('/api/settings', authenticateToken, tenantFilter, tenantGuard, settingsRoutes);
+app.use('/api/tasks', authenticateToken, tenantFilter, tenantGuard, taskRoutes);
 app.use('/api/profile', authenticateToken, profileRoutes);
 app.use('/api/announcements', authenticateToken, announcementsRoutes);
 
 const ticketRoutes = require('./routes/ticketRoutes');
-app.use('/api/tickets', authenticateToken, tenantGuard, ticketRoutes);
+app.use('/api/tickets', authenticateToken, tenantFilter, tenantGuard, ticketRoutes);
 
 // Test Route
 app.get('/api/test-tasks', (req, res) => res.json({ message: 'Task API Mount Point Active' }));
