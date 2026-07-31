@@ -440,11 +440,12 @@ class PayrollController {
             const plDaysPayable = parseFloat(req.query.pl_days_payable || separation?.pl_days_payable || 0);
 
             // Salary Structure
-            const salaryStructure = await db('salary_structures')
-                .where({ employee_id: empId, company_id: companyId })
-                .first();
+            const lwdDateForStructure = new Date(lastWorkingDay);
+            const fnfMonth = lwdDateForStructure.getMonth() + 1;
+            const fnfYear = lwdDateForStructure.getFullYear();
+            const activeSalaryStructure = await payrollService.getActiveSalaryStructure(empId, companyId, fnfMonth, fnfYear);
 
-            const baseSalary = parseFloat(salaryStructure?.base_salary || 0);
+            const baseSalary = parseFloat((activeSalaryStructure?.isRevision ? activeSalaryStructure.basic : activeSalaryStructure?.base_salary) || 0);
             const dailyRate = totalDaysInMonth > 0 ? baseSalary / totalDaysInMonth : baseSalary / 30;
 
             // Calculations

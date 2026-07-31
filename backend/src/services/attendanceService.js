@@ -1443,7 +1443,10 @@ class AttendanceService {
                             const isPaid = !onLeave.leave_type_name.toLowerCase().includes('unpaid') &&
                                 !onLeave.leave_type_name.toLowerCase().includes('lop');
                             status = isPaid ? 'PL' : 'UL';
-                            if (isPaid) stats.PL++; else stats.UL++;
+                            const isHalfDay = Number(onLeave.days) === 0.5 &&
+                                toLocalYMD(onLeave.start_date) === toLocalYMD(onLeave.end_date);
+                            const leaveIncrement = isHalfDay ? 0.5 : 1;
+                            if (isPaid) stats.PL += leaveIncrement; else stats.UL += leaveIncrement;
                         } else {
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
