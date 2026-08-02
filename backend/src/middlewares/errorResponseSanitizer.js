@@ -4,7 +4,11 @@
 // Legitimate business-logic messages (e.g. "Invalid leave type selected.") never match these
 // patterns and pass through unchanged.
 const RAW_ERROR_PATTERNS = [
-    /\b(select|insert into|update|delete from)\b/i,
+    // A SQL verb followed (within a short distance) by a backtick-quoted identifier is how
+    // Knex-compiled SQL actually looks (e.g. "insert into `leaves` (`company_id`, ...)").
+    // Requiring the backtick avoids matching plain English like "Invalid status update" or
+    // "Unauthorized to update ticket status/assignee."
+    /\b(select|update|delete\s+from|insert\s+into)\b[\s\S]{0,60}?`[a-zA-Z_0-9]+`/i,
     /^ER_[A-Z_]+/,
     /SQLSTATE/i,
     /ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND/,
