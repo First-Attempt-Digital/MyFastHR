@@ -1,15 +1,5 @@
-// Service
 const analyticsRepository = require('../repositories/analyticsRepository');
 
-class AnalyticsService {
-    async getDashboardMetrics(companyId) {
-        return await analyticsRepository.getEmployeeStats(companyId);
-    }
-}
-
-const analyticsService = new AnalyticsService();
-
-// Controller
 class AnalyticsController {
     async getMetrics(req, res) {
         try {
@@ -67,6 +57,5 @@ class AnalyticsController {
 }
 
 module.exports = {
-    analyticsService,
     analyticsController: new AnalyticsController()
 };

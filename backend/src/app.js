@@ -766,9 +766,6 @@ app.use(async (req, res, next) => {
     next();
 });
 
-// const tenantDbMiddleware = require('./middlewares/tenantDbMiddleware');
-// app.use(tenantDbMiddleware);
-
 const categoryRoutes = require('./routes/categoryRoutes');
 
 // Routes
@@ -1084,8 +1081,6 @@ app.use('/api/announcements', authenticateToken, announcementsRoutes);
 const ticketRoutes = require('./routes/ticketRoutes');
 app.use('/api/tickets', authenticateToken, tenantFilter, tenantGuard, ticketRoutes);
 
-// Test Route
-app.get('/api/test-tasks', (req, res) => res.json({ message: 'Task API Mount Point Active' }));
 
 
 // Base API route
