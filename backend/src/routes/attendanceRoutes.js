@@ -202,16 +202,6 @@ router.post('/manual-update', hasPermission(['approve_attendance']), async (req,
     }
 });
 
-router.delete('/delete-testing-attendance', async (req, res) => {
-    try {
-        const { employee_id, date } = req.query;
-        const result = await attendanceService.deleteTestingAttendance(req.user, employee_id, date);
-        res.json(result);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
 router.get('/override-history', hasPermission(['approve_attendance']), async (req, res) => {
     try {
         const result = await attendanceService.getOverrideHistory(req.company_id);

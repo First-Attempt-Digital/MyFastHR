@@ -81,7 +81,6 @@ const AttendanceMuster = () => {
     const [punchHistoryOpen, setPunchHistoryOpen] = useState(false);
     const [modalLoading, setModalLoading] = useState(false);
     const [modalError, setModalError] = useState(null);
-    const [deletingAttendance, setDeletingAttendance] = useState(false);
 
     // Entry/Exit Exception Requests States
     const [entryRequests, setEntryRequests] = useState([]);
@@ -112,26 +111,6 @@ const AttendanceMuster = () => {
             setModalError(err.message || 'Failed to fetch details');
         } finally {
             setModalLoading(false);
-        }
-    };
-
-    const handleDeleteTestingAttendance = async () => {
-        if (!selectedCell || !selectedCell.employee || !selectedCell.date) return;
-        if (!window.confirm(`Are you sure you want to delete attendance records for ${selectedCell.employee.name} on ${selectedCell.date}?`)) {
-            return;
-        }
-
-        try {
-            setDeletingAttendance(true);
-            await api.delete(`/attendance/delete-testing-attendance?employee_id=${selectedCell.employee.id}&date=${selectedCell.date}`);
-            alert('Attendance records deleted successfully!');
-            setSelectedCell(null); // Close modal
-            fetchMatrix(); // Refresh the grid!
-        } catch (err) {
-            console.error('Failed to delete attendance:', err);
-            alert(err.response?.data?.message || err.message || 'Failed to delete attendance');
-        } finally {
-            setDeletingAttendance(false);
         }
     };
 
@@ -1773,37 +1752,6 @@ const AttendanceMuster = () => {
                                                 )}
                                             </div>
                                         )}
-
-                                        {/* Testing Delete Button for Company 29 and employee 963258 */}
-                                        {(() => {
-                                            const token = localStorage.getItem('auth_token');
-                                            if (!token) return null;
-                                            let isCompany29 = false;
-                                            try {
-                                                const base64Url = token.split('.')[1];
-                                                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                                                const decoded = JSON.parse(window.atob(base64));
-                                                isCompany29 = Number(decoded.company_id) === 29;
-                                            } catch(e) {}
-                                            
-                                            const isRitesh = String(selectedCell?.employee?.code) === '963258';
-                                            const hasAttendance = modalData?.attendance || (modalData?.attendance_logs && modalData.attendance_logs.length > 0);
-                                            
-                                            if (isCompany29 && isRitesh && hasAttendance) {
-                                                return (
-                                                    <div className="pt-4 border-t border-slate-100 flex justify-center">
-                                                        <button
-                                                            onClick={handleDeleteTestingAttendance}
-                                                            disabled={deletingAttendance}
-                                                            className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-98 disabled:opacity-50"
-                                                        >
-                                                            {deletingAttendance ? 'Deleting...' : 'Delete Attendance (Testing)'}
-                                                        </button>
-                                                    </div>
-                                                );
-                                            }
-                                            return null;
-                                        })()}
 
                                     </div>
                                 ) : (
