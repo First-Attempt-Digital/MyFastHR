@@ -11,6 +11,10 @@ module.exports = {
       database: process.env.DB_NAME || 'myfasthr_db',
       timezone: '+05:30',
       dateStrings: true,
+      // Pinned explicitly rather than relying on the mysql2 default. The
+      // super-admin SQL sandbox (adminController.executeSqlQuery) treats
+      // single-statement-only as a security boundary.
+      multipleStatements: false,
     },
     migrations: {
       directory: '../database/migrations',
@@ -28,6 +32,10 @@ module.exports = {
       database: process.env.DB_NAME || 'myfasthr_db',
       timezone: '+05:30',
       dateStrings: true,
+      // Pinned explicitly rather than relying on the mysql2 default. The
+      // super-admin SQL sandbox (adminController.executeSqlQuery) treats
+      // single-statement-only as a security boundary.
+      multipleStatements: false,
     },
     migrations: {
       directory: '../database/migrations',

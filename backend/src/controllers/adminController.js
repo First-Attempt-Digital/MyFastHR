@@ -694,23 +694,85 @@ class AdminController {
             }
 
             // 3. Block SELECT constructs that break out of "read-only": file write/read to the DB
-            //    host (INTO OUTFILE/DUMPFILE, LOAD_FILE) and resource-exhaustion builtins.
+            //    host (INTO OUTFILE/DUMPFILE, LOAD_FILE), resource-exhaustion builtins, and
+            //    row locks (a SELECT ... FOR UPDATE can block writers platform-wide).
             const forbidden = [
                 /\bINTO\s+OUTFILE\b/i,
                 /\bINTO\s+DUMPFILE\b/i,
                 /\bLOAD_FILE\s*\(/i,
                 /\bSLEEP\s*\(/i,
                 /\bBENCHMARK\s*\(/i,
-                /\bGET_LOCK\s*\(/i
+                /\bGET_LOCK\s*\(/i,
+                /\bFOR\s+UPDATE\b/i,
+                /\bLOCK\s+IN\s+SHARE\s+MODE\b/i
             ];
             const hit = forbidden.find(re => re.test(normalized));
             if (hit) {
-                return res.status(403).json({ message: 'Security Policy Alert: The query uses a disallowed construct (file I/O or locking/sleep builtins are not permitted).' });
+                return res.status(403).json({ message: 'Security Policy Alert: The query uses a disallowed construct (file I/O, locking or sleep builtins are not permitted).' });
             }
 
-            const results = await db.raw(normalized);
-            res.json(results);
+            // 4. Deny the MySQL system database — mysql.user holds DB account credentials and
+            //    is never legitimate from an application DB explorer. information_schema is
+            //    deliberately NOT denied: it is how schema drift (missing PKs, missing columns)
+            //    gets diagnosed against production.
+            if (/\bmysql\s*\.\s*[`\w]/i.test(normalized) || /\bFROM\s+`?mysql`?\s*\.\s*/i.test(normalized)) {
+                return res.status(403).json({ message: 'Security Policy Alert: The MySQL system database is not accessible from the SQL Sandbox.' });
+            }
+
+            // 5. Cap the result set. Only SELECT takes an appended LIMIT — MySQL does not accept
+            //    LIMIT on every SHOW/DESCRIBE form — so other verbs are capped by slicing below.
+            const MAX_ROWS = 500;
+            let toRun = normalized;
+            if (upper.startsWith('SELECT') && !/\bLIMIT\b/i.test(normalized)) {
+                toRun = `${normalized} LIMIT ${MAX_ROWS}`;
+            }
+
+            // mysql2 resolves to [rows, fieldPackets]. Returning that raw array made the UI
+            // report "2 rows returned" for every query and render array indices as column
+            // headers, so unwrap to the row array the SQL Sandbox table actually expects.
+            const raw2 = await db.raw(toRun);
+            const rowsRaw = Array.isArray(raw2) ? raw2[0] : raw2;
+            let rows = Array.isArray(rowsRaw) ? rowsRaw : [];
+            const truncated = rows.length > MAX_ROWS;
+            if (truncated) rows = rows.slice(0, MAX_ROWS);
+
+            // Redact secret-bearing columns so credential material never reaches the browser
+            // even on a SELECT *. Note this matches on column NAME: a deliberate
+            // `SELECT password_hash AS x` still aliases around it. That is accepted — this is
+            // defence-in-depth against accidental exposure and against a hijacked super-admin
+            // session, not a sandbox against a super_admin who already holds DB credentials.
+            const SECRET_COLUMN = /password|hash|secret|token|otp|api_key|delete_key/i;
+            rows = rows.map(row => {
+                if (!row || typeof row !== 'object') return row;
+                const clean = { ...row };
+                Object.keys(clean).forEach(k => {
+                    if (SECRET_COLUMN.test(k) && clean[k] !== null) clean[k] = '[REDACTED]';
+                });
+                return clean;
+            });
+
+            // Every execution is auditable, mirroring toggleSystemFreeze. Best-effort: an
+            // audit-log failure must not swallow the super admin's query result.
+            try {
+                await db.centralDb('audit_logs').insert({
+                    company_id: null,
+                    user_id: req.user.id,
+                    action: 'SYSTEM_SQL_QUERY',
+                    details: `SQL Sandbox query (${rows.length} rows${truncated ? `, truncated to ${MAX_ROWS}` : ''}): ${normalized.slice(0, 500)}`,
+                    ip_address: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+                    created_at: db.centralDb.fn.now()
+                });
+            } catch (auditErr) {
+                console.error('[SQL-SANDBOX] audit log write failed:', auditErr.code || auditErr.message);
+            }
+
+            res.json(rows);
         } catch (error) {
+            // Unchanged from before this hardening pass. Note errorResponseSanitizer replaces
+            // `error` with a generic string whenever it looks like raw SQL, so the sandbox
+            // surfaces "SQL Execution Error" rather than e.g. "Unknown column 'x'". That costs
+            // some diagnostic precision but is not worked around here — routing a real driver
+            // error past a global security control for one endpoint is not a trade worth making.
             res.status(400).json({ message: 'SQL Execution Error', error: error.message });
         }
     }

@@ -2,8 +2,15 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { authenticate, hasPermission } = require('../middlewares/authMiddleware');
+const rateLimit = require('express-rate-limit');
 
 const systemController = require('../controllers/systemController');
+
+const sqlSandboxLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 60,
+    message: { message: 'Too many SQL Sandbox queries. Please wait a few minutes before retrying.' }
+});
 
 // All routes here require super_admin permission
 router.use(authenticate);
@@ -60,7 +67,10 @@ router.patch('/invoices/:invoiceId/status', adminController.updateInvoiceStatus)
 // Mainframe Monitoring
 router.get('/mainframe-stats', systemController.getMainframeStats);
 router.post('/system/command', adminController.executeSystemCommand);
-router.post('/system/query', adminController.executeSqlQuery);
+// The SQL Sandbox runs arbitrary read queries as the DB user. The global limiter is
+// 5000/15min, which is no constraint at all for a scripted scrape through a hijacked
+// super-admin session, so this route gets its own tighter budget.
+router.post('/system/query', sqlSandboxLimiter, adminController.executeSqlQuery);
 router.get('/system/settings', adminController.getSystemSettings);
 router.post('/system/freeze', adminController.toggleSystemFreeze);
 
