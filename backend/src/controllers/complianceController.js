@@ -26,10 +26,13 @@ class ComplianceController {
             if (!file) return res.status(400).json({ message: 'No file uploaded' });
             if (!document_type) return res.status(400).json({ message: 'Document type is required' });
 
-            const docId = await DocumentService.uploadDocument(employeeId, companyId, document_type, file);
-            res.json({ 
-                message: 'Document uploaded successfully', 
-                id: docId[0],
+            // uploadedBy must be passed explicitly — it defaults to 'admin', and this is
+            // the employee-facing upload. It gates the manager/admin notification and is
+            // what employee_documents.uploaded_by is persisted as.
+            const docId = await DocumentService.uploadDocument(employeeId, companyId, document_type, file, {}, null, 'employee');
+            res.json({
+                message: 'Document uploaded successfully',
+                id: docId,
                 status: 'pending'
             });
         } catch (err) {

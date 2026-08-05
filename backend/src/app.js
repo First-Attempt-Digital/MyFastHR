@@ -710,9 +710,11 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Global Request Logger for Debugging
+// Global Request Logger. Logs req.path, never req.url — the query string can
+// carry a biometric api_key (see /Device/SaveDevice and /api/attendance/machine-log,
+// plus flexibleAuth in machineRoutes.js), and req.url would write it to disk.
 app.use((req, res, next) => {
-    console.log(`>>> [NET]: ${req.method} ${req.url}`);
+    console.log(`>>> [NET]: ${req.method} ${req.path}`);
     next();
 });
 

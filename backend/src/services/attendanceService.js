@@ -329,11 +329,6 @@ function calculateSplitShiftStatus(dayLogs, shift, rules) {
         const inMins = dateToMins(log.check_in);
         const isLate = inMins > (s1Start + grace1In);
 
-        // [DEBUG_MUSTER] - remove after fix confirmed
-        if (inMins > 0 && inMins < 700) { // 0-11:40am range
-            console.log(`[DEBUG_MUSTER] check_in=${log.check_in} typeof=${typeof log.check_in} inMins=${inMins} s1Start=${s1Start} grace1In=${grace1In} threshold=${s1Start+grace1In} isLate=${isLate}`);
-        }
-
         if (log.check_out) {
             const outMins = dateToMins(log.check_out);
             const isEarly = outMins < (s1End - grace1Out);
@@ -1278,13 +1273,9 @@ class AttendanceService {
                 const dateTime = date.getTime();
 
                 // Resolve active shift for this employee on targetDateStr
-                const activeAssignment = empAssignments.find(sa => {
-                    const matched = sa.fromStr <= targetDateStr && (!sa.toStr || sa.toStr >= targetDateStr);
-                    if (emp.employee_id_number === '963258' && d === 2) {
-                        console.log(`[DEBUG_FIND] sa.id=${sa.id} sa.fromStr=${sa.fromStr} sa.toStr=${sa.toStr} targetDateStr=${targetDateStr} matched=${matched}`);
-                    }
-                    return matched;
-                });
+                const activeAssignment = empAssignments.find(sa =>
+                    sa.fromStr <= targetDateStr && (!sa.toStr || sa.toStr >= targetDateStr)
+                );
 
                 const resolvedShift = {
                     ...emp,
@@ -2184,7 +2175,6 @@ class AttendanceService {
     }
 
     async getEligibleEmployees(companyId) {
-        console.log('>>> [DEBUG]: Fetching Eligible Employees for Company:', companyId);
         const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
 
         // Fetch all employees with department/designation details
@@ -2201,8 +2191,6 @@ class AttendanceService {
                 'employees.designation',
                 'departments.name as department_name'
             );
-
-        console.log(`>>> [DEBUG]: Found ${employees.length} employees`);
 
         // Fetch all shift assignments (active or future)
         const assignments = await db('employee_shift_assignments')
