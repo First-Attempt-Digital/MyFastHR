@@ -1083,8 +1083,6 @@ app.use('/api/announcements', authenticateToken, announcementsRoutes);
 const ticketRoutes = require('./routes/ticketRoutes');
 app.use('/api/tickets', authenticateToken, tenantFilter, tenantGuard, ticketRoutes);
 
-
-
 // Base API route
 app.get('/api', (req, res) => res.send('MyFastHR SaaS API is running...'));
 
