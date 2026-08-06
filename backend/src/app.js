@@ -516,6 +516,34 @@ const syncDatabaseSchema = async () => {
             console.error('>>> [DB-SYNC-ERROR]: working_rules column sync failed:', e.message);
         }
 
+        // 7. Ensure audit_logs table exists
+        // Written by 5 sites in adminController (impersonation, backup create/restore,
+        // SQL sandbox, system freeze) and read by getAuditLogs, but never part of this
+        // sync - it exists in prod by some other means, so a fresh environment had no
+        // self-heal. Shape mirrors exactly what those call sites insert and select.
+        // Deliberately no foreign keys: an audit trail must outlive the company/user rows
+        // it references, and company_id is null for platform-level actions.
+        try {
+            const hasAuditLogs = await db.schema.hasTable('audit_logs');
+            if (!hasAuditLogs) {
+                console.log('>>> [DB-SYNC]: Creating audit_logs table...');
+                await db.schema.createTable('audit_logs', (table) => {
+                    table.increments('id').primary();
+                    table.integer('company_id').nullable();
+                    table.integer('user_id').nullable();
+                    table.string('action', 100).notNullable();
+                    table.text('details').nullable();
+                    table.string('ip_address', 45).nullable();
+                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.index('company_id');
+                    table.index('user_id');
+                    table.index('created_at');
+                });
+                console.log('>>> [DB-SYNC]: audit_logs table created.');
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: audit_logs sync failed:', e.message);
+        }
 
     } catch (err) {
         console.error('>>> [DB-SYNC-ERROR]:', err.message);
