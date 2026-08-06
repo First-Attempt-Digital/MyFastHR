@@ -57,6 +57,12 @@ import { fetchBranding, getAssetUrl } from './utils/api';
 import RegularizationView from './pages/dashboards/RegularizationView';
 import LeaveGranter from './pages/LeaveGranter';
 
+// NOT A SECURITY BOUNDARY. `user_role` is read from localStorage, which anyone can edit
+// in devtools to reach any route here. This gate exists purely so users don't see menu
+// items and screens that aren't theirs - it decides what to *render*, never what is
+// *permitted*. Every endpoint those screens call must enforce its own authorization
+// server-side via the hasPermission middleware; do not treat a route being listed in
+// `allowedRoles` as evidence that the underlying API is protected.
 const ProtectedRoute = ({ children, allowedRoles = [], noShell = false }) => {
   const token = localStorage.getItem('auth_token');
   const role = localStorage.getItem('user_role');
