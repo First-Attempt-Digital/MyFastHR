@@ -915,8 +915,12 @@ app.post('/Device/SaveDevice', async (req, res) => {
 // (TimeWatch machine URL shows: http://myfasthr.com/Device/ - missing SaveDevice)
 app.post(['/Device', '/Device/'], (req, res) => {
     console.log(`>>> [BIOMETRIC-MACHINE]: ${req.path} hit - treating as /Device/SaveDevice`);
-    // Forward to the same SaveDevice logic by rewriting the URL and re-dispatching
-    req.url = '/Device/SaveDevice';
+    // Forward to the same SaveDevice logic by rewriting the URL and re-dispatching.
+    // Carry the query string across: on Express 5 req.query is a lazy getter derived from
+    // req.url, so a bare rewrite silently drops it. SaveDevice accepts the biometric key
+    // as req.query.api_key, so a device pointed at /Device?api_key=... was failing auth.
+    const queryStart = req.url.indexOf('?');
+    req.url = '/Device/SaveDevice' + (queryStart === -1 ? '' : req.url.slice(queryStart));
     app.handle(req, res);
 });
 
