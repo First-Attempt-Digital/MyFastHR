@@ -1,5 +1,16 @@
 const db = require('../config/db');
 
+/**
+ * Applies the per-user key plus, when we have one, the tenant scope.
+ * A null companyId means "this caller has no tenant context" (unimpersonating
+ * super_admin) — scope by user_id alone rather than inventing a company.
+ */
+const scopeToUser = (query, userId, companyId) => {
+    query.where('user_id', userId);
+    if (companyId) query.andWhere('company_id', companyId);
+    return query;
+};
+
 class NotificationService {
     async createNotification(userId, companyId, title, message, type = 'info') {
         return await db('notifications').insert({
@@ -12,45 +23,34 @@ class NotificationService {
     }
 
     async getNotifications(userId, companyId) {
-        try {
-            return await db('notifications')
-                .where({ user_id: userId, company_id: companyId })
-                .orderBy('created_at', 'desc')
-                .limit(20);
-        } catch (err) {
-            // Fallback for cases where company_id column might be missing
-            return await db('notifications')
-                .where({ user_id: userId })
-                .orderBy('created_at', 'desc')
-                .limit(20);
-        }
+        // The previous catch-all here silently re-ran the query *without* the company
+        // filter, so any transient DB error turned into a cross-tenant read. Errors now
+        // propagate to the route's handler (and errorResponseSanitizer) instead.
+        return await scopeToUser(db('notifications'), userId, companyId)
+            .orderBy('created_at', 'desc')
+            .limit(20);
     }
 
     async markAsRead(notificationId, userId, companyId) {
-        return await db('notifications')
-            .where({ id: notificationId, user_id: userId, company_id: companyId })
+        return await scopeToUser(db('notifications'), userId, companyId)
+            .andWhere('id', notificationId)
             .update({ is_read: true });
     }
 
     async markAllAsRead(userId, companyId) {
-        return await db('notifications')
-            .where({ user_id: userId, company_id: companyId })
+        return await scopeToUser(db('notifications'), userId, companyId)
             .update({ is_read: true });
     }
 
     async getUnreadCount(userId, companyId) {
-        try {
-            const result = await db('notifications')
-                .where({ user_id: userId, company_id: companyId, is_read: false })
-                .count('id as count')
-                .first();
-            return result?.count || 0;
-        } catch (err) {
-            const result = await db('notifications')
-                .where({ user_id: userId, is_read: false })
-                .count('id as count')
-                .first();
-        }
+        // The old fallback branch computed `result` but never returned it, so any error
+        // here produced `undefined` -> res.json({ count: undefined }) -> `{}` on the wire,
+        // and the AppShell badge silently went blank.
+        const result = await scopeToUser(db('notifications'), userId, companyId)
+            .andWhere('is_read', false)
+            .count('id as count')
+            .first();
+        return Number(result?.count) || 0;
     }
 
     async notifyAction(actorUser, targetEmployeeId, actionType, details) {
@@ -59,8 +59,13 @@ class NotificationService {
             const employee = await db('employees').where('id', targetEmployeeId).first();
             if (!employee) return;
 
-            const actorUserId = actorUser.id;
+            // Don't emit notifications into another tenant. super_admin is exempt because it
+            // legitimately acts across companies (and carries a null company_id).
             const actorRole = actorUser.role_name;
+            if (actorRole !== 'super_admin' && actorUser.company_id
+                && employee.company_id !== actorUser.company_id) {
+                return;
+            }
 
             // 1. If actor is NOT the target employee (meaning it is a manager or admin performing action on employee profile)
             if (actorUser.employee_id !== employee.id) {

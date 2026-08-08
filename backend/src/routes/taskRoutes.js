@@ -1,17 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { authenticateToken } = require('../middlewares/authMiddleware');
-const tenantFilter = require('../middlewares/tenantMiddleware');
+const { authorize } = require('../middlewares/authMiddleware');
 
+const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_ATTACHMENTS_PER_TASK = 10;
+const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.csv', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip'
+]);
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const absolutePath = path.resolve(__dirname, '../../uploads/tasks');
-        if (!fs.existsSync(absolutePath)) {
-            fs.mkdirSync(absolutePath, { recursive: true });
+        // Store under company_<id>/tasks so the authenticated /uploads/:filename route in
+        // app.js can actually resolve these — it only scans company-isolated folders.
+        // The old flat uploads/tasks path was unreachable by that route (and unreachable
+        // full stop, since `fs` was never required here and this callback always threw).
+        const companyId = req.company_id || (req.user && req.user.company_id);
+        if (!companyId) {
+            return cb(new Error('Company context missing for attachment upload'));
+        }
+        const absolutePath = path.resolve(__dirname, '../../uploads', `company_${companyId}`, 'tasks');
+        try {
+            if (!fs.existsSync(absolutePath)) {
+                fs.mkdirSync(absolutePath, { recursive: true });
+            }
+        } catch (err) {
+            return cb(err);
         }
         cb(null, absolutePath);
     },
@@ -20,7 +39,32 @@ const storage = multer.diskStorage({
         cb(null, 'task-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
-const upload = multer({ storage });
+
+const upload = multer({
+    storage,
+    limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_ATTACHMENTS_PER_TASK },
+    fileFilter: (req, file, cb) => {
+        const ext = path.extname(file.originalname || '').toLowerCase();
+        if (!ALLOWED_ATTACHMENT_EXTENSIONS.has(ext)) {
+            return cb(new Error(`Attachment type "${ext || 'unknown'}" is not allowed`));
+        }
+        cb(null, true);
+    }
+});
+
+// Turns multer's rejections (size/count/type) into a 400 instead of bubbling to the
+// generic handler as a 500.
+const uploadAttachments = (req, res, next) => {
+    upload.array('attachments')(req, res, (err) => {
+        if (!err) return next();
+        const message = err.code === 'LIMIT_FILE_SIZE'
+            ? 'Attachment exceeds the 10 MB limit'
+            : err.code === 'LIMIT_FILE_COUNT'
+                ? `A task can have at most ${MAX_ATTACHMENTS_PER_TASK} attachments`
+                : err.message;
+        res.status(400).json({ message });
+    });
+};
 
 // router.use(authenticateToken, tenantFilter); // Removed as already in app.js
 
@@ -54,11 +98,11 @@ router.get('/', async (req, res) => {
 });
 
 // Create a new task with attachments
-router.post('/', upload.array('attachments'), async (req, res) => {
+router.post('/', uploadAttachments, async (req, res) => {
     try {
         const companyId = req.company_id;
-        const { 
-            name, assigned_by, priority, due_date, 
+        const {
+            name, assigned_by, priority, due_date,
             followers, description, checklist, assignee_ids
         } = req.body;
 
@@ -69,10 +113,21 @@ router.post('/', upload.array('attachments'), async (req, res) => {
             size: f.size
         }));
 
+        // assigned_by comes straight from the client; only honour it if that employee is
+        // actually in this tenant, otherwise fall back to the caller.
+        let assignedBy = req.user.employee_id;
+        if (assigned_by) {
+            const owner = await db('employees')
+                .where({ id: assigned_by, company_id: companyId })
+                .select('id')
+                .first();
+            if (owner) assignedBy = owner.id;
+        }
+
         const [taskId] = await db('tasks').insert({
             company_id: companyId,
             name,
-            assigned_by: assigned_by || req.user.employee_id,
+            assigned_by: assignedBy,
             assignee_ids: assignee_ids || '[]', // Already stringified from frontend if multi
             priority: priority || 'Medium',
             due_date: due_date || null,
@@ -122,8 +177,9 @@ router.patch('/:id/status', async (req, res) => {
     }
 });
 
-// Delete a task
-router.delete('/:id', async (req, res) => {
+// Delete a task — mirrors the frontend gate on /admin/tasks (App.jsx `exceptEmployee`),
+// which was the only thing restricting this before.
+router.delete('/:id', authorize(['super_admin', 'company_admin', 'manager']), async (req, res) => {
     try {
         const { id } = req.params;
         const companyId = req.company_id;
