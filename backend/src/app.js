@@ -925,6 +925,8 @@ app.post('/Device/SaveDevice', async (req, res) => {
             timestamp: `${dateStr} ${timeStr}`
         };
 
+        console.log(`>>> [BIOMETRIC-MACHINE]: Processing punch for employee '${punch.employee_code}' at '${punch.timestamp}' on device '${deviceSerial}' (company: ${device.company_id})`);
+
         const machineAttendanceService = require('./services/machineAttendanceService');
         const result = await machineAttendanceService.processPunch(device.company_id, device.device_serial, punch);
 
