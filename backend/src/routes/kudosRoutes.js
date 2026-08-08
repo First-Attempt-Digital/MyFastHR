@@ -4,8 +4,12 @@ const db = require('../config/db');
 
 const MAX_BADGE_LENGTH = 50;
 const MAX_MESSAGE_LENGTH = 500;
-const DEFAULT_FEED_LIMIT = 100;
-const MAX_FEED_LIMIT = 200;
+// EmployeeDashboard renders the whole array with no "load more" and never sends ?limit,
+// so the default has to sit above any plausible existing volume or a tenant silently loses
+// its older wall (and the client-side department/activity filters would scan a truncated
+// list). The cap exists to bound the query, not to paginate the current UI.
+const DEFAULT_FEED_LIMIT = 1000;
+const MAX_FEED_LIMIT = 2000;
 
 // Create Kudos
 router.post('/', async (req, res) => {

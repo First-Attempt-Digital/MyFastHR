@@ -100,7 +100,9 @@ router.get('/', async (req, res) => {
 // Create a new task with attachments
 router.post('/', uploadAttachments, async (req, res) => {
     try {
-        const companyId = req.company_id;
+        // Same fallback the multer destination uses, so the task row and its attachment
+        // files can never be filed under different tenants.
+        const companyId = req.company_id || req.user.company_id;
         const {
             name, assigned_by, priority, due_date,
             followers, description, checklist, assignee_ids

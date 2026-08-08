@@ -59,11 +59,20 @@ class NotificationService {
             const employee = await db('employees').where('id', targetEmployeeId).first();
             if (!employee) return;
 
-            // Don't emit notifications into another tenant. super_admin is exempt because it
-            // legitimately acts across companies (and carries a null company_id).
+            // Don't emit notifications into another tenant. Deliberately conservative — it
+            // only suppresses when BOTH sides carry a company and they genuinely differ:
+            //  - super_admin is exempt; it legitimately acts across companies.
+            //  - a NULL employees.company_id is NOT treated as foreign. Employees created by
+            //    a super_admin get company_id NULL (employeeController.create passes
+            //    req.user.company_id), and suppressing those would silently stop notifying
+            //    real people whose profiles their own admin edits.
+            //  - compared numerically, so a company_id stored as VARCHAR in a drifted schema
+            //    ("7" vs 7) can't suppress every notification tenant-wide.
             const actorRole = actorUser.role_name;
-            if (actorRole !== 'super_admin' && actorUser.company_id
-                && employee.company_id !== actorUser.company_id) {
+            const actorCompanyId = actorUser.company_id;
+            const targetCompanyId = employee.company_id;
+            if (actorRole !== 'super_admin' && actorCompanyId && targetCompanyId
+                && Number(targetCompanyId) !== Number(actorCompanyId)) {
                 return;
             }
 

@@ -1887,9 +1887,10 @@ const EmployeeDashboard = () => {
  
                                         <div className="space-y-2">
                                             <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Personal Message</label>
-                                            <textarea 
+                                            <textarea
                                                 value={kudosMessage}
                                                 onChange={e => setKudosMessage(e.target.value)}
+                                                maxLength={500}
                                                 placeholder="Write something nice..."
                                                 className="w-full border border-slate-200 rounded-[14px] p-4 bg-[#F8FAFC] resize-none h-[100px] text-sm font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
                                             ></textarea>

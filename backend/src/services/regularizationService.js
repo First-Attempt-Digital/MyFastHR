@@ -10,7 +10,11 @@ const notificationService = require('./notificationService');
 const resolveScope = (user, companyId) => {
     const scoped = companyId || user.company_id || null;
     const isSuperAdmin = user.role_name === 'super_admin';
-    return { scoped, isGlobal: !scoped && isSuperAdmin };
+    // super_admin has always had unfiltered reach on updateStatus; narrowing that would
+    // break approvals for any super_admin whose users row carries a non-null company_id.
+    // It is only pinned when it is explicitly impersonating a *different* tenant.
+    const impersonating = isSuperAdmin && !!companyId && companyId !== user.company_id;
+    return { scoped, isGlobal: isSuperAdmin && !impersonating };
 };
 
 class RegularizationService {
@@ -100,18 +104,17 @@ class RegularizationService {
     async listReviewRequests(user, companyId) {
         const employee = await db('employees').where({ user_id: user.id }).first();
         const isAdmin = ['company_admin', 'super_admin'].includes(user.role_name);
-        const { scoped, isGlobal } = resolveScope(user, companyId);
+        const { scoped } = resolveScope(user, companyId);
 
+        // Deliberately ALWAYS filtered, with the same call shape as before — this list has no
+        // status filter and no LIMIT, so letting an unimpersonating super_admin through
+        // unscoped would return every regularization row of every tenant, on a screen whose
+        // rows carry no company column (RegularizationView renders the whole array). The fix
+        // here is only that `scoped` now honours super_admin's ?company_id= impersonation,
+        // which user.company_id silently ignored.
         let query = db('attendance_regularizations as r')
-            .join('employees as e', 'r.employee_id', 'e.id');
-
-        // An unimpersonating super_admin gets the platform-wide view (matching
-        // orgController.getChartData / analytics). Everyone else is pinned to their tenant —
-        // previously this read user.company_id directly, so super_admin's ?company_id=
-        // impersonation was ignored and the screen always came back empty.
-        if (!isGlobal) {
-            query = query.where('r.company_id', scoped);
-        }
+            .join('employees as e', 'r.employee_id', 'e.id')
+            .where('r.company_id', scoped);
 
         if (!isAdmin) {
             // Manager role: can see requests of subordinates
