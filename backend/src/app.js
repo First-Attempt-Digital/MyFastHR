@@ -53,7 +53,7 @@ const syncDatabaseSchema = async () => {
             'bank_name', 'account_number', 'ifsc_code', 'bank_branch', 'dd_payable_at',
             'uan_number', 'pf_number', 'esi_number', 'include_pf', 'include_esi', 'include_lwf', 'include_gratuity', 'pf_excess_contribution',
             'payment_type', 'probation_period', 'confirmation_date', 'contract_start_date', 'contract_end_date', 'referred_by', 'shift',
-            'emergency_contact_name', 'emergency_contact_number', 'emergency_contact_relation', 
+            'emergency_contact_name', 'emergency_contact_number', 'emergency_contact_relation',
             'emergency_email', 'emergency_contact_address', 'emergency_city',
             'photo', 'onboarding_token', 'onboarding_token_created_at', 'onboarding_status', 'onboarding_filled_fields', 'attendance_scheme_id',
             'nick_name', 'extension', 'blood_group', 'marital_status', 'marriage_date',
@@ -80,13 +80,13 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('spouse_name')) table.string('spouse_name').nullable();
                 if (missingColumns.includes('pan_number')) table.string('pan_number').nullable();
                 if (missingColumns.includes('aadhaar_number')) table.string('aadhaar_number').nullable();
-                
+
                 if (missingColumns.includes('bank_name')) table.string('bank_name').nullable();
                 if (missingColumns.includes('account_number')) table.string('account_number').nullable();
                 if (missingColumns.includes('ifsc_code')) table.string('ifsc_code').nullable();
                 if (missingColumns.includes('bank_branch')) table.string('bank_branch').nullable();
                 if (missingColumns.includes('dd_payable_at')) table.string('dd_payable_at').nullable();
-                
+
                 if (missingColumns.includes('uan_number')) table.string('uan_number').nullable();
                 if (missingColumns.includes('pf_number')) table.string('pf_number').nullable();
                 if (missingColumns.includes('esi_number')) table.string('esi_number').nullable();
@@ -95,7 +95,7 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('include_lwf')) table.boolean('include_lwf').defaultTo(false);
                 if (missingColumns.includes('include_gratuity')) table.boolean('include_gratuity').defaultTo(false);
                 if (missingColumns.includes('pf_excess_contribution')) table.boolean('pf_excess_contribution').defaultTo(false);
-                
+
                 if (missingColumns.includes('payment_type')) table.string('payment_type').nullable();
                 if (missingColumns.includes('probation_period')) table.string('probation_period').nullable();
                 if (missingColumns.includes('confirmation_date')) table.date('confirmation_date').nullable();
@@ -103,7 +103,7 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('contract_end_date')) table.date('contract_end_date').nullable();
                 if (missingColumns.includes('referred_by')) table.string('referred_by').nullable();
                 if (missingColumns.includes('shift')) table.string('shift').nullable();
-                
+
                 if (missingColumns.includes('emergency_contact_name')) table.string('emergency_contact_name').nullable();
                 if (missingColumns.includes('emergency_contact_number')) table.string('emergency_contact_number').nullable();
                 if (missingColumns.includes('emergency_contact_relation')) table.string('emergency_contact_relation').nullable();
@@ -167,9 +167,9 @@ const syncDatabaseSchema = async () => {
             // Even if no missing columns, try to drop unique constraint if it still exists
             try {
                 await db.schema.alterTable('employees', (table) => {
-                    table.dropUnique(['employee_id_number']).catch(() => {});
+                    table.dropUnique(['employee_id_number']).catch(() => { });
                 });
-            } catch (e) {}
+            } catch (e) { }
             console.log('>>> [DB-SYNC]: Employees table schema is already up to date.');
         }
 
@@ -177,7 +177,7 @@ const syncDatabaseSchema = async () => {
         try {
             const hasSeriesTable = await db.schema.hasTable('employee_number_series');
             if (hasSeriesTable) {
-                await db.raw('ALTER TABLE employee_number_series MODIFY COLUMN id INT AUTO_INCREMENT').catch(() => {});
+                await db.raw('ALTER TABLE employee_number_series MODIFY COLUMN id INT AUTO_INCREMENT').catch(() => { });
             }
         } catch (e) { /* ignore */ }
 
@@ -208,7 +208,7 @@ const syncDatabaseSchema = async () => {
                 table.timestamp('updated_at').defaultTo(db.fn.now());
             });
             console.log('>>> [DB-SYNC]: system_settings table created.');
-            
+
             await db('system_settings').insert([
                 { key_name: 'logo_url', value_text: '/uploads/branding/logo.png' },
                 { key_name: 'favicon_url', value_text: '/uploads/branding/favicon.png' },
@@ -443,7 +443,7 @@ const syncDatabaseSchema = async () => {
                     }
                 }
                 if (mappings.length > 0) {
-                    await db('role_permissions').insert(mappings).catch(() => {});
+                    await db('role_permissions').insert(mappings).catch(() => { });
                 }
                 console.log('>>> [DB-SYNC]: Seeding permissions and role mappings completed.');
             }
@@ -566,13 +566,13 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.get('/uploads/kyc/:filename', (req, res, next) => {
     const filename = req.params.filename;
     const uploadsBase = path.join(__dirname, '../uploads');
-    
+
     // 1. Try legacy path first (backwards compatibility)
     const legacyPath = path.join(uploadsBase, 'kyc', filename);
     if (fs.existsSync(legacyPath) && fs.lstatSync(legacyPath).isFile()) {
         return res.sendFile(legacyPath);
     }
-    
+
     // 2. Scan company-isolated folders
     if (fs.existsSync(uploadsBase)) {
         const dirs = fs.readdirSync(uploadsBase);
@@ -657,28 +657,28 @@ app.use(cors((req, callback) => {
     // so comparing them would let any site have its origin reflected back with credentials.
     // Allow only the explicit allowlist (+ private LAN IPs for on-prem/biometric access).
     const isLocalIP = origin && (
-        origin.startsWith('http://192.168.') || 
-        origin.startsWith('http://10.') || 
-        origin.startsWith('http://172.16.') || 
-        origin.startsWith('http://172.17.') || 
-        origin.startsWith('http://172.18.') || 
-        origin.startsWith('http://172.19.') || 
-        origin.startsWith('http://172.20.') || 
-        origin.startsWith('http://172.21.') || 
-        origin.startsWith('http://172.22.') || 
-        origin.startsWith('http://172.23.') || 
-        origin.startsWith('http://172.24.') || 
-        origin.startsWith('http://172.25.') || 
-        origin.startsWith('http://172.26.') || 
-        origin.startsWith('http://172.27.') || 
-        origin.startsWith('http://172.28.') || 
-        origin.startsWith('http://172.29.') || 
-        origin.startsWith('http://172.30.') || 
+        origin.startsWith('http://192.168.') ||
+        origin.startsWith('http://10.') ||
+        origin.startsWith('http://172.16.') ||
+        origin.startsWith('http://172.17.') ||
+        origin.startsWith('http://172.18.') ||
+        origin.startsWith('http://172.19.') ||
+        origin.startsWith('http://172.20.') ||
+        origin.startsWith('http://172.21.') ||
+        origin.startsWith('http://172.22.') ||
+        origin.startsWith('http://172.23.') ||
+        origin.startsWith('http://172.24.') ||
+        origin.startsWith('http://172.25.') ||
+        origin.startsWith('http://172.26.') ||
+        origin.startsWith('http://172.27.') ||
+        origin.startsWith('http://172.28.') ||
+        origin.startsWith('http://172.29.') ||
+        origin.startsWith('http://172.30.') ||
         origin.startsWith('http://172.31.')
     );
-    
+
     const isAllowed = !origin || allowedOrigins.includes(origin) || isLocalIP;
-    
+
     if (isAllowed) {
         callback(null, {
             origin: origin || true,
@@ -689,7 +689,7 @@ app.use(cors((req, callback) => {
         });
     } else {
         console.warn(`>>> [CORS BLOCKED]: Unauthorized origin attempt: ${origin}`);
-        callback(null, { 
+        callback(null, {
             origin: false, // Return origin: false instead of throwing an Error to prevent server-side 500 crash
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -754,7 +754,7 @@ app.use(async (req, res, next) => {
 
                 const isAuthRoute = req.path.startsWith('/api/auth');
                 const isFreezeToggleRoute = req.path === '/api/admin/system/freeze';
-                
+
                 if (!isSuperAdmin && !isAuthRoute && !isFreezeToggleRoute) {
                     return res.status(403).json({ message: 'System under emergency freeze. All modifications are suspended.' });
                 }
@@ -781,7 +781,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
         console.log('>>> [BIOMETRIC-MACHINE-HIT]: POST /Device/SaveDevice | IP:', req.ip);
 
         // Accept ocp-apim-subscription-key (machine standard) OR x-api-key OR query param
-        const apiKey = req.headers['ocp-apim-subscription-key'] 
+        const apiKey = req.headers['ocp-apim-subscription-key']
             || req.headers['Ocp-Apim-Subscription-Key']
             || req.headers['x-api-key']
             || req.headers['X-Api-Key']
@@ -794,8 +794,8 @@ app.post('/Device/SaveDevice', async (req, res) => {
         }
 
         // Extract device serial - try multiple field names used by different machines
-        const deviceSerial = req.body.deviceSerialno 
-            || req.body.deviceID 
+        const deviceSerial = req.body.deviceSerialno
+            || req.body.deviceID
             || req.body.device_serial
             || req.body.DeviceSN
             || req.body.serialno;
@@ -807,7 +807,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
         }
 
         // Extract employee ID - try multiple field names
-        const employeeID = req.body.employeeID 
+        const employeeID = req.body.employeeID
             || req.body.employee_id
             || req.body.EnrollNumber
             || req.body.enrollNumber;
@@ -839,7 +839,7 @@ app.post('/Device/SaveDevice', async (req, res) => {
 
         // Lookup device by serial - allow master key to work WITHOUT device pre-registration
         let device = await db('biometric_devices').where({ device_serial: deviceSerial }).first();
-        
+
         if (!device) {
             // If master key is used and device not registered, auto-register under default company (for testing)
             if (isMasterKey(apiKey)) {
@@ -892,9 +892,9 @@ app.post('/Device/SaveDevice', async (req, res) => {
         // Update device online status
         await db('biometric_devices')
             .where({ id: device.id })
-            .update({ 
-                status: 'online', 
-                last_ping_at: db.fn.now() 
+            .update({
+                status: 'online',
+                last_ping_at: db.fn.now()
             });
 
         console.log(`>>> [BIOMETRIC-MACHINE]: Punch result for employee '${punch.employee_code}':`, result);
@@ -912,12 +912,208 @@ app.post('/Device/SaveDevice', async (req, res) => {
     }
 });
 
+// Biometric vendor test endpoint for checking response_code ACK headers without disrupting prod flow
+app.post('/Device/SaveDeviceTest', async (req, res) => {
+    try {
+        console.log('>>> [BIOMETRIC-TEST-MACHINE-HIT]: POST /Device/SaveDeviceTest | IP:', req.ip);
+
+        // Sanitize sensitive values for logging
+        const logHeaders = { ...req.headers };
+        ['x-api-key', 'ocp-apim-subscription-key', 'authorization'].forEach(h => {
+            if (logHeaders[h]) logHeaders[h] = '***REDACTED***';
+            if (logHeaders[h.toLowerCase()]) logHeaders[h.toLowerCase()] = '***REDACTED***';
+        });
+        const logBody = { ...req.body };
+        if (logBody.api_key) logBody.api_key = '***REDACTED***';
+        
+        console.log('>>> [BIOMETRIC-TEST-HIT] Headers:', logHeaders);
+        console.log('>>> [BIOMETRIC-TEST-HIT] Body:', logBody);
+
+        // Accept ocp-apim-subscription-key (machine standard) OR x-api-key OR query param
+        const apiKey = req.headers['ocp-apim-subscription-key']
+            || req.headers['Ocp-Apim-Subscription-Key']
+            || req.headers['x-api-key']
+            || req.headers['X-Api-Key']
+            || req.query.api_key
+            || req.body?.api_key;
+
+        const transId = req.headers['trans_id'] || req.headers['trans-id'] || req.query.trans_id || req.body?.trans_id;
+
+        if (!apiKey) {
+            console.warn('>>> [BIOMETRIC-TEST-MACHINE]: Missing subscription key from IP:', req.ip);
+            res.setHeader('response_code', 'ERROR_UNAUTHORIZED');
+            if (transId) res.setHeader('trans_id', transId);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', '0');
+            return res.status(401).end();
+        }
+
+        // Extract device serial - try multiple field names used by different machines
+        const deviceSerial = req.body.deviceSerialno
+            || req.body.deviceID
+            || req.body.device_serial
+            || req.body.DeviceSN
+            || req.body.serialno;
+
+        if (!deviceSerial) {
+            console.warn('>>> [BIOMETRIC-TEST-MACHINE]: Missing device serial in payload.');
+            res.setHeader('response_code', 'ERROR_INVALID_SERIAL');
+            if (transId) res.setHeader('trans_id', transId);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', '0');
+            return res.status(400).end();
+        }
+
+        // Extract employee ID - try multiple field names
+        const employeeID = req.body.employeeID
+            || req.body.employee_id
+            || req.body.EnrollNumber
+            || req.body.enrollNumber;
+
+        if (!employeeID) {
+            console.warn('>>> [BIOMETRIC-TEST-MACHINE]: Missing employeeID in payload.');
+            res.setHeader('response_code', 'ERROR_INVALID_USER_ID');
+            if (transId) res.setHeader('trans_id', transId);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', '0');
+            return res.status(400).end();
+        }
+
+        // Extract date and time - try multiple formats
+        const dateStr = req.body.date || req.body.Date;
+        const timeStr = req.body.time || req.body.Time;
+
+        if (!dateStr || !timeStr) {
+            console.warn('>>> [BIOMETRIC-TEST-MACHINE]: Missing date or time in payload.');
+            res.setHeader('response_code', 'ERROR_INVALID_IO_TIME');
+            if (transId) res.setHeader('trans_id', transId);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', '0');
+            return res.status(400).end();
+        }
+
+        // Skip failed punches if machine sends PunchStatus (could be 'success', 'True', or true)
+        const punchStatus = req.body.PunchStatus || req.body.punchStatus || req.body.punch_status;
+        if (punchStatus !== undefined && punchStatus !== null) {
+            const statusStr = String(punchStatus).toLowerCase().trim();
+            const isSuccess = statusStr === 'success' || statusStr === 'true' || statusStr === '1';
+            if (!isSuccess) {
+                console.warn('>>> [BIOMETRIC-TEST-MACHINE]: Skipping punch with status:', punchStatus);
+                res.setHeader('response_code', 'OK');
+                if (transId) res.setHeader('trans_id', transId);
+                res.setHeader('Content-Type', 'application/octet-stream');
+                res.setHeader('Content-Length', '0');
+                return res.status(200).end();
+            }
+        }
+
+        // Lookup device by serial
+        let device = await db('biometric_devices').where({ device_serial: deviceSerial }).first();
+
+        if (!device) {
+            if (isMasterKey(apiKey)) {
+                console.warn(`>>> [BIOMETRIC-TEST-MACHINE]: Device ${deviceSerial} not registered. Master key used - attempting auto-registration.`);
+                const firstCompany = await db('companies').orderBy('id', 'asc').first();
+                if (firstCompany) {
+                    const crypto = require('crypto');
+                    const newApiKey = `mfhr_device_live_${crypto.randomBytes(32).toString('hex')}`;
+                    const [newDeviceId] = await db('biometric_devices').insert({
+                        company_id: firstCompany.id,
+                        device_name: `Auto-Registered Device (${deviceSerial})`,
+                        device_serial: deviceSerial,
+                        ip_address: req.ip,
+                        port: 80,
+                        status: 'online',
+                        api_key: newApiKey,
+                        last_ping_at: db.fn.now()
+                    });
+                    device = await db('biometric_devices').where({ id: newDeviceId }).first();
+                } else {
+                    res.setHeader('response_code', 'ERROR_DB_ACCESS');
+                    if (transId) res.setHeader('trans_id', transId);
+                    res.setHeader('Content-Type', 'application/octet-stream');
+                    res.setHeader('Content-Length', '0');
+                    return res.status(404).end();
+                }
+            } else {
+                res.setHeader('response_code', 'ERROR_INVALID_SERIAL');
+                if (transId) res.setHeader('trans_id', transId);
+                res.setHeader('Content-Type', 'application/octet-stream');
+                res.setHeader('Content-Length', '0');
+                return res.status(404).end();
+            }
+        }
+
+        // Validate API key
+        const configuredSubKey = process.env.BIOMETRIC_SUBSCRIPTION_KEY;
+        const isValidKey = isMasterKey(apiKey) || (apiKey === device.api_key) || (!!configuredSubKey && apiKey === configuredSubKey);
+        if (!isValidKey) {
+            console.warn(`>>> [BIOMETRIC-TEST-MACHINE]: Invalid key for device ${deviceSerial}.`);
+            res.setHeader('response_code', 'ERROR_UNAUTHORIZED');
+            if (transId) res.setHeader('trans_id', transId);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', '0');
+            return res.status(401).end();
+        }
+
+        // Build punch object
+        const punch = {
+            employee_code: String(employeeID).trim(),
+            timestamp: `${dateStr} ${timeStr}`
+        };
+
+        const machineAttendanceService = require('./services/machineAttendanceService');
+        const result = await machineAttendanceService.processPunch(device.company_id, device.device_serial, punch);
+
+        // Update device online status
+        await db('biometric_devices')
+            .where({ id: device.id })
+            .update({
+                status: 'online',
+                last_ping_at: db.fn.now()
+            });
+
+        console.log(`>>> [BIOMETRIC-TEST-MACHINE]: Punch result for employee '${punch.employee_code}':`, result);
+
+        if (result.status === 'failed') {
+            res.setHeader('response_code', 'ERROR_FAILED');
+            if (transId) res.setHeader('trans_id', transId);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', '0');
+            return res.status(400).end();
+        }
+
+        // Success ACK response
+        res.setHeader('response_code', 'OK');
+        if (transId) res.setHeader('trans_id', transId);
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Length', '0');
+        res.status(200).end();
+
+    } catch (err) {
+        console.error('[BIOMETRIC-TEST-VENDOR-PUSH-ERROR]:', { code: err.code, errno: err.errno });
+        res.setHeader('response_code', 'ERROR_DB_ACCESS');
+        const transId = req.headers['trans_id'] || req.headers['trans-id'] || req.query.trans_id || req.body?.trans_id;
+        if (transId) res.setHeader('trans_id', transId);
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Length', '0');
+        res.status(500).end();
+    }
+});
+
 // Alias: /Device/ and /Device also forward to SaveDevice handler
 // (TimeWatch machine URL shows: http://myfasthr.com/Device/ - missing SaveDevice)
 app.post(['/Device', '/Device/'], (req, res) => {
     console.log(`>>> [BIOMETRIC-MACHINE]: ${req.path} hit - treating as /Device/SaveDevice`);
     // Forward to the same SaveDevice logic by rewriting the URL and re-dispatching
     req.url = '/Device/SaveDevice';
+    app.handle(req, res);
+});
+
+// Alias: /DeviceTest/ and /DeviceTest also forward to SaveDeviceTest handler
+app.post(['/DeviceTest', '/DeviceTest/'], (req, res) => {
+    console.log(`>>> [BIOMETRIC-MACHINE-TEST]: ${req.path} hit - treating as /Device/SaveDeviceTest`);
+    req.url = '/Device/SaveDeviceTest';
     app.handle(req, res);
 });
 
@@ -962,13 +1158,13 @@ app.post('/api/public/book-demo', async (req, res) => {
         if (!name || !email) {
             return res.status(400).json({ message: 'Company name and email are required.' });
         }
-        
+
         // Generate unique slug
         const baseSlug = name
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/(^-|-$)/g, '');
-        
+
         let uniqueSlug = baseSlug || `company-${Date.now()}`;
         let suffix = 1;
         while (true) {
@@ -1050,7 +1246,7 @@ app.post('/api/attendance/machine-log', async (req, res) => {
             console.warn('>>> [BIOMETRIC]: Unauthorized machine punch attempt. Invalid API Key.');
             return res.status(401).json({ message: 'Unauthorized. Invalid or missing API key.' });
         }
-        
+
         const result = await attendanceService.processMachineLog(req.body);
         res.json(result);
     } catch (err) {
@@ -1103,7 +1299,7 @@ app.get(/(.*)/, (req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).json({ 
+    res.status(500).json({
         message: 'Internal Server Error',
         error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
