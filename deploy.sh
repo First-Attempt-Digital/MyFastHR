@@ -38,30 +38,39 @@ error() {
 rollback() {
     log "Initiating rollback procedure..."
     
-    LATEST_BACKUP=$(ls -td ${BACKUP_DIR}/deploy_backup_* 2>/dev/null | head -1)
-    
-    if [ -z "${LATEST_BACKUP}" ]; then
-        error "No backups found to rollback to!"
-        exit 1
-    fi
-    
-    log "Restoring files from: ${LATEST_BACKUP}"
+    # Pick the newest backup whose archive is actually usable, not merely the newest
+    # directory. Never delete the live trees until that is confirmed: backend/uploads/
+    # is gitignored, so restoring from a bad archive means KYC docs, task attachments
+    # and profile photos are gone for good.
+    #
+    # Walking back to an older valid backup matters because a deploy that failed while
+    # writing its own archive (disk full, for example) leaves a truncated files.tar.gz
+    # in the NEWEST directory. Stopping at that one would strand the operator with no
+    # rollback at all, even though a perfectly good archive sits in the previous
+    # directory. This also covers `--rollback` run by hand against older archives that
+    # were never validated at creation time.
+    LATEST_BACKUP=""
+    for CANDIDATE in $(ls -td ${BACKUP_DIR}/deploy_backup_* 2>/dev/null); do
+        if [ ! -s "${CANDIDATE}/files.tar.gz" ]; then
+            error "Skipping ${CANDIDATE}: archive missing or empty."
+            continue
+        fi
+        if ! tar -tzf "${CANDIDATE}/files.tar.gz" > /dev/null 2>&1; then
+            error "Skipping ${CANDIDATE}: archive is corrupt or truncated."
+            continue
+        fi
+        LATEST_BACKUP="${CANDIDATE}"
+        break
+    done
 
-    # Never delete the live trees until we have confirmed the archive we are about to
-    # restore from is present and readable. backend/uploads/ is gitignored, so a bad
-    # archive here means KYC docs, task attachments and profile photos are gone for good.
-    # This also covers `--rollback` run by hand, where LATEST_BACKUP may be an older
-    # deploy's archive that was never validated at creation time.
-    if [ ! -s "${LATEST_BACKUP}/files.tar.gz" ]; then
-        error "Backup archive missing or empty: ${LATEST_BACKUP}/files.tar.gz"
+    if [ -z "${LATEST_BACKUP}" ]; then
+        error "No usable backup found to rollback to!"
         error "Refusing to delete the live code/uploads. Rollback aborted."
+        error "Inspect ${BACKUP_DIR} by hand before retrying — the live tree is untouched."
         exit 1
     fi
-    if ! tar -tzf "${LATEST_BACKUP}/files.tar.gz" > /dev/null 2>&1; then
-        error "Backup archive is corrupt: ${LATEST_BACKUP}/files.tar.gz"
-        error "Refusing to delete the live code/uploads. Rollback aborted."
-        exit 1
-    fi
+
+    log "Restoring files from: ${LATEST_BACKUP}"
 
     # Restore codebase files
     rm -rf "${BACKEND_DIR}" "${FRONTEND_DIR}"
@@ -106,16 +115,26 @@ mysqldump --no-tablespaces -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" > "${CURR
 # we read it", which is expected since PM2 writes backend/logs/ during the archive),
 # exit >= 2 is fatal, and the archive is verified to actually contain both trees.
 log "Archiving active code assets..."
+# tar's stderr goes to a temp file OUTSIDE the backup directory on purpose. The most
+# likely fatal cause here is the backup filesystem being full — and if the stderr file
+# lived in that same full filesystem, the diagnostic would itself fail to write and the
+# operator would get an empty error at exactly the moment they need the reason.
+TAR_STDERR=$(mktemp /tmp/myfasthr_deploy_tar_stderr.XXXXXX)
 TAR_STATUS=0
 tar -czf "${CURRENT_BACKUP_PATH}/files.tar.gz" -C "${APP_DIR}" backend frontend \
-    2> "${CURRENT_BACKUP_PATH}/files.tar.stderr" || TAR_STATUS=$?
+    2> "${TAR_STDERR}" || TAR_STATUS=$?
 
 if [ "${TAR_STATUS}" -ge 2 ]; then
     error "File backup failed (tar exit ${TAR_STATUS}). Aborting BEFORE any destructive step."
     error "tar stderr:"
-    cat "${CURRENT_BACKUP_PATH}/files.tar.stderr" >&2
+    cat "${TAR_STDERR}" >&2
+    error "(If this is empty, check free disk space on ${BACKUP_DIR} — a full filesystem"
+    error " kills the archive without tar always emitting a message.)"
+    rm -f "${TAR_STDERR}"
     exit 1
 fi
+
+rm -f "${TAR_STDERR}"
 
 if [ "${TAR_STATUS}" -eq 1 ]; then
     log "Note: tar reported files changed during archiving (expected for live logs); continuing."
