@@ -46,6 +46,23 @@ rollback() {
     fi
     
     log "Restoring files from: ${LATEST_BACKUP}"
+
+    # Never delete the live trees until we have confirmed the archive we are about to
+    # restore from is present and readable. backend/uploads/ is gitignored, so a bad
+    # archive here means KYC docs, task attachments and profile photos are gone for good.
+    # This also covers `--rollback` run by hand, where LATEST_BACKUP may be an older
+    # deploy's archive that was never validated at creation time.
+    if [ ! -s "${LATEST_BACKUP}/files.tar.gz" ]; then
+        error "Backup archive missing or empty: ${LATEST_BACKUP}/files.tar.gz"
+        error "Refusing to delete the live code/uploads. Rollback aborted."
+        exit 1
+    fi
+    if ! tar -tzf "${LATEST_BACKUP}/files.tar.gz" > /dev/null 2>&1; then
+        error "Backup archive is corrupt: ${LATEST_BACKUP}/files.tar.gz"
+        error "Refusing to delete the live code/uploads. Rollback aborted."
+        exit 1
+    fi
+
     # Restore codebase files
     rm -rf "${BACKEND_DIR}" "${FRONTEND_DIR}"
     tar -xzf "${LATEST_BACKUP}/files.tar.gz" -C "${APP_DIR}"
@@ -79,8 +96,44 @@ mkdir -p "${CURRENT_BACKUP_PATH}"
 mysqldump --no-tablespaces -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" > "${CURRENT_BACKUP_PATH}/db.sql"
 
 # 2. File Backup
+# This archive is the ONLY thing standing between a failed deploy and permanent data
+# loss: rollback() does `rm -rf backend frontend` and then restores from it. uploads/
+# (KYC docs, task attachments, profile photos, branding) is gitignored, so if this
+# archive is empty or truncated the rollback deletes those files and restores nothing.
+# It previously ran with `2>/dev/null || true`, which discarded stderr AND swallowed a
+# non-zero exit — a disk-full or unreadable file produced a broken archive and armed a
+# destructive rollback silently. Now: tar exit 1 is tolerated (it means "file changed as
+# we read it", which is expected since PM2 writes backend/logs/ during the archive),
+# exit >= 2 is fatal, and the archive is verified to actually contain both trees.
 log "Archiving active code assets..."
-tar -czf "${CURRENT_BACKUP_PATH}/files.tar.gz" -C "${APP_DIR}" backend frontend 2>/dev/null || true
+TAR_STATUS=0
+tar -czf "${CURRENT_BACKUP_PATH}/files.tar.gz" -C "${APP_DIR}" backend frontend \
+    2> "${CURRENT_BACKUP_PATH}/files.tar.stderr" || TAR_STATUS=$?
+
+if [ "${TAR_STATUS}" -ge 2 ]; then
+    error "File backup failed (tar exit ${TAR_STATUS}). Aborting BEFORE any destructive step."
+    error "tar stderr:"
+    cat "${CURRENT_BACKUP_PATH}/files.tar.stderr" >&2
+    exit 1
+fi
+
+if [ "${TAR_STATUS}" -eq 1 ]; then
+    log "Note: tar reported files changed during archiving (expected for live logs); continuing."
+fi
+
+# Verify the archive is readable and actually holds both trees, so a rollback has
+# something real to restore. A truncated/empty archive must never reach rollback().
+if ! tar -tzf "${CURRENT_BACKUP_PATH}/files.tar.gz" > /dev/null 2>&1; then
+    error "File backup is unreadable/corrupt. Aborting BEFORE any destructive step."
+    exit 1
+fi
+for REQUIRED_TREE in backend frontend; do
+    if ! tar -tzf "${CURRENT_BACKUP_PATH}/files.tar.gz" | grep -q "^${REQUIRED_TREE}/"; then
+        error "File backup is missing the '${REQUIRED_TREE}/' tree. Aborting BEFORE any destructive step."
+        exit 1
+    fi
+done
+log "File backup verified ($(du -h "${CURRENT_BACKUP_PATH}/files.tar.gz" | cut -f1))."
 
 # Hook for rollback on failure
 trap 'error "Deployment failed! Reverting to backup..."; rollback; exit 1' ERR

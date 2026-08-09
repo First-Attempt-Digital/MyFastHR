@@ -545,6 +545,132 @@ const syncDatabaseSchema = async () => {
             console.error('>>> [DB-SYNC-ERROR]: audit_logs sync failed:', e.message);
         }
 
+        // 8. Ensure notifications table exists
+        // Written by notificationService.createNotification (the single insert site, fed by
+        // leave/payroll/document/attendance/regularization flows) and read by
+        // notificationRoutes + the AppShell bell. It has never been part of this sync, so a
+        // fresh environment had no self-heal. Shape mirrors exactly what those sites touch:
+        // no updated_at, because nothing anywhere writes one.
+        // Deliberately no foreign keys, matching audit_logs above: company_id is legitimately
+        // NULL for super_admin-owned employees (see the comment in notificationService.notifyAction).
+        try {
+            const hasNotifications = await db.schema.hasTable('notifications');
+            if (!hasNotifications) {
+                console.log('>>> [DB-SYNC]: Creating notifications table...');
+                await db.schema.createTable('notifications', (table) => {
+                    table.increments('id').primary();
+                    table.integer('user_id').notNullable();
+                    table.integer('company_id').nullable();
+                    table.string('title', 255).notNullable();
+                    table.text('message').nullable();
+                    // Free-form, not an enum: call sites emit 'info' / 'success' / 'error' /
+                    // 'warning', and AppShell additionally tests for a 'leave' type.
+                    table.string('type', 50).defaultTo('info');
+                    table.boolean('is_read').defaultTo(false);
+                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.index('user_id');
+                    table.index('company_id');
+                    table.index('created_at');
+                });
+                console.log('>>> [DB-SYNC]: notifications table created.');
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: notifications sync failed:', e.message);
+        }
+
+        // 9. Ensure employee_kudos table exists
+        // Written and read only by routes/kudosRoutes.js, and row-counted by
+        // adminController.getSystemTables. Never part of this sync until now.
+        // badge/message widths match the MAX_BADGE_LENGTH (50) and MAX_MESSAGE_LENGTH (500)
+        // caps the route validates against, so the DB can't silently truncate what the
+        // route just accepted.
+        // company_id is nullable on purpose: the route now requires a tenant, but rows
+        // persisted before that fix carry NULL, so the real prod column must permit it.
+        try {
+            const hasEmployeeKudos = await db.schema.hasTable('employee_kudos');
+            if (!hasEmployeeKudos) {
+                console.log('>>> [DB-SYNC]: Creating employee_kudos table...');
+                await db.schema.createTable('employee_kudos', (table) => {
+                    table.increments('id').primary();
+                    table.integer('company_id').nullable();
+                    table.integer('sender_id').notNullable();
+                    table.integer('recipient_id').notNullable();
+                    table.string('badge', 50).notNullable();
+                    table.string('message', 500).nullable();
+                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.timestamp('updated_at').defaultTo(db.fn.now());
+                    table.index('company_id');
+                    table.index('sender_id');
+                    table.index('recipient_id');
+                    table.index('created_at');
+                });
+                console.log('>>> [DB-SYNC]: employee_kudos table created.');
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: employee_kudos sync failed:', e.message);
+        }
+
+        // 10. Ensure attendance_regularizations table exists
+        // Written by regularizationService (apply + approve/reject) and read by
+        // regularizationService, attendanceService (muster day-detail), attendanceRepository
+        // and analyticsRepository. Never part of this sync until now.
+        // check_in/check_out are TIME, not DATETIME: the client posts 'HH:MM:00', the approval
+        // path concatenates them onto a date string, and the UI slices the first 5 chars.
+        // approved_by holds a users.id (attendanceService left-joins users on it), not an employee id.
+        // company_id is nullable because rows written before the tenant fix carry NULL.
+        try {
+            const hasRegularizations = await db.schema.hasTable('attendance_regularizations');
+            if (!hasRegularizations) {
+                console.log('>>> [DB-SYNC]: Creating attendance_regularizations table...');
+                await db.schema.createTable('attendance_regularizations', (table) => {
+                    table.increments('id').primary();
+                    table.integer('employee_id').notNullable();
+                    table.integer('company_id').nullable();
+                    table.date('date').notNullable();
+                    table.time('check_in').nullable();
+                    table.time('check_out').nullable();
+                    table.text('reason').notNullable();
+                    // 'pending' | 'approved' | 'rejected'
+                    table.string('status', 20).defaultTo('pending');
+                    // 'full_day' | 'half_day'
+                    table.string('regularization_type', 20).defaultTo('full_day');
+                    table.integer('approved_by').nullable();
+                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.timestamp('updated_at').defaultTo(db.fn.now());
+                    table.index('employee_id');
+                    table.index('company_id');
+                    table.index('date');
+                    table.index('status');
+                });
+                console.log('>>> [DB-SYNC]: attendance_regularizations table created.');
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: attendance_regularizations sync failed:', e.message);
+        }
+
+        // 11. Ensure employees table has company_id column
+        // Every tenant-scoped query keys off employees.company_id, but the column was never
+        // declared anywhere in this routine - the employees section above only ALTERs the
+        // table and assumes company_id already exists. Nullable to match reality: employees
+        // created by a super_admin are persisted with company_id NULL
+        // (employeeController.create passes req.user.company_id), and notificationService
+        // explicitly treats that NULL as "not foreign" rather than as a data error.
+        try {
+            const hasEmployeesTable = await db.schema.hasTable('employees');
+            if (hasEmployeesTable) {
+                const hasEmployeeCompanyId = await db.schema.hasColumn('employees', 'company_id');
+                if (!hasEmployeeCompanyId) {
+                    console.log('>>> [DB-SYNC]: Adding company_id column to employees table...');
+                    await db.schema.alterTable('employees', (table) => {
+                        table.integer('company_id').unsigned().nullable();
+                    });
+                    console.log('>>> [DB-SYNC]: company_id column added to employees table.');
+                }
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: employees company_id sync failed:', e.message);
+        }
+
     } catch (err) {
         console.error('>>> [DB-SYNC-ERROR]:', err.message);
     }

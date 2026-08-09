@@ -125,6 +125,42 @@ pm2 startup
 pm2 save
 ```
 
+> ### ⚠️ ALWAYS pass `--env production`. The security gate depends on it.
+>
+> The `test.*` auth-bypass block and the weak-`JWT_SECRET` boot guard are both gated on
+> `NODE_ENV === 'production'` at runtime. `ecosystem.config.js` has `env: { NODE_ENV: 'development' }`
+> as its default and only sets `production` via `env_production`, which PM2 applies **only** when
+> `--env production` is passed.
+>
+> **Setting `NODE_ENV=production` in `backend/.env` does not save you.** `dotenv` never overwrites a
+> variable that is already set in the process environment, and PM2 has already set `NODE_ENV=development`
+> by that point. The `.env` line is inert here.
+>
+> That means a bare `pm2 restart myfasthr`, a `pm2 resurrect` after reboot, or a `pm2 save` taken while
+> the app was started without the flag will silently bring production up in development mode — which
+> **re-enables the `test.admin.token` bypass on all endpoints** and disables the boot guard that refuses
+> to start on a weak JWT secret. There is no visible symptom; the app looks healthy.
+>
+> Restart with the flag, never bare:
+> ```bash
+> pm2 restart ecosystem.config.js --env production   # correct
+> pm2 restart myfasthr                               # WRONG — drops back to development
+> ```
+>
+> **Verify after every deploy and every reboot.** Both of these must pass:
+> ```bash
+> # 1. PM2 must report production for every instance
+> pm2 env 0 | grep NODE_ENV        # expect: NODE_ENV: production
+>
+> # 2. The demo-token bypass must be rejected (expect 401/403, NOT 200)
+> curl -s -o /dev/null -w '%{http_code}\n' \
+>   -H 'Authorization: Bearer test.admin.token' \
+>   https://myfasthr.com/api/employees
+> ```
+> A `200` from the second command means production is running in development mode and every endpoint is
+> currently reachable with a hardcoded token. Treat it as an active incident: restart with `--env production`,
+> re-run `pm2 save`, then re-test.
+
 ---
 
 ## 🔒 Nginx Reverse Proxy Configuration
