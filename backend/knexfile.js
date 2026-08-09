@@ -26,10 +26,13 @@ module.exports = {
     // saturation, i.e. sustained pendingAcquires > 0 or used pegged at max.
     // The constraint to reason about is:
     //   per-process `max` x PM2 instance count  vs  MySQL `max_connections`
-    // ecosystem.config.js runs `instances: 'max'` in cluster mode, so on an
-    // 8-vCPU box that is 8 x 10 = 80 connections from this app alone, against a
-    // Hostinger MySQL whose max_connections is not documented in this repo.
-    // Measure both sides before changing either number.
+    // Measured against production on 2026-08-09: the VPS has 2 vCPU, so
+    // `instances: 'max'` yields 2 workers => a ceiling of 2 x 10 = 20 connections
+    // from this app. MySQL there reports max_connections = 151, with an all-time
+    // Max_used_connections of 14. There is therefore a wide margin today and no
+    // reason to raise `max`. Re-measure before changing either number, and note
+    // that the ceiling scales with vCPU count: moving to a bigger VPS multiplies
+    // the app's connection ceiling automatically without any config change here.
     pool: {
       min: 2,
       max: 10,
@@ -67,10 +70,13 @@ module.exports = {
     // saturation, i.e. sustained pendingAcquires > 0 or used pegged at max.
     // The constraint to reason about is:
     //   per-process `max` x PM2 instance count  vs  MySQL `max_connections`
-    // ecosystem.config.js runs `instances: 'max'` in cluster mode, so on an
-    // 8-vCPU box that is 8 x 10 = 80 connections from this app alone, against a
-    // Hostinger MySQL whose max_connections is not documented in this repo.
-    // Measure both sides before changing either number.
+    // Measured against production on 2026-08-09: the VPS has 2 vCPU, so
+    // `instances: 'max'` yields 2 workers => a ceiling of 2 x 10 = 20 connections
+    // from this app. MySQL there reports max_connections = 151, with an all-time
+    // Max_used_connections of 14. There is therefore a wide margin today and no
+    // reason to raise `max`. Re-measure before changing either number, and note
+    // that the ceiling scales with vCPU count: moving to a bigger VPS multiplies
+    // the app's connection ceiling automatically without any config change here.
     pool: {
       min: 2,
       max: 10,
