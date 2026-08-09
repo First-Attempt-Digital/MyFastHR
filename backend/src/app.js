@@ -551,23 +551,37 @@ const syncDatabaseSchema = async () => {
         // notificationRoutes + the AppShell bell. It has never been part of this sync, so a
         // fresh environment had no self-heal. Shape mirrors exactly what those sites touch:
         // no updated_at, because nothing anywhere writes one.
-        // Deliberately no foreign keys, matching audit_logs above: company_id is legitimately
-        // NULL for super_admin-owned employees (see the comment in notificationService.notifyAction).
+        // Deliberately no foreign keys, matching audit_logs above.
+        // Column types verified against production 2026-08-09 (SHOW CREATE TABLE), not
+        // inferred from call sites — an earlier revision guessed company_id/message as
+        // nullable and both are NOT NULL in prod.
+        // ⚠️ company_id being NOT NULL is a live constraint worth knowing: createNotification
+        // writes whatever companyId its caller passes, and callers that resolve it from an
+        // unimpersonating super_admin's context can pass null. Today no employee row has a
+        // NULL company_id in prod (verified: 0 of 262), so the path isn't reachable via
+        // notifyAction — but a null from any other caller would throw on insert rather
+        // than write a NULL. Not introduced here; flagged because this DDL makes it explicit.
         try {
             const hasNotifications = await db.schema.hasTable('notifications');
             if (!hasNotifications) {
                 console.log('>>> [DB-SYNC]: Creating notifications table...');
                 await db.schema.createTable('notifications', (table) => {
-                    table.increments('id').primary();
+                    // Signed int in prod, unlike employee_kudos/attendance_regularizations
+                    // whose ids are unsigned. knex's increments() always emits unsigned, so
+                    // the column is spelled out to reproduce prod exactly.
+                    table.specificType('id', 'int NOT NULL AUTO_INCREMENT').primary();
                     table.integer('user_id').notNullable();
-                    table.integer('company_id').nullable();
+                    // NOT NULL, verified against prod 2026-08-09 via SHOW CREATE TABLE.
+                    // This contradicts the earlier assumption that company_id is nullable
+                    // here: prod rejects a NULL. See the caveat comment above the block.
+                    table.integer('company_id').notNullable();
                     table.string('title', 255).notNullable();
-                    table.text('message').nullable();
+                    table.text('message').notNullable();
                     // Free-form, not an enum: call sites emit 'info' / 'success' / 'error' /
                     // 'warning', and AppShell additionally tests for a 'leave' type.
                     table.string('type', 50).defaultTo('info');
                     table.boolean('is_read').defaultTo(false);
-                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.timestamp('created_at').notNullable().defaultTo(db.fn.now());
                     // Composite, not per-column: every read is keyed on user_id first
                     // (see scopeToUser in notificationService). The bell polls every 30s
                     // for EVERY logged-in user, so these two are the hot paths:
@@ -591,21 +605,26 @@ const syncDatabaseSchema = async () => {
         // badge/message widths match the MAX_BADGE_LENGTH (50) and MAX_MESSAGE_LENGTH (500)
         // caps the route validates against, so the DB can't silently truncate what the
         // route just accepted.
-        // company_id is nullable on purpose: the route now requires a tenant, but rows
-        // persisted before that fix carry NULL, so the real prod column must permit it.
+        // Types verified against production 2026-08-09 (SHOW CREATE TABLE). An earlier
+        // revision assumed company_id was nullable "because pre-fix rows carry NULL" —
+        // prod declares it unsigned NOT NULL, so no such row can exist.
         try {
             const hasEmployeeKudos = await db.schema.hasTable('employee_kudos');
             if (!hasEmployeeKudos) {
                 console.log('>>> [DB-SYNC]: Creating employee_kudos table...');
                 await db.schema.createTable('employee_kudos', (table) => {
                     table.increments('id').primary();
-                    table.integer('company_id').nullable();
-                    table.integer('sender_id').notNullable();
-                    table.integer('recipient_id').notNullable();
-                    table.string('badge', 50).notNullable();
-                    table.string('message', 500).nullable();
-                    table.timestamp('created_at').defaultTo(db.fn.now());
-                    table.timestamp('updated_at').defaultTo(db.fn.now());
+                    // unsigned + NOT NULL throughout, and badge is varchar(100) with message
+                    // as TEXT — all verified against prod 2026-08-09 via SHOW CREATE TABLE.
+                    // The route's 50/500 caps are stricter than the column, which is the
+                    // safe direction: validation rejects before the DB could truncate.
+                    table.integer('company_id').unsigned().notNullable();
+                    table.integer('sender_id').unsigned().notNullable();
+                    table.integer('recipient_id').unsigned().notNullable();
+                    table.string('badge', 100).notNullable();
+                    table.text('message').nullable();
+                    table.timestamp('created_at').notNullable().defaultTo(db.fn.now());
+                    table.timestamp('updated_at').notNullable().defaultTo(db.fn.now());
                     // The feed is `where company_id = ? order by created_at desc limit/offset`
                     // (kudosRoutes), so the composite serves filter + sort in one index and
                     // makes a standalone index('company_id') a redundant prefix.
@@ -627,26 +646,36 @@ const syncDatabaseSchema = async () => {
         // check_in/check_out are TIME, not DATETIME: the client posts 'HH:MM:00', the approval
         // path concatenates them onto a date string, and the UI slices the first 5 chars.
         // approved_by holds a users.id (attendanceService left-joins users on it), not an employee id.
-        // company_id is nullable because rows written before the tenant fix carry NULL.
+        // Types verified against production 2026-08-09 (SHOW CREATE TABLE): company_id is
+        // unsigned NOT NULL (not nullable as previously assumed) and check_in/check_out are
+        // varchar(50), not TIME.
         try {
             const hasRegularizations = await db.schema.hasTable('attendance_regularizations');
             if (!hasRegularizations) {
                 console.log('>>> [DB-SYNC]: Creating attendance_regularizations table...');
                 await db.schema.createTable('attendance_regularizations', (table) => {
                     table.increments('id').primary();
-                    table.integer('employee_id').notNullable();
-                    table.integer('company_id').nullable();
+                    table.integer('employee_id').unsigned().notNullable();
+                    table.integer('company_id').unsigned().notNullable();
+                    // Present in prod but referenced by ZERO code in backend/src. Kept so a
+                    // fresh environment is a faithful copy of prod and a schema diff shows
+                    // no phantom difference — not because anything reads it.
+                    table.integer('attendance_id').unsigned().nullable();
                     table.date('date').notNullable();
-                    table.time('check_in').nullable();
-                    table.time('check_out').nullable();
+                    // varchar(50), NOT time. Verified against prod 2026-08-09 — the earlier
+                    // TIME inference from call sites was wrong. This is why
+                    // regularizationService.js:177-195 carries three-way string
+                    // normalization: it has always been handling free-form strings.
+                    table.string('check_in', 50).nullable();
+                    table.string('check_out', 50).nullable();
                     table.text('reason').notNullable();
                     // 'pending' | 'approved' | 'rejected'
-                    table.string('status', 20).defaultTo('pending');
+                    table.string('status', 50).defaultTo('pending');
                     // 'full_day' | 'half_day'
-                    table.string('regularization_type', 20).defaultTo('full_day');
-                    table.integer('approved_by').nullable();
-                    table.timestamp('created_at').defaultTo(db.fn.now());
-                    table.timestamp('updated_at').defaultTo(db.fn.now());
+                    table.string('regularization_type', 50).defaultTo('full_day');
+                    table.integer('approved_by').unsigned().nullable();
+                    table.timestamp('created_at').notNullable().defaultTo(db.fn.now());
+                    table.timestamp('updated_at').notNullable().defaultTo(db.fn.now());
                     // Two access shapes, both composite:
                     //   employee + day  -> attendanceService muster day-detail, and the
                     //                      overlap check in regularizationService.apply
