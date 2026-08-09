@@ -568,9 +568,16 @@ const syncDatabaseSchema = async () => {
                     table.string('type', 50).defaultTo('info');
                     table.boolean('is_read').defaultTo(false);
                     table.timestamp('created_at').defaultTo(db.fn.now());
-                    table.index('user_id');
-                    table.index('company_id');
-                    table.index('created_at');
+                    // Composite, not per-column: every read is keyed on user_id first
+                    // (see scopeToUser in notificationService). The bell polls every 30s
+                    // for EVERY logged-in user, so these two are the hot paths:
+                    //   getNotifications  -> where user_id .. order by created_at desc
+                    //   getUnreadCount    -> where user_id .. and is_read = false
+                    // A standalone index('user_id') would be a redundant prefix of the
+                    // first of these. company_id is only ever an additional filter
+                    // alongside user_id, never a lookup key on its own here.
+                    table.index(['user_id', 'created_at'], 'notifications_user_created_idx');
+                    table.index(['user_id', 'is_read'], 'notifications_user_read_idx');
                 });
                 console.log('>>> [DB-SYNC]: notifications table created.');
             }
@@ -599,10 +606,13 @@ const syncDatabaseSchema = async () => {
                     table.string('message', 500).nullable();
                     table.timestamp('created_at').defaultTo(db.fn.now());
                     table.timestamp('updated_at').defaultTo(db.fn.now());
-                    table.index('company_id');
+                    // The feed is `where company_id = ? order by created_at desc limit/offset`
+                    // (kudosRoutes), so the composite serves filter + sort in one index and
+                    // makes a standalone index('company_id') a redundant prefix.
+                    // sender_id/recipient_id back the two employees joins.
+                    table.index(['company_id', 'created_at'], 'employee_kudos_company_created_idx');
                     table.index('sender_id');
                     table.index('recipient_id');
-                    table.index('created_at');
                 });
                 console.log('>>> [DB-SYNC]: employee_kudos table created.');
             }
@@ -637,10 +647,14 @@ const syncDatabaseSchema = async () => {
                     table.integer('approved_by').nullable();
                     table.timestamp('created_at').defaultTo(db.fn.now());
                     table.timestamp('updated_at').defaultTo(db.fn.now());
-                    table.index('employee_id');
-                    table.index('company_id');
-                    table.index('date');
-                    table.index('status');
+                    // Two access shapes, both composite:
+                    //   employee + day  -> attendanceService muster day-detail, and the
+                    //                      overlap check in regularizationService.apply
+                    //   tenant + status -> the review queue (listReviewRequests)
+                    // Standalone employee_id / company_id indexes would be redundant
+                    // prefixes of these.
+                    table.index(['employee_id', 'date'], 'attendance_regularizations_emp_date_idx');
+                    table.index(['company_id', 'status'], 'attendance_regularizations_company_status_idx');
                 });
                 console.log('>>> [DB-SYNC]: attendance_regularizations table created.');
             }
