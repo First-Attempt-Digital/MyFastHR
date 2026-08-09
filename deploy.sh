@@ -172,11 +172,44 @@ cd "${FRONTEND_DIR}"
 npm install
 npm run build
 
-# 6. Copy build output to backend public server path
-log "Syncing static assets to backend public route..."
-rm -rf "${BACKEND_DIR}/public/"
-mkdir -p "${BACKEND_DIR}/public"
-cp -r "${FRONTEND_DIR}/dist/"* "${BACKEND_DIR}/public/"
+# 6. Publish build output to the backend static path.
+# Done as a rename, NOT as `rm -rf public && cp -r dist/* public/`. Express serves this
+# exact directory (see `express.static(path.join(__dirname, '../public'))` in app.js), so
+# deleting it and copying ~17MB back in leaves a 1-3 second window during which every
+# asset request 404s and anyone loading the app gets a blank/broken page. Staging the new
+# tree in a sibling directory and renaming it into place shrinks that window from seconds
+# to the two rename syscalls below.
+log "Publishing static assets to backend public route..."
+PUBLIC_DIR="${BACKEND_DIR}/public"
+PUBLIC_NEW="${BACKEND_DIR}/public_new"
+PUBLIC_OLD="${BACKEND_DIR}/public_old"
+
+rm -rf "${PUBLIC_NEW}" "${PUBLIC_OLD}"
+mkdir -p "${PUBLIC_NEW}"
+cp -r "${FRONTEND_DIR}/dist/"* "${PUBLIC_NEW}/"
+
+# Never swap in a tree that has no entry point. Without this the deploy would happily
+# publish an empty directory: the healthcheck below only probes /api, which answers 200
+# regardless of whether any frontend asset exists, so a broken build would pass unnoticed.
+if [ ! -f "${PUBLIC_NEW}/index.html" ]; then
+    error "Frontend build produced no index.html. NOT swapping."
+    error "The previously published frontend stays live and untouched. Investigate the build."
+    rm -rf "${PUBLIC_NEW}"
+    # Deliberately bypass the ERR trap. Reaching rollback() here would restore db.sql and
+    # thereby discard every attendance punch recorded since the backup was taken -- a far
+    # worse outcome than a stale frontend, especially since the schema is unchanged and the
+    # already-published frontend is still perfectly serviceable.
+    trap - ERR
+    exit 1
+fi
+
+# Both renames are on the same filesystem, so each is atomic. The gap between them is
+# microseconds rather than the seconds a recursive copy would take.
+if [ -d "${PUBLIC_DIR}" ]; then
+    mv "${PUBLIC_DIR}" "${PUBLIC_OLD}"
+fi
+mv "${PUBLIC_NEW}" "${PUBLIC_DIR}"
+rm -rf "${PUBLIC_OLD}"
 
 # 7. Reload backend cluster zero-downtime
 log "Reloading processes via PM2..."
