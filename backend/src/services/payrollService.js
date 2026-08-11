@@ -65,24 +65,47 @@ const isRuleApplicable = (emp, rule) => {
     return true; // default to true for other rules if not configured
 };
 
+// Normalise any DB date value (Date object or string) to a YYYY-MM-DD calendar
+// day in IST, so date comparisons never drift across a timezone boundary.
+const toLocalYMD = (dateVal) => {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
+};
+
+// The payroll time period for a month is always the complete calendar month:
+// the 1st day through the last day. The last day is derived dynamically —
+// `new Date(year, month, 0)` is day zero of the *next* month, i.e. the last day
+// of this one — so Feb resolves to 28 or 29 depending on the year, and no data
+// from the following month can ever fall inside the range.
+const getPayrollPeriod = (month, year) => {
+    const m = parseInt(month, 10);
+    const y = parseInt(year, 10);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const mm = String(m).padStart(2, '0');
+    return {
+        month: m,
+        year: y,
+        daysInMonth,
+        startDate: `${y}-${mm}-01`,
+        endDate: `${y}-${mm}-${String(daysInMonth).padStart(2, '0')}`
+    };
+};
+
 class PayrollService {
+    getPayrollPeriod(month, year) {
+        return getPayrollPeriod(month, year);
+    }
+
     resolveActiveTenure(joiningDateStr, resignationDateStr, month, year) {
-        const daysInMonth = new Date(year, month, 0).getDate();
+        const { daysInMonth, startDate: startOfMonthStr, endDate: endOfMonthStr } = getPayrollPeriod(month, year);
         let startDay = 1;
         let endDay = daysInMonth;
 
-        const toLocalYMD = (dateVal) => {
-            if (!dateVal) return null;
-            const d = new Date(dateVal);
-            if (isNaN(d.getTime())) return null;
-            return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
-        };
-
         if (joiningDateStr) {
             const joinStr = toLocalYMD(joiningDateStr);
-            const startOfMonthStr = `${year}-${String(month).padStart(2, '0')}-01`;
-            const endOfMonthStr = `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`;
-            
+
             if (joinStr > endOfMonthStr) {
                 return { activeDays: 0, preJoiningDays: daysInMonth, postResignationDays: 0 };
             }
@@ -93,9 +116,7 @@ class PayrollService {
 
         if (resignationDateStr) {
             const resignStr = toLocalYMD(resignationDateStr);
-            const startOfMonthStr = `${year}-${String(month).padStart(2, '0')}-01`;
-            const endOfMonthStr = `${year}-${String(month).padStart(2, '0')}-${daysInMonth}`;
-            
+
             if (resignStr < startOfMonthStr) {
                 return { activeDays: 0, preJoiningDays: 0, postResignationDays: daysInMonth };
             }
@@ -112,9 +133,8 @@ class PayrollService {
     }
 
     async getActiveSalaryStructure(employeeId, companyId, month, year) {
-        const lastDay = new Date(year, month, 0).getDate();
-        const endOfMonthStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-        
+        const { endDate: endOfMonthStr } = getPayrollPeriod(month, year);
+
         // Find latest revision that has effective_from set and is on or before the end of the month
         const activeRevision = await db('salary_structures')
             .where({ employee_id: employeeId, company_id: companyId })
@@ -307,8 +327,9 @@ class PayrollService {
     }
 
     async calculateSingleEmployeePayrollComponents(employeeId, companyId, month, year, empRecord = null, overtimeBonus = 0, manualDeduction = 0, loanEmi = 0) {
-        const daysInMonth = new Date(year, month, 0).getDate();
-        
+        const period = getPayrollPeriod(month, year);
+        const daysInMonth = period.daysInMonth;
+
         // 1. Fetch employee
         const emp = await db('employees').where({ id: employeeId }).first();
         if (!emp) return null;
@@ -376,7 +397,8 @@ class PayrollService {
         if (activeRules.late_penalty_effective_date) {
             const effDate = new Date(activeRules.late_penalty_effective_date);
             if (!isNaN(effDate.getTime())) {
-                const payrollMonthEnd = new Date(year, month, 0); // last day of payroll month
+                // Last day of the payroll month (dynamic — 28/29/30/31)
+                const payrollMonthEnd = new Date(period.year, period.month - 1, period.daysInMonth);
                 if (payrollMonthEnd < effDate) {
                     activeRules.late_deduction_type = 'none';
                     activeRules.late_deduction_value = 0;
@@ -387,7 +409,7 @@ class PayrollService {
         // Dynamically resolve Grace Cap / Mo from assigned shift to sync Late Mark Policy
         let employeeGraceCap = null;
         try {
-            const targetDate = `${year}-${String(month).padStart(2, '0')}-01`;
+            const targetDate = period.startDate;
             const activeAssignment = await db('employee_shift_assignments as esa')
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', employeeId)
@@ -624,6 +646,9 @@ class PayrollService {
             throw new Error(`Payroll is locked for ${month}/${year}.`);
         }
 
+        // Payroll always runs over the complete calendar month: 1st -> last day.
+        const period = getPayrollPeriod(month, year);
+
         // 1. Get matrix data
         const attendanceService = require('./attendanceService');
         const { matrix } = await attendanceService.getMatrix({ 
@@ -660,9 +685,16 @@ class PayrollService {
                 }
 
                 // --- DETECT ACTIVE LOANS & EMIs (fetch AFTER reverting to get fresh balances) ---
-                const activeLoans = await trx('loans')
+                const allActiveLoans = await trx('loans')
                     .where({ employee_id: empRecord.id, company_id: companyId, status: 'active' });
-                
+
+                // Only loans disbursed within the payroll period (on or before its last
+                // day) may be deducted — a loan issued next month must not affect this run.
+                const activeLoans = allActiveLoans.filter(loan => {
+                    const loanDay = toLocalYMD(loan.loan_date || loan.created_at);
+                    return !loanDay || loanDay <= period.endDate;
+                });
+
                 let loanEmi = 0;
                 const deductionsToApply = [];
                 for (const loan of activeLoans) {
@@ -824,23 +856,16 @@ class PayrollService {
                 .where({ employee_id: empRecord.id, company_id: companyId })
                 .whereIn('status', ['active', 'completed']);
 
-            const targetMonth = parseInt(month);
-            const targetYear = parseInt(year);
-            const lastDayOfPayrollMonth = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${new Date(targetYear, targetMonth, 0).getDate()}`;
+            const { month: targetMonth, year: targetYear, endDate: lastDayOfPayrollMonth } = getPayrollPeriod(month, year);
 
             let activeLoans = [];
             let totalOutstandingBefore = 0;
 
             for (const loan of employeeLoans) {
-                // Skip loans created after the target month
-                const loanDateString = loan.loan_date || loan.created_at;
-                if (loanDateString) {
-                    const loanDate = new Date(loanDateString);
-                    const loanMonth = loanDate.getMonth() + 1;
-                    const loanYear = loanDate.getFullYear();
-                    if (loanYear > targetYear || (loanYear === targetYear && loanMonth > targetMonth)) {
-                        continue;
-                    }
+                // Skip loans disbursed after the last day of the payroll period
+                const loanDay = toLocalYMD(loan.loan_date || loan.created_at);
+                if (loanDay && loanDay > lastDayOfPayrollMonth) {
+                    continue;
                 }
 
                 // Sum repayments that occurred after this payroll month
@@ -1918,7 +1943,11 @@ class PayrollService {
     }
 
     async previewLoanDeductions(companyId, month, year) {
-        // Fetch all active loans
+        // The preview must mirror what processCompanyPayroll will actually deduct,
+        // so it is scoped to the same complete-calendar-month period.
+        const period = getPayrollPeriod(month, year);
+
+        // Fetch active loans disbursed on or before the last day of the period
         const activeLoans = await db('loans')
             .join('employees', 'loans.employee_id', '=', 'employees.id')
             .where({ 'loans.company_id': companyId, 'loans.status': 'active' })
@@ -1928,12 +1957,19 @@ class PayrollService {
                 'loans.amount',
                 'loans.monthly_emi',
                 'loans.remaining_balance',
+                'loans.loan_date',
+                'loans.created_at',
                 'employees.first_name',
                 'employees.last_name',
                 'employees.employee_id_number'
             );
 
-        const activeMap = new Map(activeLoans.map(l => [l.id, l]));
+        const inPeriod = (loan) => {
+            const loanDay = toLocalYMD(loan.loan_date || loan.created_at);
+            return !loanDay || loanDay <= period.endDate;
+        };
+
+        const activeMap = new Map(activeLoans.filter(inPeriod).map(l => [l.id, l]));
 
         // Fetch repayments made in the target month/year's payroll (if it was already processed)
         const payrollRepayments = await db('loan_repayments')
@@ -1959,9 +1995,10 @@ class PayrollService {
                 .whereIn('loans.id', missingLoanIds)
                 .select(
                     'loans.id', 'loans.title', 'loans.amount', 'loans.monthly_emi', 'loans.remaining_balance',
+                    'loans.loan_date', 'loans.created_at',
                     'employees.first_name', 'employees.last_name', 'employees.employee_id_number'
                 );
-            for (const loan of completedLoans) {
+            for (const loan of completedLoans.filter(inPeriod)) {
                 const rep = payrollRepayments.find(r => r.loan_id === loan.id);
                 loan.remaining_balance = parseFloat(loan.remaining_balance) + (rep ? parseFloat(rep.amount_paid) : 0);
                 activeMap.set(loan.id, loan);

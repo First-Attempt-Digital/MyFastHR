@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
     ChevronLeft, ChevronRight, Info, Edit2, Lock, Unlock,
@@ -123,6 +123,34 @@ const formatDateLetter = (dateStr) => {
     } catch (e) {
         return dateStr;
     }
+};
+
+const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// A payroll/loan time period is always the complete calendar month: 1st -> last day.
+// `new Date(year, month, 0)` is day zero of the next month, i.e. the last day of this
+// one, so Feb resolves to 28 or 29 by year and nothing from the next month can leak in.
+// Accepts a "Mon YYYY" label (e.g. "Aug 2026") and returns { start, end } as YYYY-MM-DD.
+const getMonthDateRange = (monthLabel) => {
+    if (!monthLabel || typeof monthLabel !== 'string') return null;
+    const [mName, yearStr] = monthLabel.trim().split(/\s+/);
+    const monthIndex = SHORT_MONTH_NAMES.indexOf(mName);
+    const year = parseInt(yearStr, 10);
+    if (monthIndex === -1 || isNaN(year)) return null;
+
+    const mm = String(monthIndex + 1).padStart(2, '0');
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+    return {
+        start: `${year}-${mm}-01`,
+        end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+    };
+};
+
+// Reduce any date value (DATE string, ISO datetime or Date) to its YYYY-MM-DD day
+// so range comparisons stay plain string comparisons and never shift by timezone.
+const toDayString = (dateVal) => {
+    if (!dateVal) return null;
+    return String(dateVal).split(' ')[0].split('T')[0];
 };
 
 const SettlementLetterContent = ({ data }) => {
@@ -444,13 +472,42 @@ const Payroll = () => {
     const generateLoanMonthOptions = useMemo(() => {
         const options = ['All'];
         const d = new Date();
-        const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         for (let i = -6; i <= 6; i++) {
             const date = new Date(d.getFullYear(), d.getMonth() + i, 1);
-            options.push(`${mNames[date.getMonth()]} ${date.getFullYear()}`);
+            options.push(`${SHORT_MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`);
         }
         return options;
     }, []);
+
+    // Selecting a month snaps the period to that whole calendar month (1st -> last day).
+    const applyLoanFilterMonth = (monthLabel) => {
+        setLoanFilterMonth(monthLabel);
+        const range = getMonthDateRange(monthLabel);
+        if (range) {
+            setLoanFilterStartDate(range.start);
+            setLoanFilterEndDate(range.end);
+        } else {
+            setLoanFilterStartDate('');
+            setLoanFilterEndDate('');
+        }
+    };
+
+    // Hand-editing either date means the user wants a custom span, not a whole month.
+    const applyLoanFilterStartDate = (value) => {
+        setLoanFilterStartDate(value);
+        setLoanFilterMonth('All');
+    };
+
+    const applyLoanFilterEndDate = (value) => {
+        setLoanFilterEndDate(value);
+        setLoanFilterMonth('All');
+    };
+
+    const clearLoanFilterDates = () => {
+        setLoanFilterStartDate('');
+        setLoanFilterEndDate('');
+        setLoanFilterMonth('All');
+    };
 
     // Process Payroll Confirmation states
     const [showProcessConfirmation, setShowProcessConfirmation] = useState(false);
@@ -1411,7 +1468,13 @@ const Payroll = () => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `Loans_Report_${selectedMonth.replace(' ', '_')}.csv`);
+        // Name the file after the period actually exported, not the payroll month tab
+        const periodLabel = loanFilterMonth !== 'All'
+            ? loanFilterMonth.replace(' ', '_')
+            : (loanFilterStartDate || loanFilterEndDate)
+                ? `${loanFilterStartDate || 'start'}_to_${loanFilterEndDate || 'end'}`
+                : 'All_Periods';
+        link.setAttribute('download', `Loans_Report_${periodLabel}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -2302,6 +2365,26 @@ const Payroll = () => {
         });
     }, [registerData, selectedOutlet, selectedDept, selectedDesignation]);
 
+    // The active loan/repayment period. A selected month always resolves to its
+    // complete calendar span (1st -> dynamically computed last day); hand-picked
+    // From/To dates are used verbatim.
+    const loanPeriod = useMemo(() => {
+        const monthRange = getMonthDateRange(loanFilterMonth);
+        return {
+            start: monthRange ? monthRange.start : loanFilterStartDate,
+            end: monthRange ? monthRange.end : loanFilterEndDate
+        };
+    }, [loanFilterMonth, loanFilterStartDate, loanFilterEndDate]);
+
+    const isWithinLoanPeriod = useCallback((dateVal) => {
+        if (!loanPeriod.start && !loanPeriod.end) return true;
+        const day = toDayString(dateVal);
+        if (!day) return true;
+        if (loanPeriod.start && day < loanPeriod.start) return false;
+        if (loanPeriod.end && day > loanPeriod.end) return false;
+        return true;
+    }, [loanPeriod]);
+
     // Filter loans
     const filteredLoans = useMemo(() => {
         if (!Array.isArray(loans)) return [];
@@ -2309,37 +2392,11 @@ const Payroll = () => {
             const matchesOutlet = matchText(loan.office_location, selectedOutlet);
             const matchesDept = matchText(loan.department_name || loan.department, selectedDept);
             const matchesDesignation = matchText(loan.designation || loan.role, selectedDesignation);
-            
-            let matchesMonth = true;
-            if (loanFilterMonth !== 'All') {
-                const dString = loan.loan_date || loan.created_at;
-                if (dString) {
-                    const date = new Date(dString);
-                    if (!isNaN(date.getTime())) {
-                        const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        const monthStr = `${mNames[date.getMonth()]} ${date.getFullYear()}`;
-                        if (monthStr !== loanFilterMonth) {
-                            matchesMonth = false;
-                        }
-                    }
-                }
-            }
+            const matchesPeriod = isWithinLoanPeriod(loan.loan_date || loan.created_at);
 
-            let matchesDateRange = true;
-            const dString = loan.loan_date || loan.created_at;
-            if (dString) {
-                const dateVal = String(dString).split(' ')[0].split('T')[0];
-                if (loanFilterStartDate && dateVal < loanFilterStartDate) {
-                    matchesDateRange = false;
-                }
-                if (loanFilterEndDate && dateVal > loanFilterEndDate) {
-                    matchesDateRange = false;
-                }
-            }
-
-            return matchesOutlet && matchesDept && matchesDesignation && matchesMonth && matchesDateRange;
+            return matchesOutlet && matchesDept && matchesDesignation && matchesPeriod;
         });
-    }, [loans, selectedOutlet, selectedDept, selectedDesignation, loanFilterMonth, loanFilterStartDate, loanFilterEndDate]);
+    }, [loans, selectedOutlet, selectedDept, selectedDesignation, isWithinLoanPeriod]);
 
     // Filter separations
     const filteredSeparations = useMemo(() => {
@@ -2385,16 +2442,17 @@ const Payroll = () => {
         });
     }, [employees, modalOutlet, modalDept, modalDesignation]);
 
-    // Filter repayments
+    // Filter repayments (scoped to the same period as the loan ledger)
     const filteredRepayments = useMemo(() => {
         if (!Array.isArray(repayments)) return [];
         return repayments.filter(r => {
             const matchesOutlet = matchText(r.office_location, selectedOutlet);
             const matchesDept = matchText(r.department_name || r.department, selectedDept);
             const matchesDesignation = matchText(r.designation || r.role, selectedDesignation);
-            return matchesOutlet && matchesDept && matchesDesignation;
+            const matchesPeriod = isWithinLoanPeriod(r.payment_date || r.created_at);
+            return matchesOutlet && matchesDept && matchesDesignation && matchesPeriod;
         });
-    }, [repayments, selectedOutlet, selectedDept, selectedDesignation]);
+    }, [repayments, selectedOutlet, selectedDept, selectedDesignation, isWithinLoanPeriod]);
 
     // Search loans
     const searchedLoans = useMemo(() => {
@@ -5129,7 +5187,7 @@ const Payroll = () => {
                                                 <input
                                                     type="date"
                                                     value={loanFilterStartDate}
-                                                    onChange={(e) => setLoanFilterStartDate(e.target.value)}
+                                                    onChange={(e) => applyLoanFilterStartDate(e.target.value)}
                                                     className="bg-transparent text-xs font-bold text-slate-700 outline-none w-[115px]"
                                                 />
                                             </div>
@@ -5139,16 +5197,13 @@ const Payroll = () => {
                                                 <input
                                                     type="date"
                                                     value={loanFilterEndDate}
-                                                    onChange={(e) => setLoanFilterEndDate(e.target.value)}
+                                                    onChange={(e) => applyLoanFilterEndDate(e.target.value)}
                                                     className="bg-transparent text-xs font-bold text-slate-700 outline-none w-[115px]"
                                                 />
                                             </div>
                                             {(loanFilterStartDate || loanFilterEndDate) && (
                                                 <button
-                                                    onClick={() => {
-                                                        setLoanFilterStartDate('');
-                                                        setLoanFilterEndDate('');
-                                                    }}
+                                                    onClick={clearLoanFilterDates}
                                                     className="text-slate-400 hover:text-slate-650 transition-all flex items-center justify-center pl-1"
                                                     title="Clear Dates"
                                                 >
@@ -5158,7 +5213,7 @@ const Payroll = () => {
                                         </div>
                                         <select
                                             value={loanFilterMonth}
-                                            onChange={(e) => setLoanFilterMonth(e.target.value)}
+                                            onChange={(e) => applyLoanFilterMonth(e.target.value)}
                                             className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none focus:border-[#4361ee] shadow-sm transition-all"
                                         >
                                             {generateLoanMonthOptions.map(opt => (
