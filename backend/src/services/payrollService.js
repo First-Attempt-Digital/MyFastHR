@@ -82,6 +82,14 @@ const toLocalYMD = (dateVal) => {
 const getPayrollPeriod = (month, year) => {
     const m = parseInt(month, 10);
     const y = parseInt(year, 10);
+    // Fail loudly here rather than letting NaN propagate into salary/loan math —
+    // this is the single choke point for period resolution across payroll.
+    if (isNaN(m) || m < 1 || m > 12) {
+        throw new Error(`Invalid payroll month: ${month}. Expected 1-12.`);
+    }
+    if (isNaN(y) || y < 1970 || y > 9999) {
+        throw new Error(`Invalid payroll year: ${year}.`);
+    }
     const daysInMonth = new Date(y, m, 0).getDate();
     const mm = String(m).padStart(2, '0');
     return {
