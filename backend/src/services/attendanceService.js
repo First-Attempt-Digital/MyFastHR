@@ -200,6 +200,42 @@ function mapFrontendStatusToDb(status) {
     return 'present';
 }
 
+/**
+ * How much of a single calendar day a leave application actually covers.
+ *
+ * `leaves.days` is the total for the whole application (see leaveService.applyLeave),
+ * so it cannot be used to decide whether one particular date is a half day: a leave
+ * running "Mon afternoon -> Wed" stores days = 2.5, and every day in that range would
+ * otherwise be treated as full. Sessions carry the per-day truth instead:
+ *   - start_session = 'session_2' -> on start_date the leave covers only the 2nd half
+ *   - end_session   = 'session_1' -> on end_date the leave covers only the 1st half
+ * Summing this over the range reproduces `leaves.days` exactly.
+ *
+ * Returns { fraction, session } where session is the half the employee is ON LEAVE for
+ * ('session_1' = first half off, 'session_2' = second half off, null = whole day).
+ */
+function getLeaveDayPortion(leave, dayYmd) {
+    const startYmd = toLocalYMD(leave.start_date);
+    const endYmd = toLocalYMD(leave.end_date);
+
+    // Legacy rows predate the session columns, and the ones that got backfilled took the
+    // full-day defaults ('session_1'/'session_2') even where days says 0.5. A stored 0.5 on a
+    // single-day leave is unambiguous, so trust it over the sessions.
+    if (startYmd === endYmd && Number(leave.days) === 0.5) {
+        if (leave.start_session === 'session_2') return { fraction: 0.5, session: 'session_2' };
+        if (leave.end_session === 'session_1') return { fraction: 0.5, session: 'session_1' };
+        return { fraction: 0.5, session: null };
+    }
+
+    if (dayYmd === startYmd && leave.start_session === 'session_2') {
+        return { fraction: 0.5, session: 'session_2' };
+    }
+    if (dayYmd === endYmd && leave.end_session === 'session_1') {
+        return { fraction: 0.5, session: 'session_1' };
+    }
+    return { fraction: 1, session: null };
+}
+
 
 function calculateSplitShiftStatus(dayLogs, shift, rules) {
     const reqPunches = parseInt(shift.total_punches_required || shift.shift_total_punches || 2);
@@ -1318,6 +1354,18 @@ class AttendanceService {
                 const dayRegularization = regularizationsMap[emp.id]?.[d];
                 const dayEarlyOut = entryRequestsMap[emp.id]?.[d];
 
+                // Approved leave for this date is resolved up-front, not only when the day has
+                // no punches: a half-day leave must stay visible even when the employee comes
+                // in for the other half (see the merge step after the status chain below).
+                const onLeave = empLeaves.find(l =>
+                    l.startTime <= dateTime && l.endTime >= dateTime
+                );
+                const leavePortion = onLeave ? getLeaveDayPortion(onLeave, targetDateStr) : null;
+                const leaveIsPaid = onLeave
+                    ? (!onLeave.leave_type_name.toLowerCase().includes('unpaid') &&
+                        !onLeave.leave_type_name.toLowerCase().includes('lop'))
+                    : false;
+
                 if (dayLogs.length > 0) {
                     const firstLog = dayLogs.find(a => a.punch_source === 'manual' || a.punch_source === 'manual_override') || dayLogs[0];
                     const dbStatus = firstLog.status ? firstLog.status.toLowerCase() : '';
@@ -1426,18 +1474,10 @@ class AttendanceService {
                         stats.H++;
                     } else {
                         // 4. Check Leaves
-                        const onLeave = empLeaves.find(l =>
-                            l.startTime <= dateTime && l.endTime >= dateTime
-                        );
-
                         if (onLeave) {
-                            const isPaid = !onLeave.leave_type_name.toLowerCase().includes('unpaid') &&
-                                !onLeave.leave_type_name.toLowerCase().includes('lop');
-                            status = isPaid ? 'PL' : 'UL';
-                            const isHalfDay = Number(onLeave.days) === 0.5 &&
-                                toLocalYMD(onLeave.start_date) === toLocalYMD(onLeave.end_date);
-                            const leaveIncrement = isHalfDay ? 0.5 : 1;
-                            if (isPaid) stats.PL += leaveIncrement; else stats.UL += leaveIncrement;
+                            status = leaveIsPaid ? 'PL' : 'UL';
+                            if (leaveIsPaid) stats.PL += leavePortion.fraction;
+                            else stats.UL += leavePortion.fraction;
                         } else {
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
@@ -1468,6 +1508,31 @@ class AttendanceService {
                         }
                     }
                 }
+                // Half-day leave + attendance on the same date. The status above was derived
+                // from the punches alone, measured against the FULL shift - so an employee who
+                // took the morning off and checked in at 14:00 came out as 'L' (and got a late
+                // deduction in payroll) while the approved leave was credited nowhere. Merge the
+                // two halves instead of letting either side win outright.
+                if (onLeave && leavePortion.fraction === 0.5 && status !== 'PL' && status !== 'UL') {
+                    if (status === 'P' || status === 'L' || status === 'E' || status === 'R' || status === 'HD') {
+                        if (status === 'L') stats.L--;
+                        else if (status === 'HD') stats.P -= 0.5;
+                        else stats.P--;
+
+                        status = leaveIsPaid ? 'HD-PL' : 'HD-UL';
+                        stats.P += 0.5;
+                        if (leaveIsPaid) stats.PL += 0.5; else stats.UL += 0.5;
+                    } else if (status === 'A') {
+                        // Absent for their working half only - the other half is approved leave.
+                        stats.A -= 0.5;
+                        if (leaveIsPaid) stats.PL += 0.5; else stats.UL += 0.5;
+                    } else if (status === 'CI') {
+                        // Day still in progress; credit the approved half now, the worked half
+                        // lands once they check out.
+                        if (leaveIsPaid) stats.PL += 0.5; else stats.UL += 0.5;
+                    }
+                }
+
                 let in1 = null, out1 = null, in2 = null, out2 = null;
                 let isGrace = false;
 

@@ -224,7 +224,7 @@ class AttendanceRepository {
             .whereIn('l.employee_id', employeeIds)
             .where({ 'l.status': 'approved' })
             .whereRaw('(MONTH(l.start_date) = ? OR MONTH(l.end_date) = ?) AND (YEAR(l.start_date) = ? OR YEAR(l.end_date) = ?)', [month, month, year, year])
-            .select('l.employee_id', 'l.start_date', 'l.end_date', 'l.days', 'l.leave_type_id', 'lt.name as leave_type_name');
+            .select('l.employee_id', 'l.start_date', 'l.end_date', 'l.days', 'l.start_session', 'l.end_session', 'l.leave_type_id', 'lt.name as leave_type_name');
 
         // 4. Get approved entry/exit requests for these employees (specifically early_out)
         const entryRequests = await db('attendance_entry_requests')
