@@ -798,7 +798,8 @@ const AttendanceMuster = () => {
                                     { label: 'E (Early Out)', style: 'bg-orange-50 text-orange-600 border-orange-200' },
                                     { label: 'R (Regularized)', style: 'bg-teal-50 text-teal-600 border-teal-200' },
                                     { label: 'HD (Half Day)', style: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-                                    { label: 'HD-PL (Half Leave + Present)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
+                                    { label: 'HD-PL (Half Paid Leave + Present)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
+                                    { label: 'HD-UL (Half Unpaid Leave + Present)', style: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-200' },
                                     { label: 'CI (Checked In)', style: 'bg-blue-50 text-blue-600 border-blue-200 animate-pulse' },
                                     { label: 'A (Absent)', style: 'bg-rose-50 text-rose-600 border-rose-200' },
                                     { label: 'OFF (Weekly Off)', style: 'bg-slate-100 text-slate-400 border-slate-200' },
@@ -944,7 +945,7 @@ const AttendanceMuster = () => {
                                                                 isWeekend ? 'bg-slate-50/20' : 'bg-transparent'
                                                             }`}
                                                         >
-                                                            <div className={`w-6.5 h-6.5 mx-auto rounded-full flex items-center justify-center text-[9px] transition-all hover:scale-110 border shadow-sm ${getStatusStyle(status)}`}>
+                                                            <div className={`w-6.5 h-6.5 mx-auto rounded-full flex items-center justify-center transition-all hover:scale-110 border shadow-sm ${status.length > 3 ? 'text-[7px] tracking-tighter' : 'text-[9px]'} ${getStatusStyle(status)}`}>
                                                                 {status}
                                                             </div>
                                                             {emp.meta?.[day]?.is_override && (

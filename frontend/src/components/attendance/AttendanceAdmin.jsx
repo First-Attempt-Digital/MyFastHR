@@ -317,6 +317,8 @@ const AttendanceAdmin = () => {
                                                     status === 'A' ? 'text-rose-600 border-rose-400 bg-rose-50/30' :
                                                     status === 'PL' ? 'text-indigo-600 border-indigo-400 bg-indigo-50/30' : // Paid Leave
                                                     status === 'UL' ? 'text-slate-500 border-slate-400 bg-slate-50/30 font-bold' : // Unpaid Leave
+                                                    status === 'HD-PL' ? 'text-indigo-600 border-indigo-400 bg-indigo-50/30 text-[9px]' : // Half Paid Leave + Present
+                                                    status === 'HD-UL' ? 'text-slate-500 border-slate-400 bg-slate-50/30 font-bold text-[9px]' : // Half Unpaid Leave + Present
                                                     status === 'OFF' ? 'text-slate-500 border-transparent bg-slate-50/10' :
                                                     (status === 'L' || status === 'CI' || status === 'E' || status === 'HD') ? 'text-slate-500 border-transparent bg-slate-50/10' :
                                                     'text-slate-200'
