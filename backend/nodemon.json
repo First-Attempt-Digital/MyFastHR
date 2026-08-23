@@ -1,0 +1,6 @@
+{
+  "//": "Dev-only: the frontend dev server and utils/api.js target :5050 (macOS AirPlay squats on 5000). nodemon is the dev entrypoint only -- production runs `node src/server.js` under PM2, which reads PORT from ecosystem.config.js (5000) and is unaffected by this file.",
+  "env": {
+    "PORT": "5050"
+  }
+}

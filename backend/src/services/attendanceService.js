@@ -2052,7 +2052,7 @@ class AttendanceService {
     }
 
     async manualUpdateAttendance(user, companyId, data) {
-        const { employee_id, date, status } = data;
+        const { employee_id, date, status, check_in, check_out } = data;
         const dbStatus = mapFrontendStatusToDb(status);
 
         await db.transaction(async (trx) => {
@@ -2066,6 +2066,10 @@ class AttendanceService {
                 .join('shifts as s', 'esa.shift_id', 's.id')
                 .where('esa.employee_id', employee_id)
                 .select('esa.from_date', 'esa.to_date', 's.start_time', 's.end_time')
+                // from_date desc first: assignments must resolve by the period they
+                // cover, and only then by insertion order. id desc alone picks the
+                // most recently created row (the Ritesh Patel bug).
+                .orderBy('esa.from_date', 'desc')
                 .orderBy('esa.id', 'desc');
 
             const nextDate = new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000);
@@ -2092,8 +2096,11 @@ class AttendanceService {
                     .where({ id: existing.id })
                     .update({
                         status: dbStatus,
-                        check_in: `${date} 12:00:00`,
-                        check_out: `${date} 18:00:00`,
+                        // Changing the status must not rewrite the employee's real punches.
+                        // Only overwrite when the caller explicitly supplies new times; a
+                        // missing check_out stays missing rather than being back-filled.
+                        check_in: check_in || existing.check_in,
+                        check_out: check_out || existing.check_out,
                         punch_source: 'manual',
                         updated_at: db.fn.now()
                     });

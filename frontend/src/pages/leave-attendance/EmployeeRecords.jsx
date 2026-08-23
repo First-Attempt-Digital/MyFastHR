@@ -774,9 +774,10 @@ const EmployeeRecords = () => {
 
                                 <div className="space-y-1.5">
                                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Number of Days</label>
-                                    <input 
-                                        type="number" 
-                                        min="1"
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        min="0.01"
                                         max="15"
                                         value={adjustDays}
                                         onChange={(e) => setAdjustDays(e.target.value)}

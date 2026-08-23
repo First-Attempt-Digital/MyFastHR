@@ -780,7 +780,7 @@ const LeaveGranter = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Days to Credit</label>
                                         <input 
-                                            type="number" required step="0.1" min="0.1"
+                                            type="number" required step="any" min="0.01"
                                             value={modalData.days}
                                             onChange={(e) => setModalData({ ...modalData, days: e.target.value })}
                                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 focus:bg-white transition-all"

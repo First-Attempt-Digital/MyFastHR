@@ -7,12 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/manifest.json': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5050',
         changeOrigin: true,
         rewrite: () => '/api/public/branding/manifest.json'
       },
       '/uploads': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5050',
         changeOrigin: true
       }
     }
