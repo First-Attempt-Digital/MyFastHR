@@ -723,6 +723,9 @@ class MachineAttendanceService {
 
                 let status = 'present';
                 let isCheckoutAttempt = false;
+                // Set when the checkout-window guard below decides to record the punch
+                // anyway (see that block); appended to the biometric_raw_logs audit row.
+                let checkoutWindowNote = null;
 
                 if (employeeWithShift && employeeWithShift.shift_start && employeeWithShift.shift_end && !employeeWithShift.shift_is_flexi) {
                     const shiftStart = employeeWithShift.shift_start;
@@ -739,15 +742,46 @@ class MachineAttendanceService {
                     const checkoutWindowMins = Math.min(120, shiftDurationMins * 0.25);
                     const thresholdDate = new Date(shiftEndDate.getTime() - checkoutWindowMins * 60 * 1000);
                     if (punchTime >= thresholdDate) {
-                        await db('biometric_raw_logs').insert({
-                            company_id: companyId,
-                            device_serial: deviceSerial,
-                            employee_code,
-                            punch_time: punchTimeStr,
-                            status: 'skipped',
-                            error_details: `Punch in ignored: checkout window has started (earliest allowed: ${thresholdDate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })})`
-                        });
-                        return { status: 'skipped', reason: 'Check-in after checkout window started' };
+                        const thresholdStr = thresholdDate.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' });
+
+                        // A punch this late in the shift is normally a check-OUT, so it must not
+                        // become a check-in that shadows a real one. But when no attendance row
+                        // exists for this logical day at all, discarding it destroys the employee's
+                        // ONLY punch: the day then reads as Absent and the punch survives only in
+                        // biometric_raw_logs. Per the master prompt ("NEVER block a biometric
+                        // punch - always log it, even if late or early"), record it instead and let
+                        // the late-in path below flag it for manager review.
+                        // `latestLog` alone is not enough to prove the logical day is empty. Its
+                        // window uses a per-shift cutoff hour, while the muster grid's
+                        // getLogicalDateStr() (attendanceService.js) uses a fixed 10-hour rule and
+                        // pulls a 00:00-09:59 punch back to the previous date whenever THAT date
+                        // held a night shift - and which shift "that date" resolves to is itself
+                        // order-dependent when an employee has overlapping open-ended rows in
+                        // employee_shift_assignments (the norm in this data). Rather than depend on
+                        // that resolution, refuse to write whenever ANY row sits close enough to
+                        // possibly share the cell. A day that already has a row is not a day whose
+                        // attendance was destroyed, so declining there costs nothing: the punch this
+                        // fallback exists to save is by definition the only one of its day.
+                        const nearWindowMs = 16 * 60 * 60 * 1000;
+                        const nearbyRow = await db('attendance')
+                            .where({ employee_id: employeeId, company_id: companyId })
+                            .where('check_in', '>=', toLocalYYYYMMDDHHmmss(new Date(punchTime.getTime() - nearWindowMs)))
+                            .where('check_in', '<=', toLocalYYYYMMDDHHmmss(new Date(punchTime.getTime() + nearWindowMs)))
+                            .first();
+
+                        if (latestLog || nearbyRow) {
+                            await db('biometric_raw_logs').insert({
+                                company_id: companyId,
+                                device_serial: deviceSerial,
+                                employee_code,
+                                punch_time: punchTimeStr,
+                                status: 'skipped',
+                                error_details: `Punch in ignored: checkout window has started (earliest allowed: ${thresholdStr})`
+                            });
+                            return { status: 'skipped', reason: 'Check-in after checkout window started' };
+                        }
+
+                        checkoutWindowNote = `Recorded as review-pending check-in: punch landed in the checkout window (started ${thresholdStr}) with no attendance row for ${targetShiftDate}`;
                     }
                 }
 
@@ -860,7 +894,8 @@ class MachineAttendanceService {
                     device_serial: deviceSerial,
                     employee_code,
                     punch_time: punchTimeStr,
-                    status: 'synced'
+                    status: 'synced',
+                    error_details: checkoutWindowNote
                 });
 
                 return { status: 'check-in', record_status: status };
