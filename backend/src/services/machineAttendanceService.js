@@ -1107,7 +1107,13 @@ class MachineAttendanceService {
                 // 2. Determine if we should generate an early out regularization request
                 let triggersEarlyOutRequest = false;
 
-                if (isEarly) {
+                // The half-day floor is load-bearing: without it a stray tap minutes after
+                // check-in (past the 2-minute dedup) raises an early-out request and stamps the
+                // row 'pending', and the status recompute below refuses to clear 'pending' - so
+                // the real full-day checkout that follows can never restore it to Present.
+                // Sub-half-day checkouts are still recorded; they just settle as 'absent' and
+                // self-heal when the genuine checkout reopens the row.
+                if (isEarly && workedHours >= halfDayLimit) {
                     if (punchTime < outMarginThreshold) {
                         // If they are punching out BEFORE the out margin window, triggers early out request
                         triggersEarlyOutRequest = true;
