@@ -694,6 +694,9 @@ class MachineAttendanceService {
                 // --- CHECK-IN ROUTINE ---
 
                 // IN MARGIN CHECK
+                // Set when the rescue below records an early punch anyway; appended to the
+                // biometric_raw_logs audit row.
+                let inMarginNote = null;
                 if (employeeWithShift && !employeeWithShift.shift_is_flexi) {
                     const shiftStart = employeeWithShift.shift_start || '09:00';
                     const inMargin = employeeWithShift.shift_in_margin !== undefined ? parseInt(employeeWithShift.shift_in_margin) : 0;
@@ -703,15 +706,39 @@ class MachineAttendanceService {
                         const shiftStartDate = new Date(`${targetShiftDate} ${String(sHours).padStart(2, '0')}:${String(sMins).padStart(2, '0')}:00 +05:30`);
                         const earliestCheckIn = new Date(shiftStartDate.getTime() - inMargin * 60 * 1000);
                         if (punchTime < earliestCheckIn) {
-                            await db('biometric_raw_logs').insert({
-                                company_id: companyId,
-                                device_serial: deviceSerial,
-                                employee_code,
-                                punch_time: punchTimeStr,
-                                status: 'skipped',
-                                error_details: `Punch in before allowed margin (earliest allowed: ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })})`
-                            });
-                            return { status: 'skipped', reason: 'Punch in before allowed margin' };
+                            // Same rationale as the checkout-window rescue below: when the logical
+                            // day has no attendance row, discarding the punch destroys the
+                            // employee's only punch and the day reads Absent — and the next-day
+                            // checkout, finding nothing to close, then spawns an orphan open row
+                            // (Highway King, Aug 30: 11 night-shift staff arrived ~75min early on
+                            // a Sunday and lost the whole worked shift this way). Rescue only
+                            // punches within 2h of shift start: anything earlier is more likely a
+                            // misattributed checkout or a wrongly assigned shift, where writing a
+                            // check-in would corrupt the muster cell instead of saving it.
+                            const rescueFloor = new Date(shiftStartDate.getTime() - Math.max(inMargin, 120) * 60 * 1000);
+                            let nearbyEarlyRow = null;
+                            if (punchTime >= rescueFloor && !latestLog) {
+                                const nearWindowMs = 16 * 60 * 60 * 1000;
+                                nearbyEarlyRow = await db('attendance')
+                                    .where({ employee_id: employeeId, company_id: companyId })
+                                    .where('check_in', '>=', toLocalYYYYMMDDHHmmss(new Date(punchTime.getTime() - nearWindowMs)))
+                                    .where('check_in', '<=', toLocalYYYYMMDDHHmmss(new Date(punchTime.getTime() + nearWindowMs)))
+                                    .first();
+                            }
+
+                            if (punchTime < rescueFloor || latestLog || nearbyEarlyRow) {
+                                await db('biometric_raw_logs').insert({
+                                    company_id: companyId,
+                                    device_serial: deviceSerial,
+                                    employee_code,
+                                    punch_time: punchTimeStr,
+                                    status: 'skipped',
+                                    error_details: `Punch in before allowed margin (earliest allowed: ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })})`
+                                });
+                                return { status: 'skipped', reason: 'Punch in before allowed margin' };
+                            }
+
+                            inMarginNote = `Recorded as early check-in: punch before the in-margin window (earliest allowed ${earliestCheckIn.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' })}) with no attendance row for ${targetShiftDate}`;
                         }
                     }
                 }
@@ -895,7 +922,7 @@ class MachineAttendanceService {
                     employee_code,
                     punch_time: punchTimeStr,
                     status: 'synced',
-                    error_details: checkoutWindowNote
+                    error_details: checkoutWindowNote || inMarginNote
                 });
 
                 return { status: 'check-in', record_status: status };
@@ -1059,8 +1086,13 @@ class MachineAttendanceService {
                         isEarly = true;
                     }
                 }
-                // Check for half-day limit skip for ALL shift types
-                if (workedHours < halfDayLimit) {
+                // Half-day limit: only 4-punch shifts still skip here — closing Session 1
+                // prematurely would misroute the employee's remaining punches into Session 2.
+                // For 2-punch and flexi shifts, dropping the punch strands the row open forever
+                // (the real damage: an unclosed cell and lost worked hours), while recording it
+                // is self-healing — any later punch overwrites check_out below, and if none
+                // comes, "left before half-day" is the truth and the status logic marks it.
+                if (workedHours < halfDayLimit && reqPunches === 4) {
                     await db('biometric_raw_logs').insert({
                         company_id: companyId,
                         device_serial: deviceSerial,
@@ -1075,7 +1107,7 @@ class MachineAttendanceService {
                 // 2. Determine if we should generate an early out regularization request
                 let triggersEarlyOutRequest = false;
 
-                if (isEarly && workedHours >= halfDayLimit) {
+                if (isEarly) {
                     if (punchTime < outMarginThreshold) {
                         // If they are punching out BEFORE the out margin window, triggers early out request
                         triggersEarlyOutRequest = true;
