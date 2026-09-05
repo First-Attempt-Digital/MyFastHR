@@ -813,7 +813,7 @@ class MachineAttendanceService {
                 }
 
                 const approvedRequest = await db('attendance_entry_requests')
-                    .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'late_in', status: 'approved' })
+                    .where({ employee_id: employeeId, company_id: companyId, date: targetShiftDate, request_type: 'late_in', status: 'approved' })
                     .first();
 
                 if (!isCheckoutAttempt && !approvedRequest && !employeeWithShift?.shift_is_flexi) {
@@ -886,13 +886,17 @@ class MachineAttendanceService {
                         // Auto-create regularization request for manager review
                         status = 'pending';
                         const existingRequest = await db('attendance_entry_requests')
-                            .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'late_in' })
+                            .where({ employee_id: employeeId, company_id: companyId, date: targetShiftDate, request_type: 'late_in' })
                             .first();
                         if (!existingRequest) {
                             await db('attendance_entry_requests').insert({
                                 company_id: companyId,
                                 employee_id: employeeId,
-                                date: dateStr,
+                                // Shift date, not calendar date: a rescued 00:0x check-in on a night
+                                // shift belongs to the previous day. Dating it by calendar day made
+                                // approval attach to the employee's real evening row on that date
+                                // and stamp it late (Highway King 10304/10305, Sep 1 2026).
+                                date: targetShiftDate,
                                 request_type: 'late_in',
                                 punch_time: punchTimeStr,
                                 location_data: JSON.stringify({ source: 'biometric', device_serial: deviceSerial }),
@@ -1122,19 +1126,20 @@ class MachineAttendanceService {
 
                 // Check if there is an approved Entry/Exit Request for this date and type 'early_out'
                 const approvedRequest = await db('attendance_entry_requests')
-                    .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out', status: 'approved' })
+                    .where({ employee_id: employeeId, company_id: companyId, date: targetShiftDate, request_type: 'early_out', status: 'approved' })
                     .first();
 
                 if (!approvedRequest && triggersEarlyOutRequest) {
                     // Biometric machine punch - log checkout anyway, just create a regularization request
                     const existingRequest = await db('attendance_entry_requests')
-                        .where({ employee_id: employeeId, company_id: companyId, date: dateStr, request_type: 'early_out' })
+                        .where({ employee_id: employeeId, company_id: companyId, date: targetShiftDate, request_type: 'early_out' })
                         .first();
                     if (!existingRequest) {
                         await db('attendance_entry_requests').insert({
                             company_id: companyId,
                             employee_id: employeeId,
-                            date: dateStr,
+                            // Shift date of the open row (targetShiftDate = check-in's date here).
+                            date: targetShiftDate,
                             request_type: 'early_out',
                             punch_time: punchTimeStr,
                             location_data: JSON.stringify({ source: 'biometric', device_serial: deviceSerial }),

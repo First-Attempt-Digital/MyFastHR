@@ -3539,12 +3539,32 @@ class AttendanceService {
                 .where('check_in', '>=', `${dateStr} 00:00:00`)
                 .where('check_in', '<=', `${nextDateStr} 23:59:59`);
 
+            // Prefer the row this request was raised FROM: the biometric engine writes the
+            // same punchTimeStr to attendance.check_in (late_in) / check_out (early_out) and
+            // to the request's punch_time, so an exact match is authoritative. The logical-date
+            // fallback below can pick a different row on the same calendar date - e.g. a
+            // rescued 00:08 night-shift check-in whose request was dated by calendar day, where
+            // the fallback landed on the employee's real 15:45 row and stamped it late.
             let existingAtt = null;
-            for (const log of candidateLogs) {
-                const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
-                if (lDate === dateStr) {
-                    existingAtt = log;
-                    break;
+            const wantedPunch = toLocalYYYYMMDDHHmmss(punchTimeStr);
+            if (wantedPunch) {
+                const punchCol = request.request_type === 'early_out' ? 'check_out' : 'check_in';
+                const dayBefore = toLocalYMD(new Date(dbDateToUTC(punchTimeStr).getTime() - 24 * 60 * 60 * 1000));
+                const dayAfter = toLocalYMD(new Date(dbDateToUTC(punchTimeStr).getTime() + 24 * 60 * 60 * 1000));
+                const nearRows = await db('attendance')
+                    .where({ employee_id: request.employee_id, company_id: companyId })
+                    .where(punchCol, '>=', `${dayBefore} 00:00:00`)
+                    .where(punchCol, '<=', `${dayAfter} 23:59:59`);
+                existingAtt = nearRows.find(r => r[punchCol] && toLocalYYYYMMDDHHmmss(r[punchCol]) === wantedPunch) || null;
+            }
+
+            if (!existingAtt) {
+                for (const log of candidateLogs) {
+                    const lDate = getLogicalDateStr(log.check_in, empAssignments, defaultShift);
+                    if (lDate === dateStr) {
+                        existingAtt = log;
+                        break;
+                    }
                 }
             }
 
