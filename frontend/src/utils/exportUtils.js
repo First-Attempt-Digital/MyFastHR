@@ -3,6 +3,23 @@
  */
 
 /**
+ * Wraps an identifier so Excel keeps it as text instead of coercing it to a number.
+ *
+ * The old trick here was a leading apostrophe, but that only works for a value typed
+ * straight into a cell. Inside a CSV it is literal data, so clients opening the file
+ * saw '123456789012 in the Account Number column. Excel reads ="123456789012" as a
+ * formula returning text, which renders clean and keeps leading zeros and 16+ digit
+ * account numbers off scientific notation.
+ *
+ * @param {*} val Account number, UAN, ESIC number or similar digit string.
+ * @returns {string} Excel text-formula form, or '' when there is no value.
+ */
+export const asExcelText = (val) => {
+    const str = val === null || val === undefined ? '' : String(val).trim();
+    return str ? `="${str.replace(/"/g, '')}"` : '';
+};
+
+/**
  * Exports JSON data array to a CSV file.
  * @param {Array<Object>} data The data records array.
  * @param {string} filename The output file name.

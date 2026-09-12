@@ -11,7 +11,7 @@ import {
 import { PieChart as RePie, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../utils/api';
-import { exportToCSV } from '../utils/exportUtils';
+import { exportToCSV, asExcelText } from '../utils/exportUtils';
 
 const numberToWords = (num) => {
     if (num === null || num === undefined || isNaN(num)) return '';
@@ -1141,10 +1141,10 @@ const Payroll = () => {
                 payment_type: reg.payment_type || '',
                 bank_name: reg.bank_name || '',
                 bank_branch: reg.bank_branch || '',
-                account_number: reg.account_number ? `'${reg.account_number}` : '',
+                account_number: asExcelText(reg.account_number),
                 ifsc_code: reg.ifsc_code || '',
-                uan_number: reg.uan_number ? `'${reg.uan_number}` : '',
-                esi_number: reg.esi_number ? `'${reg.esi_number}` : '',
+                uan_number: asExcelText(reg.uan_number),
+                esi_number: asExcelText(reg.esi_number),
                 // 2. Attendance Stats
                 presents: reg.stats?.P || 0,
                 leaves: reg.stats?.L || 0,
@@ -1301,10 +1301,10 @@ const Payroll = () => {
                 payment_type: reg.payment_type || '',
                 bank_name: reg.bank_name || '',
                 bank_branch: reg.bank_branch || '',
-                account_number: reg.account_number ? `'${reg.account_number}` : '',
+                account_number: asExcelText(reg.account_number),
                 ifsc_code: reg.ifsc_code || '',
-                uan_number: reg.uan_number ? `'${reg.uan_number}` : '',
-                esi_number: reg.esi_number ? `'${reg.esi_number}` : '',
+                uan_number: asExcelText(reg.uan_number),
+                esi_number: asExcelText(reg.esi_number),
                 presents: reg.stats?.P || 0,
                 leaves: reg.stats?.L || 0,
                 absents: reg.stats?.A || 0,

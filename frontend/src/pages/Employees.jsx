@@ -4,7 +4,7 @@ import { Search, Plus, Filter, MoreVertical, Download, UserCheck, Mail, Building
 import { motion, AnimatePresence } from 'framer-motion';
 import api, { getAssetUrl } from '../utils/api';
 import DeleteSecurityModal from '../components/common/DeleteSecurityModal';
-import { exportToCSV, exportToECR } from '../utils/exportUtils';
+import { exportToCSV, exportToECR, asExcelText } from '../utils/exportUtils';
 
 const InputField = ({ label, name, type = "text", placeholder, options, value, onChange, required = false, valueKey = "value", labelKey = "label" }) => (
     <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
@@ -346,7 +346,18 @@ const Employees = () => {
             account_status: 'Status',
             created_at: 'Created At'
         };
-        exportToCSV(filteredEmployees, `Employee_Directory_${new Date().toISOString().split('T')[0]}.csv`, headers);
+        // Long digit strings (account/Aadhaar/UAN...) must stay text or Excel renders them
+        // in scientific notation and eats leading zeros.
+        const rows = filteredEmployees.map(emp => ({
+            ...emp,
+            uan_number: asExcelText(emp.uan_number),
+            pan_number: asExcelText(emp.pan_number),
+            aadhaar_number: asExcelText(emp.aadhaar_number),
+            pf_number: asExcelText(emp.pf_number),
+            esi_number: asExcelText(emp.esi_number),
+            account_number: asExcelText(emp.account_number)
+        }));
+        exportToCSV(rows, `Employee_Directory_${new Date().toISOString().split('T')[0]}.csv`, headers);
         setShowExportDropdown(false);
     };
 
