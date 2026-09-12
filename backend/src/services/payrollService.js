@@ -13,6 +13,7 @@ function safeParseJson(data) {
 }
 const PDFDocument = require('pdfkit');
 const notificationService = require('./notificationService');
+const { ESIC_WAGE_CEILING } = require('../utils/statutory');
 
 const convertNumberToWords = (num) => {
     const a = [
@@ -240,7 +241,7 @@ class PayrollService {
                     const structuredGross = parseFloat(activeRevision.gross_salary)
                         || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
 
-                    if (structuredGross > 35000) {
+                    if (structuredGross > ESIC_WAGE_CEILING) {
                         eeShare = 0;
                         erShare = 0;
                     }
@@ -580,7 +581,7 @@ class PayrollService {
                     const structuredGross = parseFloat(activeRevision.gross_salary) 
                         || (parseFloat(activeRevision.basic) + (parseFloat(activeRevision.hra) || 0) + (parseFloat(activeRevision.special_allowance) || 0) + (parseFloat(activeRevision.medical_allowance) || 0));
                     
-                    if (structuredGross > 35000) {
+                    if (structuredGross > ESIC_WAGE_CEILING) {
                         eeShare = 0;
                         erShare = 0;
                     }

@@ -6,6 +6,7 @@ const tenantFilter = require('../middlewares/tenantMiddleware');
 
 const payrollController = require('../controllers/payrollController');
 const globalRulesController = require('../controllers/globalRulesController');
+const { ESIC_WAGE_CEILING } = require('../utils/statutory');
 
 router.use(authenticate, tenantFilter);
 
@@ -236,7 +237,7 @@ router.post('/salary-revision', async (req, res) => {
         const defaultErPf = isPfApp ? getShareAmount(pfRule, true, finalBasic, gross) : 0;
         let defaultEeEsic = isEsiApp ? getShareAmount(esiRule, false, finalBasic, gross) : 0;
         let defaultErEsic = isEsiApp ? getShareAmount(esiRule, true, finalBasic, gross) : 0;
-        if (gross > 35000) {
+        if (gross > ESIC_WAGE_CEILING) {
             defaultEeEsic = 0;
             defaultErEsic = 0;
         }
@@ -380,8 +381,12 @@ router.put('/salary-revision/:id', async (req, res) => {
 
         const defaultEePf = isPfApp ? getShareAmount(pfRule, false, finalBasic, gross) : 0;
         const defaultErPf = isPfApp ? getShareAmount(pfRule, true, finalBasic, gross) : 0;
-        const defaultEeEsic = isEsiApp ? getShareAmount(esiRule, false, finalBasic, gross) : 0;
-        const defaultErEsic = isEsiApp ? getShareAmount(esiRule, true, finalBasic, gross) : 0;
+        let defaultEeEsic = isEsiApp ? getShareAmount(esiRule, false, finalBasic, gross) : 0;
+        let defaultErEsic = isEsiApp ? getShareAmount(esiRule, true, finalBasic, gross) : 0;
+        if (gross > ESIC_WAGE_CEILING) {
+            defaultEeEsic = 0;
+            defaultErEsic = 0;
+        }
 
         const finalEmployeePf = (employee_pf !== undefined && employee_pf !== null) ? parseFloat(employee_pf) : defaultEePf;
         const finalEmployeeEsic = (employee_esic !== undefined && employee_esic !== null) ? parseFloat(employee_esic) : defaultEeEsic;
