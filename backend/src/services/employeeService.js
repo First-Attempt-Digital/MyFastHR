@@ -377,6 +377,46 @@ class EmployeeService {
         });
     }
 
+    // Paid off days per month (see resolvePaidOffDays in payrollService). Feature is on for a
+    // company when working_rules.paid_off_days_per_month is set; that value is the default for
+    // employees whose own value is NULL.
+    async getPaidOffDays(companyId) {
+        const rules = await db('working_rules').where({ company_id: companyId }).select('paid_off_days_per_month').first();
+        const companyDefault = rules?.paid_off_days_per_month ?? null;
+        const employees = await db('employees as e')
+            .leftJoin('departments as d', 'e.department_id', 'd.id')
+            .where({ 'e.company_id': companyId, 'e.status': 'active' })
+            .select('e.id', 'e.employee_id_number', 'e.first_name', 'e.last_name', 'e.designation',
+                'd.name as department_name', 'e.paid_off_days_per_month')
+            .orderBy('e.first_name');
+        return {
+            enabled: companyDefault !== null,
+            company_default: companyDefault === null ? null : Number(companyDefault),
+            employees: employees.map(e => ({
+                ...e,
+                paid_off_days_per_month: e.paid_off_days_per_month === null ? null : Number(e.paid_off_days_per_month),
+                effective: Number(e.paid_off_days_per_month ?? companyDefault ?? 0)
+            }))
+        };
+    }
+
+    // employeeIds = 'all' updates every active employee of the company.
+    async setPaidOffDays(companyId, employeeIds, days) {
+        const rules = await db('working_rules').where({ company_id: companyId }).select('paid_off_days_per_month').first();
+        if (rules?.paid_off_days_per_month === null || rules?.paid_off_days_per_month === undefined) {
+            throw new Error('Paid off days are not enabled for this company.');
+        }
+        const value = employeeRepository.cleanPaidOffDays(days);
+        if (value === undefined || value === null) throw new Error('Enter the number of paid off days.');
+
+        let query = db('employees').where({ company_id: companyId, status: 'active' });
+        if (employeeIds !== 'all') {
+            if (!Array.isArray(employeeIds) || employeeIds.length === 0) throw new Error('Select at least one employee.');
+            query = query.whereIn('id', employeeIds);
+        }
+        return await query.update({ paid_off_days_per_month: value });
+    }
+
     async bulkDeleteEmployees(ids, user) {
         await db.transaction(async (trx) => {
             // Find user_ids first to delete from users table

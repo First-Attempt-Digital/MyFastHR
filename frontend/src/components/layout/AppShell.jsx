@@ -1292,6 +1292,15 @@ const AppShell = ({ children }) => {
                         <span className="text-[10px] text-slate-400">Update weekend configurations</span>
                       </div>
                     </Link>
+                    {(role === 'company_admin' || role === 'super_admin') && (
+                      <Link to="/leaves/paid-days-off" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
+                        <Calendar size={16} />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold">Paid Days Off</span>
+                          <span className="text-[10px] text-slate-400">Paid absent days per month</span>
+                        </div>
+                      </Link>
+                    )}
                     <Link to="/leaves/employee-records" className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-all">
                       <Users size={16} />
                       <div className="flex flex-col">

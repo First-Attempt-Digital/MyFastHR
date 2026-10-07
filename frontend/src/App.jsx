@@ -53,6 +53,7 @@ import AttendanceMuster from './pages/leave-attendance/AttendanceMuster';
 import EmployeeRecords from './pages/leave-attendance/EmployeeRecords';
 import WeekendOverride from './pages/leave-attendance/WeekendOverride';
 import AssignScheme from './pages/leave-attendance/AssignScheme';
+import PaidDaysOff from './pages/leave-attendance/PaidDaysOff';
 import { fetchBranding, getAssetUrl } from './utils/api';
 import RegularizationView from './pages/dashboards/RegularizationView';
 import LeaveGranter from './pages/LeaveGranter';
@@ -224,6 +225,7 @@ function App() {
 
           <Route path="granter" element={<ProtectedRoute allowedRoles={exceptEmployee} noShell={true}><LeaveGranter /></ProtectedRoute>} />
           <Route path="assign-scheme" element={<ProtectedRoute allowedRoles={exceptEmployee} noShell={true}><AssignScheme /></ProtectedRoute>} />
+          <Route path="paid-days-off" element={<ProtectedRoute allowedRoles={['super_admin', 'company_admin']} noShell={true}><PaidDaysOff /></ProtectedRoute>} />
           <Route path="manual-override" element={<ProtectedRoute allowedRoles={exceptEmployee} noShell={true}><ManualOverride /></ProtectedRoute>} />
           <Route path="shift-override" element={<ProtectedRoute allowedRoles={exceptEmployee} noShell={true}><ShiftOverride /></ProtectedRoute>} />
 

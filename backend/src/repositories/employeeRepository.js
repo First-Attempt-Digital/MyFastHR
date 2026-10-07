@@ -138,7 +138,8 @@ class EmployeeRepository {
             photo: cleanString(data.photo),
             onboarding_token: cleanString(data.onboarding_token),
             onboarding_status: cleanString(data.onboarding_status),
-            onboarding_token_created_at: cleanDate(data.onboarding_token_created_at)
+            onboarding_token_created_at: cleanDate(data.onboarding_token_created_at),
+            paid_off_days_per_month: this.cleanPaidOffDays(data.paid_off_days_per_month)
         };
 
         // Remove undefined keys so Knex doesn't update them
@@ -149,6 +150,17 @@ class EmployeeRepository {
         });
 
         return result;
+    }
+
+    // Paid off days per month: undefined = leave as is, ''/null = fall back to the company default.
+    cleanPaidOffDays(val) {
+        if (val === undefined) return undefined;
+        if (val === null || val === '') return null;
+        const n = Number(val);
+        if (isNaN(n) || n < 0 || n > 31) {
+            throw new Error('Paid off days per month must be a number from 0 to 31.');
+        }
+        return n;
     }
 
     async create(data, trx = null) {

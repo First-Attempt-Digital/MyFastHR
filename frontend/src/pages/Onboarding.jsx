@@ -499,6 +499,9 @@ const Onboarding = () => {
     const [errors, setErrors] = useState({});
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [globalRules, setGlobalRules] = useState([]);
+    // Company default for paid off days per month; null = company uses leave entitlements instead
+    const [paidOffDefault, setPaidOffDefault] = useState(null);
+    const usesPaidOffDays = paidOffDefault !== null;
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     
@@ -558,6 +561,8 @@ const Onboarding = () => {
 
         // Leave Entitlements
         initial_leaves: {},
+        // Paid off days per month; '' = company default
+        paid_off_days_per_month: '',
 
         // Role settings
         role_name: 'employee'
@@ -614,7 +619,17 @@ const Onboarding = () => {
                 console.error('Failed to fetch global rules on onboarding:', err);
             }
         };
+        const fetchPaidOffDefault = async () => {
+            try {
+                const rules = await api.get('/settings/working-rules');
+                const v = rules?.paid_off_days_per_month;
+                setPaidOffDefault(v === null || v === undefined ? null : Number(v));
+            } catch (err) {
+                console.error('Failed to fetch working rules on onboarding:', err);
+            }
+        };
         fetchGlobalRules();
+        fetchPaidOffDefault();
     }, []);
 
     const fetchEmployeeToEdit = async () => {
@@ -727,6 +742,7 @@ const Onboarding = () => {
                 account_number: res.account_number || '',
                 ifsc_code: res.ifsc_code || '',
                 initial_leaves: employeeLeaves,
+                paid_off_days_per_month: res.paid_off_days_per_month ?? '',
                 role_name: res.role_name || 'employee'
             }));
         } catch (err) {
@@ -992,7 +1008,7 @@ const Onboarding = () => {
         { id: 2, title: 'EMPLOYEE POSITION', icon: Briefcase },
         { id: 3, title: 'STATUTORY INFO', icon: FileText },
         { id: 4, title: 'PAYMENT MODE', icon: CreditCard },
-        { id: 5, title: 'LEAVE ENTITLEMENT', icon: Calendar }
+        { id: 5, title: usesPaidOffDays ? 'PAID DAYS OFF' : 'LEAVE ENTITLEMENT', icon: Calendar }
     ];
 
     const validateStep = (step) => {
@@ -1023,6 +1039,9 @@ const Onboarding = () => {
                 if (!formData.account_number) newErrors.account_number = true;
                 if (!formData.ifsc_code) newErrors.ifsc_code = true;
             }
+        } else if (step === 5 && usesPaidOffDays) {
+            const v = formData.paid_off_days_per_month;
+            if (v !== '' && v != null && (isNaN(Number(v)) || Number(v) < 0 || Number(v) > 31)) newErrors.paid_off_days_per_month = true;
         } else if (step === 5) {
             // Validate that initial leaves are numeric and positive
             if (formData.initial_leaves) {
@@ -1093,6 +1112,10 @@ const Onboarding = () => {
                 contract_end_date: unformatDate(formData.contract_end_date),
                 confirmation_date: unformatDate(formData.confirmation_date)
             };
+            // Paid-off-days companies do not use leave entitlements: sending them would write
+            // leave_adjustments the company never asked for.
+            if (usesPaidOffDays) delete submissionData.initial_leaves;
+            else delete submissionData.paid_off_days_per_month;
             
             if (editId) {
                 await api.put(`/employees/${editId}`, submissionData);
@@ -1729,6 +1752,45 @@ const Onboarding = () => {
                     </div>
                 );
             case 5:
+                if (usesPaidOffDays) {
+                    const current = (formData.paid_off_days_per_month ?? '') === '' ? paidOffDefault : Number(formData.paid_off_days_per_month);
+                    const setDays = (v) => setFormData(prev => ({ ...prev, paid_off_days_per_month: v }));
+                    return (
+                        <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6 max-w-2xl">
+                            <div className="p-4 bg-indigo-50/50 border border-indigo-100/50 rounded-xl text-indigo-900 text-xs font-semibold leading-relaxed">
+                                Days per month the employee can be absent without a salary cut. Absences beyond this are deducted. Unused days do not carry over.
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Paid days off per month</label>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {[0, 2, 3, 4, 5].map(n => (
+                                        <button
+                                            key={n}
+                                            type="button"
+                                            onClick={() => setDays(n)}
+                                            className={`px-4 py-2 rounded border text-sm font-bold transition-all ${current === n ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-300 text-slate-700 hover:border-indigo-400'}`}
+                                        >
+                                            {n} days
+                                        </button>
+                                    ))}
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="31"
+                                        step="0.5"
+                                        value={formData.paid_off_days_per_month ?? ''}
+                                        onChange={(e) => setDays(e.target.value)}
+                                        placeholder={`Custom (default ${paidOffDefault})`}
+                                        className={`px-4 py-2 bg-white border rounded text-sm w-48 focus:outline-none transition-all ${errors.paid_off_days_per_month ? 'border-rose-400 bg-rose-50' : 'border-slate-300 focus:border-indigo-400'}`}
+                                    />
+                                </div>
+                                {errors.paid_off_days_per_month && (
+                                    <span className="text-[9px] font-bold text-rose-600 uppercase tracking-tight">Enter a number from 0 to 31</span>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }
                 return (
                     <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6 max-w-2xl">
                         <div className="p-4 bg-indigo-50/50 border border-indigo-100/50 rounded-xl text-indigo-900 text-xs font-semibold leading-relaxed">

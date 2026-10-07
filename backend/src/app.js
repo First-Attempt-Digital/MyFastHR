@@ -61,7 +61,7 @@ const syncDatabaseSchema = async () => {
             'present_address', 'city', 'district', 'state', 'country', 'pincode',
             'permanent_address', 'permanent_city', 'permanent_country', 'permanent_pincode',
             'department_id', 'gender', 'date_of_birth', 'resignation_date', 'office_location',
-            'applicable_statutory_rules'
+            'applicable_statutory_rules', 'paid_off_days_per_month'
         ];
 
         const missingColumns = [];
@@ -151,6 +151,8 @@ const syncDatabaseSchema = async () => {
                 if (missingColumns.includes('resignation_date')) table.date('resignation_date').nullable();
                 if (missingColumns.includes('office_location')) table.string('office_location', 100).nullable();
                 if (missingColumns.includes('applicable_statutory_rules')) table.text('applicable_statutory_rules').nullable();
+                // NULL = use the company default in working_rules.paid_off_days_per_month
+                if (missingColumns.includes('paid_off_days_per_month')) table.decimal('paid_off_days_per_month', 4, 1).nullable();
             });
 
             // Force drop unique constraint on employee_id_number to allow duplicates as requested
@@ -511,9 +513,36 @@ const syncDatabaseSchema = async () => {
                     });
                     console.log('>>> [DB-SYNC]: late_penalty_effective_date column added to working_rules table.');
                 }
+                // Paid off days: absent days per month that payroll pays instead of cutting.
+                // NULL = feature off for the company; a number = on, and the default for
+                // employees whose own employees.paid_off_days_per_month is NULL.
+                const hasPaidOffDays = await db.schema.hasColumn('working_rules', 'paid_off_days_per_month');
+                if (!hasPaidOffDays) {
+                    console.log('>>> [DB-SYNC]: Adding paid_off_days_per_month column to working_rules table...');
+                    await db.schema.alterTable('working_rules', (table) => {
+                        table.decimal('paid_off_days_per_month', 4, 1).nullable();
+                    });
+                }
             }
         } catch (e) {
             console.error('>>> [DB-SYNC-ERROR]: working_rules column sync failed:', e.message);
+        }
+
+        // 6b. Payroll rows record the paid off days applied, for the payslip
+        try {
+            if (await db.schema.hasTable('payrolls')) {
+                const hasUsed = await db.schema.hasColumn('payrolls', 'paid_off_days_used');
+                const hasEntitled = await db.schema.hasColumn('payrolls', 'paid_off_days_entitled');
+                if (!hasUsed || !hasEntitled) {
+                    console.log('>>> [DB-SYNC]: Adding paid off days columns to payrolls table...');
+                    await db.schema.alterTable('payrolls', (table) => {
+                        if (!hasUsed) table.decimal('paid_off_days_used', 4, 1).nullable();
+                        if (!hasEntitled) table.decimal('paid_off_days_entitled', 4, 1).nullable();
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: payrolls paid off days column sync failed:', e.message);
         }
 
         // 7. Ensure audit_logs table exists

@@ -133,6 +133,26 @@ class EmployeeController {
         }
     }
 
+    async getPaidOffDays(req, res) {
+        try {
+            if (!req.company_id) return res.status(400).json({ message: 'Select a company first.' });
+            res.json(await employeeService.getPaidOffDays(req.company_id));
+        } catch (err) {
+            res.status(500).json({ message: err.message });
+        }
+    }
+
+    async setPaidOffDays(req, res) {
+        try {
+            if (!req.company_id) return res.status(400).json({ message: 'Select a company first.' });
+            const { employee_ids, days } = req.body;
+            const updated = await employeeService.setPaidOffDays(req.company_id, employee_ids, days);
+            res.json({ message: `Paid off days updated for ${updated} employee(s).`, updated });
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
+
     async generateToken(req, res) {
         try {
             const token = await employeeService.generateOnboardingToken(req.params.id, req.user.company_id);

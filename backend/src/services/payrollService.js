@@ -102,6 +102,18 @@ const getPayrollPeriod = (month, year) => {
     };
 };
 
+// Paid off days: up to N absent days a month are paid instead of cut. Unused days lapse.
+// companyDefault NULL = feature off for the company (entitled null, nothing covered).
+// N is prorated for a part-month tenure and rounded down to the half day, so a mid-month
+// joiner does not get the full allowance. shortfall is the tenure days neither worked nor
+// otherwise paid; it is fractional for half days, so a half day is covered as 0.5.
+const resolvePaidOffDays = (companyDefault, employeeValue, activeDays, daysInMonth, shortfall) => {
+    if (companyDefault === null || companyDefault === undefined) return { used: 0, entitled: null };
+    const perMonth = Number(employeeValue ?? companyDefault) || 0;
+    const entitled = Math.floor(perMonth * (activeDays / daysInMonth) * 2) / 2;
+    return { used: Math.min(shortfall, entitled), entitled };
+};
+
 class PayrollService {
     getPayrollPeriod(month, year) {
         return getPayrollPeriod(month, year);
@@ -376,9 +388,6 @@ class PayrollService {
             };
         }
 
-        const paidDays = empRecord.stats.P + empRecord.stats.L + empRecord.stats.OFF + empRecord.stats.H + (empRecord.stats.PL || 0);
-        const unpaidLeaveDays = Math.max(0, tenure.activeDays - paidDays);
-
         // 5. Fetch rules
         const rules = await db('working_rules').where({ company_id: companyId }).first() || {
             max_late_allowed: 3,
@@ -386,6 +395,14 @@ class PayrollService {
             late_deduction_value: 0,
             ot_rate_multiplier: 1.0
         };
+
+        const workedOrPaidDays = empRecord.stats.P + empRecord.stats.L + empRecord.stats.OFF + empRecord.stats.H + (empRecord.stats.PL || 0);
+        const { used: paidOffDaysUsed, entitled: paidOffDaysEntitled } = resolvePaidOffDays(
+            rules.paid_off_days_per_month, emp.paid_off_days_per_month,
+            tenure.activeDays, daysInMonth, Math.max(0, tenure.activeDays - workedOrPaidDays)
+        );
+        const paidDays = workedOrPaidDays + paidOffDaysUsed;
+        const unpaidLeaveDays = Math.max(0, tenure.activeDays - paidDays);
 
         // Resolve active rules from employee scheme if available
         let activeRules = { ...rules };
@@ -644,6 +661,8 @@ class PayrollService {
             loan_emi_deduction: actualLoanEmi,
             paidDays,
             unpaidLeaveDays,
+            paidOffDaysUsed,
+            paidOffDaysEntitled,
             stats: empRecord.stats
         };
     }
@@ -756,6 +775,8 @@ class PayrollService {
                         total_deductions: comp.total_deductions,
                         unpaid_leave_deduction: parseFloat(comp.unpaid_leave_deduction).toFixed(2),
                         unpaid_leave_days: comp.unpaidLeaveDays,
+                        paid_off_days_used: comp.paidOffDaysEntitled === null ? null : comp.paidOffDaysUsed,
+                        paid_off_days_entitled: comp.paidOffDaysEntitled,
                         late_mark_deduction: parseFloat(comp.late_mark_deduction).toFixed(2),
                         late_marks_count: comp.stats.L,
                         overtime_bonus: otBonus.toFixed(2),
@@ -963,6 +984,8 @@ class PayrollService {
                 other_deductions_breakdown: comp.other_deductions_breakdown || [],
                 gratuity_share: gratuityShare,
                 unpaid_leave_deduction: comp.unpaid_leave_deduction,
+                paid_off_days_used: comp.paidOffDaysEntitled === null ? null : comp.paidOffDaysUsed,
+                paid_off_days_entitled: comp.paidOffDaysEntitled,
                 late_mark_deduction: comp.late_mark_deduction,
                 late_marks_count: comp.stats.L,
                 stats: comp.stats,
@@ -1249,6 +1272,12 @@ class PayrollService {
         doc.fillColor('#64748B').text('Joining Date:', margin + 15, infoY + 52);
         doc.fillColor('#0F172A').text(formatDisplayDate(payroll.joining_date), margin + 105, infoY + 52);
 
+        const hasPaidOffDays = payroll.paid_off_days_entitled !== null && payroll.paid_off_days_entitled !== undefined;
+        if (hasPaidOffDays) {
+            doc.fillColor('#64748B').text('Paid Days Off:', margin + 260, infoY + 52);
+            doc.fillColor('#0F172A').text(`${parseFloat(payroll.paid_off_days_used || 0)} of ${parseFloat(payroll.paid_off_days_entitled)} used`, margin + 340, infoY + 52);
+        }
+
         // 5. Earnings vs Deductions dual column table
         const tableY = infoY + boxHeight + 20;
         const colWidth = (pageWidth - (margin * 2) - 15) / 2; // Split width evenly with a 15pt gap
@@ -1286,7 +1315,8 @@ class PayrollService {
             deductionsList.push({ label: `Late Mark Cuts (${payroll.late_marks_count || 0} Lates)`, val: parseFloat(payroll.late_mark_deduction) });
         }
         if (parseFloat(payroll.unpaid_leave_deduction || 0) > 0) {
-            deductionsList.push({ label: `Unpaid Leave Deductions (${parseFloat(payroll.unpaid_leave_days || 0)} Days)`, val: parseFloat(payroll.unpaid_leave_deduction) });
+            const unpaidLabel = hasPaidOffDays ? 'Absent Day Deductions' : 'Unpaid Leave Deductions';
+            deductionsList.push({ label: `${unpaidLabel} (${parseFloat(payroll.unpaid_leave_days || 0)} Days)`, val: parseFloat(payroll.unpaid_leave_deduction) });
         }
         if (parseFloat(payroll.loan_emi_deduction || 0) > 0) {
             deductionsList.push({ label: 'Loan EMI Deduction', val: parseFloat(payroll.loan_emi_deduction) });
@@ -1636,6 +1666,8 @@ class PayrollService {
             total_deductions: comp.total_deductions,
             unpaid_leave_deduction: parseFloat(comp.unpaid_leave_deduction).toFixed(2),
             unpaid_leave_days: comp.unpaidLeaveDays,
+            paid_off_days_used: comp.paidOffDaysEntitled === null ? null : comp.paidOffDaysUsed,
+            paid_off_days_entitled: comp.paidOffDaysEntitled,
             late_mark_deduction: parseFloat(comp.late_mark_deduction).toFixed(2),
             late_marks_count: comp.stats.L,
             overtime_bonus: otBonus.toFixed(2),
@@ -1698,6 +1730,8 @@ class PayrollService {
             total_deductions: comp.total_deductions,
             unpaid_leave_deduction: parseFloat(comp.unpaid_leave_deduction).toFixed(2),
             unpaid_leave_days: comp.unpaidLeaveDays,
+            paid_off_days_used: comp.paidOffDaysEntitled === null ? null : comp.paidOffDaysUsed,
+            paid_off_days_entitled: comp.paidOffDaysEntitled,
             late_mark_deduction: parseFloat(comp.late_mark_deduction).toFixed(2),
             late_marks_count: comp.stats.L,
             overtime_bonus: otBonus.toFixed(2),
