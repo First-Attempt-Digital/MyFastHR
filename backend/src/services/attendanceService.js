@@ -1092,12 +1092,17 @@ class AttendanceService {
         const elapsedDay = todayStr.startsWith(monthPrefix) ? parseInt(todayStr.slice(8, 10), 10)
             : (todayStr < monthPrefix ? 0 : null);
 
-        const paidOffSummary = (emp, stats) => {
+        // Payroll pays a COUNT of absences, not particular days. So the cells can say which
+        // ones, the earliest whole-day absences are flagged meta.paid_off, up to the whole days
+        // used. The day letter stays A/UL: the other read screens and the readpath harness agree
+        // on letters, and this is a muster-only overlay.
+        const paidOffSummary = (emp, stats, wholeAbsentDays, meta) => {
             if (!paidOffOn) return { paid_off: null, payable_days: null };
             const tenure = resolveActiveTenure(emp.joining_date, emp.resignation_date, month, year);
             if (tenure.activeDays === 0) return { paid_off: null, payable_days: null };
             const r = computePaidDays(stats, tenure, daysInMonth,
                 rules.paid_off_days_per_month, emp.paid_off_days_per_month, elapsedDay);
+            wholeAbsentDays.slice(0, Math.floor(r.paidOffDaysUsed)).forEach(d => { meta[d].paid_off = true; });
             return {
                 paid_off: { used: r.paidOffDaysUsed, entitled: r.paidOffDaysEntitled },
                 payable_days: r.paidDays
@@ -1109,6 +1114,8 @@ class AttendanceService {
             const grid_timings = {};
             const grid_meta = {};
             const stats = { P: 0, L: 0, A: 0, PL: 0, UL: 0, OFF: 0, H: 0 };
+            // Whole-day absences in date order (A, or a full-day UL), for the paid-days-off overlay.
+            const wholeAbsentDays = [];
 
             // Resolve employee specific weekoffs from scheme if assigned
             const empWeekoffs = emp.scheme_weekoffs
@@ -1176,6 +1183,7 @@ class AttendanceService {
                 }
 
                 let status = '-'; // Default unknown
+                let dayAmount = 1;
 
                 if (dayLogs.length > 0 || dayRegularization || dayEarlyOut) {
                     // Shared with the history sheet and the day-detail drawer - see resolveDayStatus.
@@ -1202,6 +1210,7 @@ class AttendanceService {
                         now
                     });
                     status = noLog.status;
+                    dayAmount = noLog.amount ?? 1;
                     bumpDayStats(stats, status, { amount: noLog.amount });
                 }
                 let in1 = null, out1 = null, in2 = null, out2 = null;
@@ -1257,6 +1266,7 @@ class AttendanceService {
                     }
                 }
                 grid[d] = status;
+                if (status === 'A' || (status === 'UL' && dayAmount === 1)) wholeAbsentDays.push(d);
                 grid_timings[d] = { in1, out1, in2, out2 };
                 grid_meta[d] = {
                     is_override: dayLogs.some(a => a.punch_source === 'manual' || a.punch_source === 'manual_override'),
@@ -1284,7 +1294,7 @@ class AttendanceService {
                 timings: grid_timings,
                 meta: grid_meta,
                 stats,
-                ...paidOffSummary(emp, stats)
+                ...paidOffSummary(emp, stats, wholeAbsentDays, grid_meta)
             };
         });
 

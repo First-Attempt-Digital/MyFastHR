@@ -191,7 +191,8 @@ const AttendanceMuster = () => {
             employee: emp,
             date: formattedDate,
             day,
-            status: emp.days[day] || '-'
+            status: emp.days[day] || '-',
+            paidOff: !!emp.meta?.[day]?.paid_off
         });
         setModalLoading(true);
         setModalError(null);
@@ -312,7 +313,7 @@ const AttendanceMuster = () => {
                 location: emp.location
             };
             for (let d = 1; d <= totalDays; d++) {
-                const dayStatus = emp.days[d] || '-';
+                const dayStatus = emp.meta?.[d]?.paid_off ? 'PDO' : (emp.days[d] || '-');
                 const dayTimings = emp.timings?.[d] || {};
                 
                 const formatCSVTime = (dateTimeStr) => {
@@ -617,6 +618,8 @@ const AttendanceMuster = () => {
     // Grid Cell Styling configuration
     const getStatusStyle = (status) => {
         switch (status) {
+            case 'PDO':
+                return 'bg-violet-50 text-violet-600 border border-violet-200/60 font-black';
             case 'P':
                 return 'bg-emerald-50 text-emerald-600 border border-emerald-200/60 font-black';
             case 'L':
@@ -915,7 +918,7 @@ const AttendanceMuster = () => {
                                     { label: 'PL (Paid Leave)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
                                     { label: 'UL (Unpaid Leave)', style: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-200' },
                                     ...(paidOffOn ? [
-                                        { label: 'PDO (Absences Paid as Days Off, used/allowed)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
+                                        { label: 'PDO (Absent, Paid as Day Off)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
                                         { label: 'PAY (Payable Days)', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
                                     ] : []),
                                 ].map((item, i) => (
@@ -1051,6 +1054,9 @@ const AttendanceMuster = () => {
                                                 {Array.from({ length: totalDays }).map((_, i) => {
                                                     const day = i + 1;
                                                     const status = emp.days[day] || '-';
+                                                    // An absence covered by paid days off: still A underneath, shown as PDO.
+                                                    const paidOff = !!emp.meta?.[day]?.paid_off;
+                                                    const cellLabel = paidOff ? 'PDO' : status;
                                                     const isWeekend = isDayWeekend(day);
                                                     return (
                                                         <td 
@@ -1063,8 +1069,11 @@ const AttendanceMuster = () => {
                                                                 isWeekend ? 'bg-slate-50/20' : 'bg-transparent'
                                                             }`}
                                                         >
-                                                            <div className={`w-6.5 h-6.5 mx-auto rounded-full flex items-center justify-center text-[9px] transition-all hover:scale-110 border shadow-sm ${getStatusStyle(status)}`}>
-                                                                {status}
+                                                            <div
+                                                                className={`w-6.5 h-6.5 mx-auto rounded-full flex items-center justify-center ${paidOff ? 'text-[7px]' : 'text-[9px]'} transition-all hover:scale-110 border shadow-sm ${getStatusStyle(cellLabel)}`}
+                                                                title={paidOff ? 'Absent - paid as a day off' : undefined}
+                                                            >
+                                                                {cellLabel}
                                                             </div>
                                                             {emp.meta?.[day]?.is_override && (
                                                                 <div 
@@ -1468,9 +1477,16 @@ const AttendanceMuster = () => {
                                             {new Date(selectedCell.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                                         </span>
                                     </div>
-                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-xs ${getStatusStyle(selectedCell.status)}`}>
-                                        {getFullStatusName(selectedCell.status)}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-xs ${getStatusStyle(selectedCell.status)}`}>
+                                            {getFullStatusName(selectedCell.status)}
+                                        </span>
+                                        {selectedCell.paidOff && (
+                                            <span className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-xs ${getStatusStyle('PDO')}`}>
+                                                Paid as day off
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {modalLoading ? (
