@@ -327,7 +327,9 @@ class PayrollService {
 
         const { paidOffDaysUsed, paidOffDaysEntitled, paidDays } = computePaidDays(
             empRecord.stats, tenure, daysInMonth,
-            rules.paid_off_days_per_month, emp.paid_off_days_per_month
+            rules.paid_off_days_per_month, emp.paid_off_days_per_month,
+            // Absences an admin marked unpaid stay cut; getMatrix counts them per row.
+            null, empRecord.paid_off?.unpaid_marked || 0
         );
         const unpaidLeaveDays = Math.max(0, tenure.activeDays - paidDays);
 

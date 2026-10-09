@@ -545,6 +545,30 @@ const syncDatabaseSchema = async () => {
             console.error('>>> [DB-SYNC-ERROR]: payrolls paid off days column sync failed:', e.message);
         }
 
+        // 6c. Admin's per-day choice on an absence under paid days off: 'paid' forces it to be
+        // one of the paid days, 'unpaid' keeps it cut. No row = automatic (earliest absences).
+        try {
+            if (!(await db.schema.hasTable('attendance_paid_off_overrides'))) {
+                console.log('>>> [DB-SYNC]: Creating attendance_paid_off_overrides table...');
+                await db.schema.createTable('attendance_paid_off_overrides', (table) => {
+                    table.increments('id').primary();
+                    table.integer('company_id').notNullable();
+                    table.integer('employee_id').notNullable();
+                    // YYYY-MM-DD as a string: a DATE column comes back as a JS Date at server-local
+                    // midnight, which is a different IST day on a UTC server.
+                    table.string('date', 10).notNullable();
+                    table.enu('mode', ['paid', 'unpaid']).notNullable();
+                    table.string('set_by_name');
+                    table.timestamp('created_at').defaultTo(db.fn.now());
+                    table.timestamp('updated_at').defaultTo(db.fn.now());
+                    table.unique(['employee_id', 'date']);
+                    table.index(['company_id', 'date']);
+                });
+            }
+        } catch (e) {
+            console.error('>>> [DB-SYNC-ERROR]: attendance_paid_off_overrides sync failed:', e.message);
+        }
+
         // 7. Ensure audit_logs table exists
         // Written by 5 sites in adminController (impersonation, backup create/restore,
         // SQL sandbox, system freeze) and read by getAuditLogs, but never part of this

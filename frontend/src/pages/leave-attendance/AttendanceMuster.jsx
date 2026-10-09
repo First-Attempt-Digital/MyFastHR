@@ -1075,10 +1075,10 @@ const AttendanceMuster = () => {
                                                             >
                                                                 {cellLabel}
                                                             </div>
-                                                            {emp.meta?.[day]?.is_override && (
+                                                            {(emp.meta?.[day]?.is_override || emp.meta?.[day]?.paid_off_mode) && (
                                                                 <div 
                                                                     className="absolute top-0 right-0 w-0 h-0 border-t-[6px] border-t-indigo-600 border-l-[6px] border-l-transparent" 
-                                                                    title="Manual Override"
+                                                                    title={emp.meta?.[day]?.paid_off_mode ? `Paid day off set by admin: ${emp.meta[day].paid_off_mode}` : 'Manual Override'}
                                                                 />
                                                             )}
                                                             {emp.meta?.[day]?.is_grace && (

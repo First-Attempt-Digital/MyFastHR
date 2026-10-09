@@ -93,14 +93,17 @@ const resolvePaidOffDays = (companyDefault, employeeValue, activeDays, daysInMon
 // not happened, so they are not a shortfall yet and must not eat the paid-days-off allowance.
 // Payroll passes nothing and gets the whole tenure, exactly as before. The entitlement is
 // always the full month's - only what has been used so far is capped.
-const computePaidDays = (stats, tenure, daysInMonth, companyDefault, employeeValue, elapsedDay = null) => {
+//
+// unpaidMarked is the number of whole-day absences an admin has marked 'unpaid' (see
+// pickPaidOffDays): those stay cut, so they are taken out of what the allowance may cover.
+const computePaidDays = (stats, tenure, daysInMonth, companyDefault, employeeValue, elapsedDay = null, unpaidMarked = 0) => {
     const workedOrPaidDays = stats.P + stats.L + stats.OFF + stats.H + (stats.PL || 0);
     const daysSoFar = elapsedDay === null
         ? tenure.activeDays
         : Math.max(0, Math.min(tenure.endDay, elapsedDay) - tenure.startDay + 1);
     const { used: paidOffDaysUsed, entitled: paidOffDaysEntitled } = resolvePaidOffDays(
         companyDefault, employeeValue,
-        tenure.activeDays, daysInMonth, Math.max(0, daysSoFar - workedOrPaidDays)
+        tenure.activeDays, daysInMonth, Math.max(0, daysSoFar - workedOrPaidDays - unpaidMarked)
     );
     return {
         workedOrPaidDays,
@@ -110,7 +113,19 @@ const computePaidDays = (stats, tenure, daysInMonth, companyDefault, employeeVal
     };
 };
 
+// Which whole-day absences the used allowance lands on. Payroll pays a count, not dates, so this
+// only decides what the screens label PDO: days an admin marked 'paid' first, then the earliest
+// unmarked ones. Days marked 'unpaid' are never picked. wholeAbsentDays is in date order;
+// modeByDay maps day-of-month -> 'paid' | 'unpaid'.
+const pickPaidOffDays = (wholeAbsentDays, modeByDay, paidOffDaysUsed) => {
+    const slots = Math.floor(paidOffDaysUsed);
+    const marked = wholeAbsentDays.filter(d => modeByDay[d] === 'paid');
+    const auto = wholeAbsentDays.filter(d => !modeByDay[d]);
+    return [...marked, ...auto].slice(0, slots).sort((a, b) => a - b);
+};
+
 module.exports = {
+    pickPaidOffDays,
     toLocalYMD,
     getPayrollPeriod,
     resolveActiveTenure,

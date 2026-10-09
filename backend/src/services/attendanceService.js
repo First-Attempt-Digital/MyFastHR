@@ -30,7 +30,7 @@ const {
     safeFormatTime,
     istDateStr
 } = require('./attendance/time');
-const { resolveActiveTenure, computePaidDays } = require('./payroll/paidDays');
+const { resolveActiveTenure, computePaidDays, pickPaidOffDays } = require('./payroll/paidDays');
 
 const {
     isNightShift,
@@ -1092,19 +1092,39 @@ class AttendanceService {
         const elapsedDay = todayStr.startsWith(monthPrefix) ? parseInt(todayStr.slice(8, 10), 10)
             : (todayStr < monthPrefix ? 0 : null);
 
+        // An admin's per-day 'paid' / 'unpaid' choice on an absence, keyed employee -> day.
+        const paidOffModes = {};
+        if (paidOffOn && employeeIds.length > 0) {
+            const marks = await db('attendance_paid_off_overrides')
+                .whereIn('employee_id', employeeIds)
+                .where('date', 'like', `${monthPrefix}-%`)
+                .select('employee_id', 'date', 'mode');
+            marks.forEach(m => {
+                (paidOffModes[m.employee_id] = paidOffModes[m.employee_id] || {})[parseInt(m.date.slice(8, 10), 10)] = m.mode;
+            });
+        }
+
         // Payroll pays a COUNT of absences, not particular days. So the cells can say which
-        // ones, the earliest whole-day absences are flagged meta.paid_off, up to the whole days
-        // used. The day letter stays A/UL: the other read screens and the readpath harness agree
-        // on letters, and this is a muster-only overlay.
+        // ones, whole-day absences are flagged meta.paid_off up to the whole days used: the ones
+        // an admin marked 'paid' first, then the earliest unmarked (pickPaidOffDays). Absences
+        // marked 'unpaid' are taken out of the count, and payroll reads unpaid_marked off this
+        // row so it cuts them too. The day letter stays A/UL: the other read screens and the
+        // readpath harness agree on letters, and this is an overlay.
         const paidOffSummary = (emp, stats, wholeAbsentDays, meta) => {
             if (!paidOffOn) return { paid_off: null, payable_days: null };
             const tenure = resolveActiveTenure(emp.joining_date, emp.resignation_date, month, year);
             if (tenure.activeDays === 0) return { paid_off: null, payable_days: null };
+            const modes = paidOffModes[emp.id] || {};
+            const unpaidMarked = wholeAbsentDays.filter(d => modes[d] === 'unpaid').length;
             const r = computePaidDays(stats, tenure, daysInMonth,
-                rules.paid_off_days_per_month, emp.paid_off_days_per_month, elapsedDay);
-            wholeAbsentDays.slice(0, Math.floor(r.paidOffDaysUsed)).forEach(d => { meta[d].paid_off = true; });
+                rules.paid_off_days_per_month, emp.paid_off_days_per_month, elapsedDay, unpaidMarked);
+            wholeAbsentDays.forEach(d => {
+                meta[d].paid_off_eligible = true;
+                if (modes[d]) meta[d].paid_off_mode = modes[d];
+            });
+            pickPaidOffDays(wholeAbsentDays, modes, r.paidOffDaysUsed).forEach(d => { meta[d].paid_off = true; });
             return {
-                paid_off: { used: r.paidOffDaysUsed, entitled: r.paidOffDaysEntitled },
+                paid_off: { used: r.paidOffDaysUsed, entitled: r.paidOffDaysEntitled, unpaid_marked: unpaidMarked },
                 payable_days: r.paidDays
             };
         };
@@ -2034,6 +2054,85 @@ class AttendanceService {
         });
 
         return { message: 'Attendance updated successfully' };
+    }
+
+    // Paid days off per day, as getMatrix resolves it, for one employee over a date range (the
+    // Manual Override ledger). Read off the same matrix row the muster and payroll use, so this
+    // screen cannot disagree with them about which absences are paid.
+    async getPaidOffDays(companyId, employeeId, from, to) {
+        const days = {};
+        const months = {};
+        let enabled = false;
+        const [fy, fm] = from.split('-').map(Number);
+        const [ty, tm] = to.split('-').map(Number);
+        for (let y = fy, m = fm; y < ty || (y === ty && m <= tm); m === 12 ? (y++, m = 1) : m++) {
+            const { matrix } = await this.getMatrix({ company_id: companyId, role_name: 'employee', employee_id: employeeId }, m, y);
+            const row = matrix[0];
+            if (!row?.paid_off) continue;
+            enabled = true;
+            const prefix = `${y}-${String(m).padStart(2, '0')}`;
+            months[prefix] = row.paid_off;
+            Object.entries(row.meta).forEach(([d, meta]) => {
+                if (!meta.paid_off_eligible) return;
+                const date = `${prefix}-${String(d).padStart(2, '0')}`;
+                if (date < from || date > to) return;
+                days[date] = { paid_off: !!meta.paid_off, mode: meta.paid_off_mode || 'auto' };
+            });
+        }
+        return { enabled, days, months };
+    }
+
+    // An admin's choice for one absence: 'paid' (this day is one of the paid days off), 'unpaid'
+    // (this day stays cut) or 'auto' (earliest absences, the default). Refused once the month's
+    // payroll is locked, on a day that is not a whole-day absence, and when it would mark more
+    // days 'paid' than the month allows.
+    async setPaidOffDay(user, companyId, data) {
+        const { employee_id, date, mode } = data;
+        if (!employee_id || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('employee_id and date (YYYY-MM-DD) are required');
+        if (!['paid', 'unpaid', 'auto'].includes(mode)) throw new Error("mode must be 'paid', 'unpaid' or 'auto'");
+        const [y, m, d] = date.split('-').map(Number);
+
+        const employee = await db('employees').where({ id: employee_id, company_id: companyId }).first();
+        if (!employee) throw new Error('Employee not found');
+
+        const controls = await db('payroll_controls').where({ company_id: companyId, month: m, year: y }).first();
+        if (controls?.payroll_locked) throw new Error(`Payroll is locked for ${m}/${y}. Unlock it to change paid days off.`);
+
+        const { matrix } = await this.getMatrix({ company_id: companyId, role_name: 'employee', employee_id }, m, y);
+        const row = matrix[0];
+        if (!row?.paid_off) throw new Error('Paid days off are not enabled for this employee this month');
+        if (!row.meta?.[d]?.paid_off_eligible) throw new Error('Only a whole-day absence can be marked as a paid day off or unpaid');
+
+        const current = row.meta[d].paid_off_mode || 'auto';
+        if (mode === 'paid' && current !== 'paid') {
+            const alreadyPaid = Object.values(row.meta).filter(x => x.paid_off_mode === 'paid').length;
+            const allowed = Math.floor(row.paid_off.entitled);
+            if (alreadyPaid + 1 > allowed) {
+                throw new Error(`Only ${allowed} paid day(s) off this month, and ${alreadyPaid} already marked. Set one back to Auto or Unpaid first.`);
+            }
+        }
+        if (mode === current) return { message: 'No change' };
+
+        const label = (x) => x === 'paid' ? 'A (paid day off)' : x === 'unpaid' ? 'A (unpaid)' : `A (auto${row.meta[d].paid_off ? ', paid day off' : ''})`;
+
+        await db.transaction(async (trx) => {
+            if (mode === 'auto') {
+                await trx('attendance_paid_off_overrides').where({ employee_id, date }).del();
+            } else {
+                const existing = await trx('attendance_paid_off_overrides').where({ employee_id, date }).first();
+                const setBy = user?.full_name || null;
+                if (existing) {
+                    await trx('attendance_paid_off_overrides').where({ id: existing.id })
+                        .update({ mode, set_by_name: setBy, updated_at: db.fn.now() });
+                } else {
+                    await trx('attendance_paid_off_overrides')
+                        .insert({ company_id: companyId, employee_id, date, mode, set_by_name: setBy });
+                }
+            }
+            await this.logOverride(trx, user, employee_id, companyId, date, label(current), mode === 'auto' ? 'A (auto)' : label(mode), 'Paid Day Off');
+        });
+
+        return { message: 'Paid day off updated' };
     }
 
     async logOverride(trx, user, employeeId, companyId, attendanceDate, prevStatus, newStatus, type) {

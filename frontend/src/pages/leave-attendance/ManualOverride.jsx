@@ -517,6 +517,9 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
     const [selectedEmp, setSelectedEmp] = useState(null);
     const [dateRange, setDateRange] = useState({ from: '', to: '' });
     const [attendance, setAttendance] = useState([]);
+    // Paid days off per absence (admin-only; it changes pay). days: date -> { paid_off, mode }.
+    const isPayAdmin = ['company_admin', 'super_admin'].includes(localStorage.getItem('user_role'));
+    const [paidOff, setPaidOff] = useState({ enabled: false, days: {}, months: {} });
     const [employeesData, setEmployeesData] = useState([]);
     const [selectedOutlet, setSelectedOutlet] = useState('all');
     const [selectedDept, setSelectedDept] = useState('all');
@@ -671,6 +674,38 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
             setAttendance(res || []);
         } catch (err) {
             setError(err.message || 'Failed to load employee history');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchPaidOff = async () => {
+        if (!isPayAdmin || !selectedEmp) return;
+        try {
+            const res = await api.get('/attendance/paid-off-days', {
+                params: { employee_id: selectedEmp.id, from: dateRange.from, to: dateRange.to }
+            });
+            setPaidOff(res || { enabled: false, days: {}, months: {} });
+        } catch {
+            setPaidOff({ enabled: false, days: {}, months: {} });
+        }
+    };
+
+    // The ledger and the paid-days-off overlay load together: every time the ledger reloads
+    // (Show, or after a status change that can turn an absence into a present day).
+    useEffect(() => {
+        if (attendance.length > 0) fetchPaidOff();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [attendance]);
+
+    const updatePaidOff = async (date, mode) => {
+        try {
+            setLoading(true);
+            await api.post('/attendance/paid-off-day', { employee_id: selectedEmp.id, date, mode });
+            setSuccess(true);
+            await fetchPaidOff();
+        } catch (err) {
+            setError(err.message || 'Failed to update paid day off');
         } finally {
             setLoading(false);
         }
@@ -876,8 +911,26 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" /> A = Absent
                         </span>
+                        {paidOff.enabled && (
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-violet-500" /> PDO = Paid Day Off
+                            </span>
+                        )}
                     </div>
                 </div>
+                {paidOff.enabled && Object.keys(paidOff.months).length > 0 && (
+                    <div className="px-6 py-3 border-b border-slate-100 bg-violet-50/40 flex flex-wrap items-center gap-x-6 gap-y-1">
+                        {Object.entries(paidOff.months).map(([ym, po]) => (
+                            <span key={ym} className="text-[10px] font-black text-violet-700 uppercase tracking-wider">
+                                Paid days off {ym}: {po.used} of {po.entitled} used
+                                {po.unpaid_marked > 0 && <span className="text-slate-500"> · {po.unpaid_marked} marked unpaid</span>}
+                            </span>
+                        ))}
+                        <span className="text-[9px] font-bold text-slate-500">
+                            Auto pays the earliest absences. Use Paid Day Off to choose which ones, or keep one cut.
+                        </span>
+                    </div>
+                )}
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50/50">
@@ -890,12 +943,15 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Session 1</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Session 2</th>
                                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
+                                {paidOff.enabled && (
+                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Paid Day Off</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {attendance.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-20 text-center">
+                                    <td colSpan={paidOff.enabled ? 9 : 8} className="px-6 py-20 text-center">
                                         <Info size={32} className="mx-auto text-slate-200 mb-3" />
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select an employee and dates to view ledger</p>
                                     </td>
@@ -913,6 +969,11 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                                             }`}>
                                                 {row.status}
                                             </span>
+                                            {paidOff.days[row.date]?.paid_off && (
+                                                <span className="ml-1 inline-flex px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-violet-50 text-violet-600">
+                                                    PDO
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-[11px] font-medium text-slate-500">{row.first_in || '--:--'}</td>
                                         <td className="px-6 py-4 text-[11px] font-medium text-slate-500">{row.last_out || '--:--'}</td>
@@ -938,6 +999,23 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
                                                 )}
                                             </select>
                                         </td>
+                                        {paidOff.enabled && (
+                                            <td className="px-6 py-4 text-right">
+                                                {paidOff.days[row.date] ? (
+                                                    <select
+                                                        value={paidOff.days[row.date].mode}
+                                                        onChange={(e) => updatePaidOff(row.date, e.target.value)}
+                                                        className="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-2 py-1 text-[9px] font-black uppercase outline-none focus:border-violet-400"
+                                                    >
+                                                        <option value="auto">Auto{paidOff.days[row.date].mode === 'auto' ? (paidOff.days[row.date].paid_off ? ' (paid)' : ' (cut)') : ''}</option>
+                                                        <option value="paid">Paid day off</option>
+                                                        <option value="unpaid">Unpaid</option>
+                                                    </select>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-300">-</span>
+                                                )}
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             )}

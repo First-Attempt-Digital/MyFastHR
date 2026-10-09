@@ -1,7 +1,7 @@
 const express = require('express');
 const attendanceService = require('../services/attendanceService');
 const router = express.Router();
-const { hasPermission } = require('../middlewares/authMiddleware');
+const { hasPermission, authorize } = require('../middlewares/authMiddleware');
 
 // Shift Management
 router.get('/shift-list', async (req, res) => {
@@ -197,6 +197,30 @@ router.post('/manual-update', hasPermission(['approve_attendance']), async (req,
     try {
         const result = await attendanceService.manualUpdateAttendance(req.user, req.company_id, req.body);
         res.json(result);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Paid days off per absence. Admin-only: it changes pay, and managers who hold
+// approve_attendance for the rest of Manual Override must not move salary.
+router.get('/paid-off-days', authorize(['company_admin', 'super_admin']), async (req, res) => {
+    try {
+        const { employee_id, from, to } = req.query;
+        if (!req.company_id) throw new Error('Select a company first');
+        if (!employee_id || !/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '') || from > to) {
+            throw new Error('employee_id, from and to (YYYY-MM-DD) are required');
+        }
+        res.json(await attendanceService.getPaidOffDays(req.company_id, parseInt(employee_id, 10), from, to));
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+router.post('/paid-off-day', authorize(['company_admin', 'super_admin']), async (req, res) => {
+    try {
+        if (!req.company_id) throw new Error('Select a company first');
+        res.json(await attendanceService.setPaidOffDay(req.user, req.company_id, req.body));
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
