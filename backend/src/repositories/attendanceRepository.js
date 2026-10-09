@@ -204,7 +204,8 @@ class AttendanceRepository {
                 'attendance_schemes.weekoffs as scheme_weekoffs',
                 'shifts.terminate_hour as terminate_hour',
                 'employees.joining_date',
-                'employees.resignation_date'
+                'employees.resignation_date',
+                'employees.paid_off_days_per_month'
             );
         const employeeIds = employees.map(e => e.id);
 

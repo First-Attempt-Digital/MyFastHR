@@ -30,6 +30,7 @@ const {
     safeFormatTime,
     istDateStr
 } = require('./attendance/time');
+const { resolveActiveTenure, computePaidDays } = require('./payroll/paidDays');
 
 const {
     isNightShift,
@@ -1083,6 +1084,26 @@ class AttendanceService {
             });
         }
 
+        // Paid days off (working_rules.paid_off_days_per_month, NULL = off) are a monthly pay rule,
+        // so day cells stay A; the row carries the same used/payable figures the payslip will.
+        // In the running month only days up to today count against the allowance.
+        const paidOffOn = rules.paid_off_days_per_month !== null && rules.paid_off_days_per_month !== undefined;
+        const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+        const elapsedDay = todayStr.startsWith(monthPrefix) ? parseInt(todayStr.slice(8, 10), 10)
+            : (todayStr < monthPrefix ? 0 : null);
+
+        const paidOffSummary = (emp, stats) => {
+            if (!paidOffOn) return { paid_off: null, payable_days: null };
+            const tenure = resolveActiveTenure(emp.joining_date, emp.resignation_date, month, year);
+            if (tenure.activeDays === 0) return { paid_off: null, payable_days: null };
+            const r = computePaidDays(stats, tenure, daysInMonth,
+                rules.paid_off_days_per_month, emp.paid_off_days_per_month, elapsedDay);
+            return {
+                paid_off: { used: r.paidOffDaysUsed, entitled: r.paidOffDaysEntitled },
+                payable_days: r.paidDays
+            };
+        };
+
         const matrix = raw.employees.map(emp => {
             const grid = {};
             const grid_timings = {};
@@ -1262,7 +1283,8 @@ class AttendanceService {
                 days: grid,
                 timings: grid_timings,
                 meta: grid_meta,
-                stats
+                stats,
+                ...paidOffSummary(emp, stats)
             };
         });
 

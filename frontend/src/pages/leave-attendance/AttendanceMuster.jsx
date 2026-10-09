@@ -147,6 +147,8 @@ const AttendanceMuster = () => {
     const [selectedDesignation, setSelectedDesignation] = useState('all');
     const [selectedShift, setSelectedShift] = useState('all');
     const [matrix, setMatrix] = useState([]);
+    // Paid days off is on for the company when the backend sends a paid_off block on any row.
+    const paidOffOn = matrix.some(emp => emp.paid_off);
     const [totalDays, setTotalDays] = useState(30);
     const [loading, setLoading] = useState(true);
     const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -338,6 +340,11 @@ const AttendanceMuster = () => {
             row.total_late = emp.stats?.L || 0;
             row.total_absent = emp.stats?.A || 0;
             row.total_off = emp.stats?.OFF || 0;
+            if (paidOffOn) {
+                row.paid_off_used = emp.paid_off?.used ?? '';
+                row.paid_off_entitled = emp.paid_off?.entitled ?? '';
+                row.payable_days = emp.payable_days ?? '';
+            }
             return row;
         });
 
@@ -358,6 +365,11 @@ const AttendanceMuster = () => {
         headers.total_late = 'Total Late (L)';
         headers.total_absent = 'Total Absent (A)';
         headers.total_off = 'Total Off (OFF)';
+        if (paidOffOn) {
+            headers.paid_off_used = 'Paid Days Off Used';
+            headers.paid_off_entitled = 'Paid Days Off Entitled';
+            headers.payable_days = 'Payable Days';
+        }
 
         exportToCSV(dataToExport, `Attendance_Muster_${selectedMonth}_${selectedYear}.csv`, headers);
     };
@@ -902,6 +914,10 @@ const AttendanceMuster = () => {
                                     { label: 'H (Holiday)', style: 'bg-sky-50 text-sky-600 border-sky-200' },
                                     { label: 'PL (Paid Leave)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
                                     { label: 'UL (Unpaid Leave)', style: 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-200' },
+                                    ...(paidOffOn ? [
+                                        { label: 'PDO (Absences Paid as Days Off, used/allowed)', style: 'bg-violet-50 text-violet-600 border-violet-200' },
+                                        { label: 'PAY (Payable Days)', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                                    ] : []),
                                 ].map((item, i) => (
                                     <div key={i} className={`px-2 py-0.5 rounded-lg border text-[8.5px] font-extrabold tracking-tight ${item.style}`}>
                                         {item.label}
@@ -995,7 +1011,13 @@ const AttendanceMuster = () => {
                                             <th className="border-r border-slate-200 p-2 text-center w-10 text-[9px] font-black text-emerald-600 uppercase tracking-tight">P</th>
                                             <th className="border-r border-slate-200 p-2 text-center w-10 text-[9px] font-black text-amber-600 uppercase tracking-tight">L</th>
                                             <th className="border-r border-slate-200 p-2 text-center w-10 text-[9px] font-black text-rose-600 uppercase tracking-tight">A</th>
-                                            <th className="p-2 text-center w-10 text-[9px] font-black text-indigo-600 uppercase tracking-tight">OFF</th>
+                                            <th className={`${paidOffOn ? 'border-r border-slate-200 ' : ''}p-2 text-center w-10 text-[9px] font-black text-indigo-600 uppercase tracking-tight`}>OFF</th>
+                                            {paidOffOn && (
+                                                <>
+                                                    <th className="border-r border-slate-200 p-2 text-center w-12 text-[9px] font-black text-violet-600 uppercase tracking-tight" title="Absences paid as days off: used / allowed this month">PDO</th>
+                                                    <th className="p-2 text-center w-10 text-[9px] font-black text-emerald-700 uppercase tracking-tight" title="Days payroll will pay for">PAY</th>
+                                                </>
+                                            )}
                                         </tr>
                                     </thead>
 
@@ -1070,9 +1092,19 @@ const AttendanceMuster = () => {
                                                 <td className="border-r border-slate-200/60 p-1.5 text-center font-black text-[10px] text-rose-600 w-10 bg-rose-50/5">
                                                     {emp.stats.A || 0}
                                                 </td>
-                                                <td className="p-1.5 text-center font-black text-[10px] text-slate-500 w-10 bg-slate-50/20">
+                                                <td className={`${paidOffOn ? 'border-r border-slate-200/60 ' : ''}p-1.5 text-center font-black text-[10px] text-slate-500 w-10 bg-slate-50/20`}>
                                                     {emp.stats.OFF || 0}
                                                 </td>
+                                                {paidOffOn && (
+                                                    <>
+                                                        <td className="border-r border-slate-200/60 p-1.5 text-center font-black text-[10px] text-violet-600 w-12 bg-violet-50/5">
+                                                            {emp.paid_off ? `${emp.paid_off.used}/${emp.paid_off.entitled}` : '-'}
+                                                        </td>
+                                                        <td className="p-1.5 text-center font-black text-[10px] text-emerald-700 w-10 bg-emerald-50/5">
+                                                            {emp.payable_days ?? '-'}
+                                                        </td>
+                                                    </>
+                                                )}
                                             </tr>
                                         ))}
                                     </tbody>
@@ -2108,6 +2140,18 @@ const AttendanceMuster = () => {
                                             <span className="text-[9px] font-black text-slate-400 block uppercase">Weekly Offs</span>
                                             <span className="text-lg font-black text-slate-500 mt-1 block">{selectedEmployee.stats.OFF || 0}</span>
                                         </div>
+                                        {selectedEmployee.paid_off && (
+                                            <>
+                                                <div className="bg-white border border-slate-100 rounded-xl p-3 text-center">
+                                                    <span className="text-[9px] font-black text-slate-400 block uppercase">Paid Days Off</span>
+                                                    <span className="text-lg font-black text-violet-600 mt-1 block">{selectedEmployee.paid_off.used} of {selectedEmployee.paid_off.entitled} used</span>
+                                                </div>
+                                                <div className="bg-white border border-slate-100 rounded-xl p-3 text-center">
+                                                    <span className="text-[9px] font-black text-slate-400 block uppercase">Payable Days</span>
+                                                    <span className="text-lg font-black text-emerald-700 mt-1 block">{selectedEmployee.payable_days}</span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 

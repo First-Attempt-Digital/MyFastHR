@@ -66,53 +66,12 @@ const isRuleApplicable = (emp, rule) => {
     return true; // default to true for other rules if not configured
 };
 
-// Normalise any DB date value (Date object or string) to a YYYY-MM-DD calendar
-// day in IST, so date comparisons never drift across a timezone boundary.
-const toLocalYMD = (dateVal) => {
-    if (!dateVal) return null;
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' });
-};
-
-// The payroll time period for a month is always the complete calendar month:
-// the 1st day through the last day. The last day is derived dynamically —
-// `new Date(year, month, 0)` is day zero of the *next* month, i.e. the last day
-// of this one — so Feb resolves to 28 or 29 depending on the year, and no data
-// from the following month can ever fall inside the range.
-const getPayrollPeriod = (month, year) => {
-    const m = parseInt(month, 10);
-    const y = parseInt(year, 10);
-    // Fail loudly here rather than letting NaN propagate into salary/loan math —
-    // this is the single choke point for period resolution across payroll.
-    if (isNaN(m) || m < 1 || m > 12) {
-        throw new Error(`Invalid payroll month: ${month}. Expected 1-12.`);
-    }
-    if (isNaN(y) || y < 1970 || y > 9999) {
-        throw new Error(`Invalid payroll year: ${year}.`);
-    }
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const mm = String(m).padStart(2, '0');
-    return {
-        month: m,
-        year: y,
-        daysInMonth,
-        startDate: `${y}-${mm}-01`,
-        endDate: `${y}-${mm}-${String(daysInMonth).padStart(2, '0')}`
-    };
-};
-
-// Paid off days: up to N absent days a month are paid instead of cut. Unused days lapse.
-// companyDefault NULL = feature off for the company (entitled null, nothing covered).
-// N is prorated for a part-month tenure and rounded down to the half day, so a mid-month
-// joiner does not get the full allowance. shortfall is the tenure days neither worked nor
-// otherwise paid; it is fractional for half days, so a half day is covered as 0.5.
-const resolvePaidOffDays = (companyDefault, employeeValue, activeDays, daysInMonth, shortfall) => {
-    if (companyDefault === null || companyDefault === undefined) return { used: 0, entitled: null };
-    const perMonth = Number(employeeValue ?? companyDefault) || 0;
-    const entitled = Math.floor(perMonth * (activeDays / daysInMonth) * 2) / 2;
-    return { used: Math.min(shortfall, entitled), entitled };
-};
+const {
+    toLocalYMD,
+    getPayrollPeriod,
+    resolveActiveTenure,
+    computePaidDays
+} = require('./payroll/paidDays');
 
 class PayrollService {
     getPayrollPeriod(month, year) {
@@ -120,37 +79,7 @@ class PayrollService {
     }
 
     resolveActiveTenure(joiningDateStr, resignationDateStr, month, year) {
-        const { daysInMonth, startDate: startOfMonthStr, endDate: endOfMonthStr } = getPayrollPeriod(month, year);
-        let startDay = 1;
-        let endDay = daysInMonth;
-
-        if (joiningDateStr) {
-            const joinStr = toLocalYMD(joiningDateStr);
-
-            if (joinStr > endOfMonthStr) {
-                return { activeDays: 0, preJoiningDays: daysInMonth, postResignationDays: 0 };
-            }
-            if (joinStr >= startOfMonthStr && joinStr <= endOfMonthStr) {
-                startDay = parseInt(joinStr.split('-')[2], 10);
-            }
-        }
-
-        if (resignationDateStr) {
-            const resignStr = toLocalYMD(resignationDateStr);
-
-            if (resignStr < startOfMonthStr) {
-                return { activeDays: 0, preJoiningDays: 0, postResignationDays: daysInMonth };
-            }
-            if (resignStr >= startOfMonthStr && resignStr <= endOfMonthStr) {
-                endDay = parseInt(resignStr.split('-')[2], 10);
-            }
-        }
-
-        const activeDays = Math.max(0, endDay - startDay + 1);
-        const preJoiningDays = startDay - 1;
-        const postResignationDays = daysInMonth - endDay;
-
-        return { activeDays, preJoiningDays, postResignationDays };
+        return resolveActiveTenure(joiningDateStr, resignationDateStr, month, year);
     }
 
     async getActiveSalaryStructure(employeeId, companyId, month, year) {
@@ -396,12 +325,10 @@ class PayrollService {
             ot_rate_multiplier: 1.0
         };
 
-        const workedOrPaidDays = empRecord.stats.P + empRecord.stats.L + empRecord.stats.OFF + empRecord.stats.H + (empRecord.stats.PL || 0);
-        const { used: paidOffDaysUsed, entitled: paidOffDaysEntitled } = resolvePaidOffDays(
-            rules.paid_off_days_per_month, emp.paid_off_days_per_month,
-            tenure.activeDays, daysInMonth, Math.max(0, tenure.activeDays - workedOrPaidDays)
+        const { paidOffDaysUsed, paidOffDaysEntitled, paidDays } = computePaidDays(
+            empRecord.stats, tenure, daysInMonth,
+            rules.paid_off_days_per_month, emp.paid_off_days_per_month
         );
-        const paidDays = workedOrPaidDays + paidOffDaysUsed;
         const unpaidLeaveDays = Math.max(0, tenure.activeDays - paidDays);
 
         // Resolve active rules from employee scheme if available
