@@ -705,7 +705,7 @@ const EmployeeWiseTab = ({ shifts, setLoading, loading, setSuccess, setError }) 
             setSuccess(true);
             await fetchPaidOff();
         } catch (err) {
-            setError(err.message || 'Failed to update paid day off');
+            setError(err.response?.data?.message || err.message || 'Failed to update paid day off');
         } finally {
             setLoading(false);
         }
