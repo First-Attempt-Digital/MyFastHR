@@ -231,7 +231,7 @@ group('split 4-punch shift: two rows a day, and the sessions are read as session
     const s1Only = detail([s1], SHIFT_SPLIT);
     eq('session 1 only -> HD', s1Only.status, 'HD');
     eq('missing session 2 is named', s1Only.explanation, 'S1: On-Time (09:00 - 13:00) | S2: Missed');
-    eq('HD banks half a day', S(weight('HD')), S({ P: 0.5 }));
+    eq('HD banks half a day, the other half is A', S(weight('HD')), S({ P: 0.5, A: 0.5 }));
 
     eq('session 2 only -> HD', letter([s2], SHIFT_SPLIT), 'HD');
     eq('late in session 2 -> L for the whole day',
@@ -453,8 +453,8 @@ group('early-out payroll weight: approved 1.0, rejected 0.5, pending 0.5, no req
     eq('case is not significant', R.earlyOutDayWeight('REJECTED'), 0.5);
 
     eq('E + approved banks a full day', S(weight('E', { earlyOutRequest: 'approved' })), S({ P: 1 }));
-    eq('E + rejected banks half', S(weight('E', { earlyOutRequest: 'rejected' })), S({ P: 0.5 }));
-    eq('E + pending banks half', S(weight('E', { earlyOutRequest: 'pending' })), S({ P: 0.5 }));
+    eq('E + rejected banks half, the other half is A', S(weight('E', { earlyOutRequest: 'rejected' })), S({ P: 0.5, A: 0.5 }));
+    eq('E + pending banks half, the other half is A', S(weight('E', { earlyOutRequest: 'pending' })), S({ P: 0.5, A: 0.5 }));
     eq('E + no request banks a full day', S(weight('E')), S({ P: 1 }));
 }
 
@@ -462,7 +462,7 @@ group('stats weights for every letter');
 {
     eq('P', S(weight('P')), S({ P: 1 }));
     eq('R counts as a present day', S(weight('R')), S({ P: 1 }));
-    eq('HD', S(weight('HD')), S({ P: 0.5 }));
+    eq('HD', S(weight('HD')), S({ P: 0.5, A: 0.5 }));
     eq('L lands in its own bucket (paid)', S(weight('L')), S({ L: 1 }));
     eq('A', S(weight('A')), S({ A: 1 }));
     eq('OFF', S(weight('OFF')), S({ OFF: 1 }));
@@ -724,6 +724,21 @@ group('duplicate rows for the same punch decide the day the same way in any orde
     const off = { ...half, id: 12, status: 'off', created_at: '2026-07-16 10:55:45' };
     eq('an exact tie falls to the higher id, in either order',
         [R.primaryDayLog([half, off], SHIFT_STANDARD).id, R.primaryDayLog([off, half], SHIFT_STANDARD).id], [12, 12]);
+}
+
+
+group('tenure: days before joining or after resignation are blank, and a row always adds up');
+{
+    eq('before joining', R.isOutsideTenure('2026-08-05', '2026-08-06', null), true);
+    eq('the joining day itself is inside', R.isOutsideTenure('2026-08-06', '2026-08-06', null), false);
+    eq('the resignation day itself is inside', R.isOutsideTenure('2026-09-11', '2025-01-01', '2026-09-11'), false);
+    eq('after resignation', R.isOutsideTenure('2026-09-12', '2025-01-01', '2026-09-11'), true);
+    eq('open bounds never blank a day', R.isOutsideTenure('2026-09-12', null, null), false);
+    const st = { P: 0, L: 0, A: 0, PL: 0, UL: 0, OFF: 0, H: 0 };
+    R.bumpDayStats(st, 'P'); R.bumpDayStats(st, 'HD'); R.bumpDayStats(st, 'E', { earlyOutRequest: 'rejected' });
+    R.bumpDayStats(st, 'L'); R.bumpDayStats(st, 'A'); R.bumpDayStats(st, 'OFF');
+    eq('P+L+A+OFF+H+PL+UL equals the 6 days counted',
+        st.P + st.L + st.A + st.OFF + st.H + st.PL + st.UL, 6);
 }
 
 // =============================================================================================

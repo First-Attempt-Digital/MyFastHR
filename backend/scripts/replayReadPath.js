@@ -172,7 +172,7 @@ async function seedCommon() {
     });
 }
 
-let empSeq = 990300;
+let empSeq = 990500;   // clear of the 9903xx ids a sibling harness leaves in a shared scratch DB
 async function makeEmployee(shiftId) {
     const id = empSeq++;
     await db('employees').insert({
@@ -845,6 +845,29 @@ async function scenarioMonthBoundaryNotCountedTwice() {
         [pastGrid[PAST_DIM], curGrid[1]]);
 }
 
+async function scenarioTenureBlanksEveryScreen() {
+    const s = 'days outside joining and resignation are blank on every screen';
+    const id = await makeEmployee(SH_GEN);
+    // Joined on the 10th, resigned on the 20th - and punches sit on both sides, as they do for
+    // real people whose dates were keyed late.
+    await db('employees').where({ id }).update({ joining_date: P(10), resignation_date: P(20) });
+    await punchRow(id, 5, '09:00:00', '18:05:00', 'present', { pin: SH_GEN });
+    await punchRow(id, 15, '09:00:00', '18:05:00', 'present', { pin: SH_GEN });
+    await punchRow(id, 25, '09:00:00', '18:05:00', 'present', { pin: SH_GEN });
+
+    const muster = (await readMatrix(PAST_M, PAST_Y))[id];
+    const hist = await readHistory(id, PAST_M, PAST_Y);
+    const mine = await readMyAttendance(id, PAST_M, PAST_Y);
+    const dw = await readDateWise(PAST_M, PAST_Y);
+    for (const d of [5, 9, 21, 25]) {
+        check(s, `day ${d} is blank on the muster, history, My Attendance and date-wise`,
+            [muster.days[d], hist[d], mine[d], dw[d][id]], ['-', '-', '-', '-']);
+    }
+    check(s, 'the joining day and a day inside are not blank',
+        [hist[10] !== '-', hist[15], mine[15], dw[15][id], muster.days[15]], [true, 'P', 'P', 'P', 'P']);
+    check(s, 'the resignation day is not blank', [hist[20] !== '-', dw[20][id] !== '-'], [true, true]);
+}
+
 const SCENARIOS = [
     scenarioPastMonthAgreement,
     scenarioCurrentMonthFutureDays,
@@ -855,7 +878,8 @@ const SCENARIOS = [
     scenarioMyAttendancePayload,
     scenarioNoWorkingRulesRow,
     scenarioLegacyNightRowOnDateWise,
-    scenarioMonthBoundaryNotCountedTwice
+    scenarioMonthBoundaryNotCountedTwice,
+    scenarioTenureBlanksEveryScreen
 ];
 
 async function main() {

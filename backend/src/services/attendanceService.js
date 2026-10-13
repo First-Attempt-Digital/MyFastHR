@@ -44,6 +44,7 @@ const {
     resolveDayStatusDetail,
     calculateSplitShiftStatus,
     bumpDayStats,
+    isOutsideTenure,
     checkIfLogUsedGrace,
     mapDbStatusToFrontend,
     mapFrontendStatusToDb
@@ -1697,8 +1698,10 @@ class AttendanceService {
         const employee = await db('employees as e')
             .leftJoin('shifts as s', 'e.shift_id', 's.id')
             .where('e.id', employeeId)
-            .select('s.*', 's.name as default_shift_name', 'e.attendance_scheme_id')
+            .select('s.*', 's.name as default_shift_name', 'e.attendance_scheme_id', 'e.joining_date', 'e.resignation_date')
             .first();
+        const empJoinStr = employee?.joining_date ? toLocalYMD(employee.joining_date) : null;
+        const empResignStr = employee?.resignation_date ? toLocalYMD(employee.resignation_date) : null;
         const defaultShiftName = employee?.default_shift_name || '---';
 
         const pinnedShifts = await loadPinnedShifts(attendance);
@@ -1780,8 +1783,9 @@ class AttendanceService {
             // null means "this day has no attendance at all" - the cue to fall through to the
             // weekoff -> holiday -> leave -> absent/blank chain, which is where OFF, H, PL, UL
             // and the deliberately blank future date come from.
-            const historyStatus = punchedStatus ||
-                resolveNoLogStatus(dateStr, { weekoffs, holidays, leaves, shift, todayStr, now }).status;
+            // Outside joining/resignation the muster draws '-' whatever the day carries; so does this.
+            const historyStatus = isOutsideTenure(dateStr, empJoinStr, empResignStr) ? '-' : (punchedStatus ||
+                resolveNoLogStatus(dateStr, { weekoffs, holidays, leaves, shift, todayStr, now }).status);
 
             // Which row IS the day - a closed row over an abandoned duplicate, an admin's manual
             // edit over any punch. The same rule the letter above was decided by, so the hours
@@ -1844,6 +1848,8 @@ class AttendanceService {
                 'employees.shift_id',
                 'employees.office_location',
                 'employees.designation',
+                'employees.joining_date',
+                'employees.resignation_date',
                 'departments.name as department_name',
                 'attendance_schemes.weekoffs as scheme_weekoffs'
             );
@@ -1973,7 +1979,9 @@ class AttendanceService {
                 department_name: emp.department_name,
                 shift_name: shiftName,
                 shift_code: shiftName,
-                status: resolveDayStatus(empLogs, activeShift, rules, {
+                status: isOutsideTenure(date,
+                    emp.joining_date ? toLocalYMD(emp.joining_date) : null,
+                    emp.resignation_date ? toLocalYMD(emp.resignation_date) : null) ? '-' : resolveDayStatus(empLogs, activeShift, rules, {
                     regularization: regularizedEmployees.has(emp.id),
                     earlyOutRequest: earlyOutEmployees.has(emp.id),
                     todayStr,

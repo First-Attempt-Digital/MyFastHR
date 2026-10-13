@@ -465,17 +465,34 @@ function earlyOutDayWeight(requestStatus) {
 // `amount` carries a half-day leave; `earlyOutRequest` carries the approval state, which this
 // cannot infer - the letter E is the same one whether a manager approved, refused or has not
 // yet looked at the request behind it.
+//
+// A partial day books its unpaid share under A, so P + L + A + OFF + H + PL + UL always adds up
+// to the days counted. Payroll never reads stats.A (it derives the shortfall from the paid
+// side), so this only changes what the row shows.
 function bumpDayStats(stats, status, ctx = {}) {
     const { amount = 1, earlyOutRequest = null } = ctx;
     if (status === 'P' || status === 'R') stats.P += 1;
-    else if (status === 'E') stats.P += earlyOutDayWeight(earlyOutRequest);
-    else if (status === 'HD') stats.P += 0.5;
+    else if (status === 'E') {
+        const weight = earlyOutDayWeight(earlyOutRequest);
+        stats.P += weight;
+        stats.A += 1 - weight;
+    } else if (status === 'HD') {
+        stats.P += 0.5;
+        stats.A += 0.5;
+    }
     else if (status === 'L') stats.L++;
     else if (status === 'A') stats.A++;
     else if (status === 'OFF') stats.OFF++;
     else if (status === 'H') stats.H++;
     else if (status === 'PL') stats.PL += amount;
     else if (status === 'UL') stats.UL += amount;
+}
+
+// A day before joining or after resignation is not the employee's to be present or absent on.
+// Both bounds and the day are 'YYYY-MM-DD' strings (or null for an open bound). Every read
+// screen blanks such a day, whatever punches or rows it carries.
+function isOutsideTenure(dateStr, joinStr, resignStr) {
+    return !!((joinStr && dateStr < joinStr) || (resignStr && dateStr > resignStr));
 }
 
 function checkIfLogUsedGrace(log, employee, rules) {
@@ -788,6 +805,7 @@ module.exports = {
     punchMarks,
     earlyOutDayWeight,
     bumpDayStats,
+    isOutsideTenure,
     checkIfLogUsedGrace,
 
     // Status vocabulary
