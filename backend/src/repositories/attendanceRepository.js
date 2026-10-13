@@ -226,7 +226,9 @@ class AttendanceRepository {
             // whatever the roster says today, and it silently falls back to the old derivation
             // when a column is not projected here - so omitting one leaves the fix inert with no
             // error. This select list has already made one fix inert that way; do not trim it.
-            .select('id', 'employee_id', 'check_in', 'check_out', 'status', 'punch_source', 'logical_date', 'review_reason', 'shift_id');
+            // created_at/updated_at decide which of two manual rows for one day is the admin's
+            // latest answer (primaryDayLog); the other screens select * and see them.
+            .select('id', 'employee_id', 'check_in', 'check_out', 'status', 'punch_source', 'logical_date', 'review_reason', 'shift_id', 'created_at', 'updated_at');
 
         // 3. Get leaves for these employees
         const leaves = await db('leaves as l')

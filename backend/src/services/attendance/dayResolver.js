@@ -138,14 +138,37 @@ function rowLogicalDate(row, employeeShifts = [], defaultShift = null) {
 function primaryDayLog(dayLogs, resolvedShift = null) {
     if (!dayLogs || dayLogs.length === 0) return null;
 
-    // An admin's explicit edit outranks any punch, duplicated or not.
-    const manual = dayLogs.find(a => a.punch_source === 'manual' || a.punch_source === 'manual_override');
+    // An admin's explicit edit outranks any punch, duplicated or not. When a day carries several
+    // manual rows (off + half-day for one check_in) the most recently WRITTEN one is the admin's
+    // current answer - manualOverride edits the row it finds first in place, so a later edit
+    // shows as updated_at on an older id. Taking whichever row came first made the letter depend
+    // on the order MySQL returned the tie in, so the same day read differently per screen.
+    const writtenAt = a => {
+        const t = a.updated_at || a.created_at;
+        return t instanceof Date ? t.toISOString().replace('T', ' ') : String(t || '');
+    };
+    const manual = dayLogs
+        .filter(a => a.punch_source === 'manual' || a.punch_source === 'manual_override')
+        .reduce((latest, a) => {
+            if (!latest) return a;
+            const [wa, wl] = [writtenAt(a), writtenAt(latest)];
+            return wa > wl || (wa === wl && (a.id || 0) > (latest.id || 0)) ? a : latest;
+        }, null);
     if (manual) return manual;
 
-    const reqPunches = parseInt(resolvedShift?.total_punches_required || resolvedShift?.shift_total_punches || 2);
-    if (reqPunches === 4) return dayLogs[0];
+    // A 'pending' row is only a holding state for an approver. When the approval was written as
+    // a second row for the same punch (approvals before 10caec7 inserted instead of updating),
+    // the settled row is the day and the pending twin is not - regardless of row order.
+    const logs = dayLogs.filter(a =>
+        String(a.status || '').toLowerCase() !== 'pending' ||
+        !dayLogs.some(b => b !== a && String(b.check_in) === String(a.check_in) &&
+            String(b.status || '').toLowerCase() !== 'pending')
+    );
 
-    return dayLogs.find(a => a.check_out) || dayLogs[0];
+    const reqPunches = parseInt(resolvedShift?.total_punches_required || resolvedShift?.shift_total_punches || 2);
+    if (reqPunches === 4) return logs[0];
+
+    return logs.find(a => a.check_out) || logs[0];
 }
 
 // The shift a DAY was recorded under, or null.

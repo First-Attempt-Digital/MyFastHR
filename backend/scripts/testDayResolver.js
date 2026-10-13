@@ -696,6 +696,37 @@ group('an abandoned duplicate row never decides the day');
 }
 
 // =============================================================================================
+group('duplicate rows for the same punch decide the day the same way in any order');
+{
+    // Hotel Highway King employee 2420 (10099), 2026-09-03: a 01:31 night punch left a 'pending'
+    // biometric row, and approving its late_in inserted a second 'present' entry_request row with
+    // the identical check_in. Which one primaryDayLog took depended on the order MySQL returned
+    // the tie in, so the muster read A while the history sheet and My Attendance read P.
+    const SHIFT_NIGHT = Object.assign({}, SHIFT_STANDARD, { start_time: '16:00', end_time: '02:00' });
+    const punch = at(D_PAST, '01:31');
+    const held = { id: 23131, check_in: punch, check_out: null, status: 'pending', punch_source: 'biometric' };
+    const approved = { id: 23133, check_in: punch, check_out: null, status: 'present', punch_source: 'entry_request' };
+    const ctx = { todayStr: TODAY_STR, now: NOW };
+    eq('the approved row is the day when it comes second', R.primaryDayLog([held, approved], SHIFT_NIGHT).id, 23133);
+    eq('and when it comes first', R.primaryDayLog([approved, held], SHIFT_NIGHT).id, 23133);
+    eq('the letter does not depend on row order',
+        [R.resolveDayStatus([held, approved], SHIFT_NIGHT, {}, ctx), R.resolveDayStatus([approved, held], SHIFT_NIGHT, {}, ctx)],
+        ['P', 'P']);
+    eq('a lone pending row still waits for the approver', R.primaryDayLog([held], SHIFT_NIGHT).id, 23131);
+
+    // Two manual rows for one day. The most recently written is the admin's answer in either
+    // order - including an older row edited in place later (employee 10001, 2026-07-16: a stale
+    // half-day row beside a present row an admin re-saved weeks later).
+    const half = { id: 11, check_in: at(D_PAST, '12:00'), check_out: at(D_PAST, '18:00'), status: 'half-day', punch_source: 'manual', created_at: '2026-07-16 10:55:45', updated_at: null };
+    const reSaved = { id: 10, check_in: at(D_PAST, '12:00'), check_out: at(D_PAST, '18:00'), status: 'present', punch_source: 'manual', created_at: '2026-07-16 01:42:04', updated_at: '2026-08-04 12:58:32' };
+    eq('the most recently written manual row wins',
+        [R.resolveDayStatus([reSaved, half], SHIFT_STANDARD, {}, ctx), R.resolveDayStatus([half, reSaved], SHIFT_STANDARD, {}, ctx)], ['P', 'P']);
+    const off = { ...half, id: 12, status: 'off', created_at: '2026-07-16 10:55:45' };
+    eq('an exact tie falls to the higher id, in either order',
+        [R.primaryDayLog([half, off], SHIFT_STANDARD).id, R.primaryDayLog([off, half], SHIFT_STANDARD).id], [12, 12]);
+}
+
+// =============================================================================================
 console.log('');
 if (failures.length) {
     console.log(`${passed}/${passed + failures.length} assertions passed. ${failures.length} FAILED:\n`);

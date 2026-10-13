@@ -1,5 +1,16 @@
 const db = require('../config/db');
 
+// The Payroll screen posts back the rules exactly as GET returned them, so weekoffs arrives as the
+// stored JSON string, not an array. Stringifying that again nested it one level deeper on every
+// save - Highway King's '[]' had grown to 16 levels and 64 KB. Unwrap to the array first.
+const toWeekoffArray = (value) => {
+    let v = value;
+    for (let i = 0; typeof v === 'string' && i < 64; i++) {
+        try { v = JSON.parse(v); } catch { return []; }
+    }
+    return Array.isArray(v) ? v : [];
+};
+
 class WorkingRulesRepository {
     async findByCompany(companyId) {
         return await db('working_rules')
@@ -15,7 +26,7 @@ class WorkingRulesRepository {
             shift_start: data.shift_start,
             shift_end: data.shift_end,
             grace_period: parseInt(data.grace_period || 0),
-            weekoffs: JSON.stringify(data.weekoffs || []),
+            weekoffs: JSON.stringify(toWeekoffArray(data.weekoffs)),
             half_day_hours: parseFloat(data.half_day_hours || 4),
             late_marks_for_half_day: parseInt(data.late_marks_for_half_day || 3),
             // New Advanced Fields
