@@ -3886,9 +3886,12 @@ class AttendanceService {
                 }
             }
 
+            // users has role_id, not a role_name column - the name lives in roles. The old
+            // where({ role_name }) threw on every call, so no admin was ever notified.
             const admins = await db('users')
-                .where({ company_id: companyId, role_name: 'company_admin' })
-                .select('id');
+                .join('roles', 'users.role_id', 'roles.id')
+                .where({ 'users.company_id': companyId, 'roles.name': 'company_admin' })
+                .select('users.id as id');
 
             admins.forEach(admin => {
                 if (!targetUserIds.includes(admin.id)) {
