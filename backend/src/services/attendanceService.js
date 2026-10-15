@@ -1111,7 +1111,7 @@ class AttendanceService {
         // marked 'unpaid' are taken out of the count, and payroll reads unpaid_marked off this
         // row so it cuts them too. The day letter stays A/UL: the other read screens and the
         // readpath harness agree on letters, and this is an overlay.
-        const paidOffSummary = (emp, stats, wholeAbsentDays, meta, unsettledDays) => {
+        const paidOffSummary = (emp, stats, wholeAbsentDays, meta, unsettledDays, grid) => {
             if (!paidOffOn) return { paid_off: null, payable_days: null };
             const tenure = resolveActiveTenure(emp.joining_date, emp.resignation_date, month, year);
             if (tenure.activeDays === 0) return { paid_off: null, payable_days: null };
@@ -1123,7 +1123,16 @@ class AttendanceService {
                 meta[d].paid_off_eligible = true;
                 if (modes[d]) meta[d].paid_off_mode = modes[d];
             });
-            pickPaidOffDays(wholeAbsentDays, modes, r.paidOffDaysUsed).forEach(d => { meta[d].paid_off = true; });
+            const picked = pickPaidOffDays(wholeAbsentDays, modes, r.paidOffDaysUsed);
+            picked.forEach(d => { meta[d].paid_off = true; });
+            // An absence the allowance covers is paid, so it leaves the A / UL counters and shows
+            // under PDO instead (P+L+A+UL+OFF+H+PL+PDO adds up to the days counted). Payroll
+            // pays from P+L+OFF+H+PL and never reads A or UL, so this is display only. What the
+            // picked whole days do not account for is the half days the allowance also covers.
+            const ulCovered = picked.filter(d => grid[d] === 'UL').length;
+            const aCovered = r.paidOffDaysUsed - ulCovered;
+            stats.UL = Math.max(0, stats.UL - ulCovered);
+            stats.A = Math.max(0, stats.A - aCovered);
             return {
                 paid_off: { used: r.paidOffDaysUsed, entitled: r.paidOffDaysEntitled, unpaid_marked: unpaidMarked },
                 payable_days: r.paidDays
@@ -1319,7 +1328,7 @@ class AttendanceService {
                 timings: grid_timings,
                 meta: grid_meta,
                 stats,
-                ...paidOffSummary(emp, stats, wholeAbsentDays, grid_meta, unsettledDays)
+                ...paidOffSummary(emp, stats, wholeAbsentDays, grid_meta, unsettledDays, grid)
             };
         });
 
