@@ -1111,14 +1111,14 @@ class AttendanceService {
         // marked 'unpaid' are taken out of the count, and payroll reads unpaid_marked off this
         // row so it cuts them too. The day letter stays A/UL: the other read screens and the
         // readpath harness agree on letters, and this is an overlay.
-        const paidOffSummary = (emp, stats, wholeAbsentDays, meta) => {
+        const paidOffSummary = (emp, stats, wholeAbsentDays, meta, unsettledDays) => {
             if (!paidOffOn) return { paid_off: null, payable_days: null };
             const tenure = resolveActiveTenure(emp.joining_date, emp.resignation_date, month, year);
             if (tenure.activeDays === 0) return { paid_off: null, payable_days: null };
             const modes = paidOffModes[emp.id] || {};
             const unpaidMarked = wholeAbsentDays.filter(d => modes[d] === 'unpaid').length;
             const r = computePaidDays(stats, tenure, daysInMonth,
-                rules.paid_off_days_per_month, emp.paid_off_days_per_month, elapsedDay, unpaidMarked);
+                rules.paid_off_days_per_month, emp.paid_off_days_per_month, elapsedDay, unpaidMarked, unsettledDays);
             wholeAbsentDays.forEach(d => {
                 meta[d].paid_off_eligible = true;
                 if (modes[d]) meta[d].paid_off_mode = modes[d];
@@ -1137,6 +1137,9 @@ class AttendanceService {
             const stats = { P: 0, L: 0, A: 0, PL: 0, UL: 0, OFF: 0, H: 0 };
             // Whole-day absences in date order (A, or a full-day UL), for the paid-days-off overlay.
             const wholeAbsentDays = [];
+            // Elapsed in-tenure days with no verdict yet (today: CI, or no punch so far). Stats skip
+            // them, so the allowance must not treat them as absences.
+            let unsettledDays = 0;
 
             // Resolve employee specific weekoffs from scheme if assigned
             const empWeekoffs = emp.scheme_weekoffs
@@ -1288,6 +1291,7 @@ class AttendanceService {
                 }
                 grid[d] = status;
                 if (status === 'A' || (status === 'UL' && dayAmount === 1)) wholeAbsentDays.push(d);
+                if (elapsedDay !== null && d <= elapsedDay && (status === 'CI' || status === '-')) unsettledDays++;
                 grid_timings[d] = { in1, out1, in2, out2 };
                 grid_meta[d] = {
                     is_override: dayLogs.some(a => a.punch_source === 'manual' || a.punch_source === 'manual_override'),
@@ -1315,7 +1319,7 @@ class AttendanceService {
                 timings: grid_timings,
                 meta: grid_meta,
                 stats,
-                ...paidOffSummary(emp, stats, wholeAbsentDays, grid_meta)
+                ...paidOffSummary(emp, stats, wholeAbsentDays, grid_meta, unsettledDays)
             };
         });
 

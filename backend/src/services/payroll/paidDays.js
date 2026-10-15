@@ -96,11 +96,16 @@ const resolvePaidOffDays = (companyDefault, employeeValue, activeDays, daysInMon
 //
 // unpaidMarked is the number of whole-day absences an admin has marked 'unpaid' (see
 // pickPaidOffDays): those stay cut, so they are taken out of what the allowance may cover.
-const computePaidDays = (stats, tenure, daysInMonth, companyDefault, employeeValue, elapsedDay = null, unpaidMarked = 0) => {
+//
+// unsettledDays is how many elapsed days have no verdict yet - today, checked in with no punch
+// out, or not punched at all. They are neither worked nor absent, so they are not a shortfall and
+// must not eat the allowance until the day settles. Payroll passes nothing: a closed month has
+// no open day.
+const computePaidDays = (stats, tenure, daysInMonth, companyDefault, employeeValue, elapsedDay = null, unpaidMarked = 0, unsettledDays = 0) => {
     const workedOrPaidDays = stats.P + stats.L + stats.OFF + stats.H + (stats.PL || 0);
     const daysSoFar = elapsedDay === null
         ? tenure.activeDays
-        : Math.max(0, Math.min(tenure.endDay, elapsedDay) - tenure.startDay + 1);
+        : Math.max(0, Math.min(tenure.endDay, elapsedDay) - tenure.startDay + 1 - unsettledDays);
     const { used: paidOffDaysUsed, entitled: paidOffDaysEntitled } = resolvePaidOffDays(
         companyDefault, employeeValue,
         tenure.activeDays, daysInMonth, Math.max(0, daysSoFar - workedOrPaidDays - unpaidMarked)

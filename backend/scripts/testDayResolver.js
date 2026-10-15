@@ -741,6 +741,20 @@ group('tenure: days before joining or after resignation are blank, and a row alw
         st.P + st.L + st.A + st.OFF + st.H + st.PL + st.UL, 6);
 }
 
+
+group('paid days off: a day with no verdict yet is not a shortfall');
+{
+    const { computePaidDays, resolveActiveTenure } = require('../src/services/payroll/paidDays');
+    // Oct 15 of a 31-day month, allowance 2: P9 + L4 worked, 1 real absence, and today checked in.
+    const tenure = resolveActiveTenure(null, null, 10, 2026);
+    const stats = { P: 9, L: 4, A: 1, OFF: 0, H: 0, PL: 0, UL: 0 };
+    const used = (unsettled) => computePaidDays(stats, tenure, 31, 2, null, 15, 0, unsettled).paidOffDaysUsed;
+    eq('today open (CI / not punched yet): only the real absence is covered', used(1), 1);
+    eq('the same row once today settles as Absent: both are covered', used(0), 2);
+    eq('payroll passes no elapsedDay and no unsettled days: unchanged',
+        computePaidDays({ P: 20, L: 0, A: 11, OFF: 0, H: 0, PL: 0, UL: 0 }, tenure, 31, 2, null).paidOffDaysUsed, 2);
+}
+
 // =============================================================================================
 console.log('');
 if (failures.length) {
