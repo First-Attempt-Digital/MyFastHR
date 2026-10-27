@@ -152,6 +152,8 @@ router.put('/paid-off-days', authorize(['company_admin', 'super_admin']), employ
 
 router.get('/managers', employeeController.getManagers);
 router.get('/options/:field', employeeController.getOptions);
+router.get('/option-lists/:field', employeeController.getOptionList);
+router.put('/option-lists/:field', authorize(['company_admin', 'manager', 'super_admin']), employeeController.saveOptionList);
 router.get('/:id', employeeController.getDetail);
 router.put('/:id', employeeController.update);
 router.patch('/:id/fire', employeeController.fire);

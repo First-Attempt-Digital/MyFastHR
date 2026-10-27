@@ -5,6 +5,8 @@ const authService = require('./authService');
 const mailService = require('./mailService');
 const bcrypt = require('bcryptjs');
 
+const EDITABLE_OPTION_LISTS = ['bank_name', 'bank_branch'];
+
 class EmployeeService {
     async getAllEmployees(user, filters) {
         return await employeeRepository.findAll(user, filters);
@@ -351,6 +353,48 @@ class EmployeeService {
         if (employee.user_id) {
             await db('users').where({ id: employee.user_id }).update({ status: 'active' });
         }
+    }
+
+    // Dropdown lists an admin edits in the onboarding popup (banks, branches). Stored per company
+    // as JSON in system_settings so a bank is available the moment it is added, not only after
+    // an employee has been saved with it.
+    _optionListKey(companyId, field) {
+        if (!companyId) throw new Error('Company context required');
+        if (!EDITABLE_OPTION_LISTS.includes(field)) throw new Error('Unsupported option list');
+        return `option_list:${companyId}:${field}`;
+    }
+
+    async getOptionList(companyId, field) {
+        const row = await db('system_settings').where({ key_name: this._optionListKey(companyId, field) }).first();
+        if (!row || !row.value_text) return [];
+        try {
+            const list = JSON.parse(row.value_text);
+            return Array.isArray(list) ? list : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async saveOptionList(companyId, field, list) {
+        if (!Array.isArray(list) || list.length > 500) throw new Error('Invalid option list');
+        const clean = [];
+        const seen = new Set();
+        for (const o of list) {
+            const label = String(o && o.label || '').trim().slice(0, 100);
+            const key = label.toLowerCase();
+            if (!label || seen.has(key)) continue;
+            seen.add(key);
+            clean.push({ label, value: label, active: o.active !== false });
+        }
+        const key_name = this._optionListKey(companyId, field);
+        const value_text = JSON.stringify(clean);
+        const existing = await db('system_settings').where({ key_name }).first();
+        if (existing) {
+            await db('system_settings').where({ key_name }).update({ value_text, updated_at: db.fn.now() });
+        } else {
+            await db('system_settings').insert({ key_name, value_text });
+        }
+        return clean;
     }
 
     async getOptions(companyId, field) {

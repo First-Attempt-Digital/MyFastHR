@@ -252,6 +252,19 @@ const ClassicDatePicker = ({ label, name, value, onChange, required = false, err
     );
 };
 
+// Admin-managed list first, then values already saved on employees, else the built-in defaults.
+const mergeOptionLists = (saved, used, fallback) => {
+    const merged = [];
+    const seen = new Set();
+    const add = (o) => {
+        const key = o.label.toLowerCase();
+        if (!seen.has(key)) { seen.add(key); merged.push(o); }
+    };
+    (Array.isArray(saved) ? saved : []).forEach(add);
+    (Array.isArray(used) ? used : []).forEach(b => add({ label: b, value: b, active: true }));
+    return merged.length > 0 ? merged : fallback;
+};
+
 const OptionManagerModal = ({ title, options, onSave, onClose }) => {
     const [localOptions, setLocalOptions] = useState([...options]);
     const [newOption, setNewOption] = useState({ label: '', value: '', active: true });
@@ -796,11 +809,13 @@ const Onboarding = () => {
 
     const fetchOnboardingOptions = async () => {
         try {
-            const [designations, locations, banks, branches, depts, shifts, activeLeaves] = await Promise.all([
+            const [designations, locations, banks, branches, savedBanks, savedBranches, depts, shifts, activeLeaves] = await Promise.all([
                 api.get('/employees/options/designation').catch(() => []),
                 api.get('/employees/options/office_location').catch(() => []),
                 api.get('/employees/options/bank_name').catch(() => []),
                 api.get('/employees/options/bank_branch').catch(() => []),
+                api.get('/employees/option-lists/bank_name').catch(() => []),
+                api.get('/employees/option-lists/bank_branch').catch(() => []),
                 api.get('/org/departments').catch(() => []),
                 api.get('/attendance/shift-list').catch(() => []),
                 api.get('/leaves/types').catch(() => [])
@@ -828,12 +843,8 @@ const Onboarding = () => {
                 location: Array.isArray(locations) && locations.length > 0 
                     ? locations.map(l => ({ label: l, value: l, active: true })) 
                     : prev.location,
-                bank_name: Array.isArray(banks) && banks.length > 0
-                    ? banks.map(b => ({ label: b, value: b, active: true }))
-                    : prev.bank_name,
-                bank_branch: Array.isArray(branches) && branches.length > 0
-                    ? branches.map(b => ({ label: b, value: b, active: true }))
-                    : prev.bank_branch,
+                bank_name: mergeOptionLists(savedBanks, banks, prev.bank_name),
+                bank_branch: mergeOptionLists(savedBranches, branches, prev.bank_branch),
                 department: Array.isArray(depts) && depts.length > 0
                     ? depts.map(d => ({ label: d.name, value: d.name, id: d.id, active: true })) 
                     : prev.department,
@@ -1147,12 +1158,19 @@ const Onboarding = () => {
         }
     };
 
-    const handleSaveOptions = (newOptions) => {
-        setFieldOptions(prev => ({
-            ...prev,
-            [activeOptionManager.field]: newOptions
-        }));
+    const handleSaveOptions = async (newOptions) => {
+        const { field } = activeOptionManager;
+        setFieldOptions(prev => ({ ...prev, [field]: newOptions }));
         setActiveOptionManager(null);
+        // Bank lists are stored per company so they are there for the next onboarding.
+        if (field === 'bank_name' || field === 'bank_branch') {
+            try {
+                await api.put(`/employees/option-lists/${field}`, { options: newOptions });
+            } catch (err) {
+                console.error('Failed to save option list:', err);
+                alert('Could not save this list. It will be lost when you leave this page.');
+            }
+        }
     };
 
     const renderStepContent = () => {

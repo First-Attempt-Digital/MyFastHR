@@ -89,6 +89,22 @@ class EmployeeController {
         }
     }
 
+    async getOptionList(req, res) {
+        try {
+            res.json(await employeeService.getOptionList(req.company_id || req.user.company_id, req.params.field));
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
+
+    async saveOptionList(req, res) {
+        try {
+            res.json(await employeeService.saveOptionList(req.company_id || req.user.company_id, req.params.field, req.body.options));
+        } catch (err) {
+            res.status(400).json({ message: err.message });
+        }
+    }
+
     async getOptions(req, res) {
         try {
             const options = await employeeService.getOptions(req.user.company_id, req.params.field);
