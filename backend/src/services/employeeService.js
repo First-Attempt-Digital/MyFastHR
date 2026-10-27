@@ -354,6 +354,8 @@ class EmployeeService {
     }
 
     async getOptions(companyId, field) {
+        const OPTION_FIELDS = ['designation', 'office_location', 'bank_name', 'bank_branch'];
+        if (!OPTION_FIELDS.includes(field)) throw new Error('Unsupported option field');
         const results = await db('employees')
             .where({ company_id: companyId })
             .distinct(field)

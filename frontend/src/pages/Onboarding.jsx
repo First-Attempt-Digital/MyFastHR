@@ -258,8 +258,9 @@ const OptionManagerModal = ({ title, options, onSave, onClose }) => {
 
     const handleAdd = () => {
         if (newOption.label.trim()) {
-            const val = newOption.label.toLowerCase().replace(/\s+/g, '_');
-            setLocalOptions([...localOptions, { label: newOption.label, value: val, active: true }]);
+            // value must equal the label: the saved string is what the server lists back next time
+            const label = newOption.label.trim();
+            setLocalOptions([...localOptions, { label, value: label, active: true }]);
             setNewOption({ label: '', value: '', active: true });
         }
     };
@@ -795,9 +796,11 @@ const Onboarding = () => {
 
     const fetchOnboardingOptions = async () => {
         try {
-            const [designations, locations, depts, shifts, activeLeaves] = await Promise.all([
+            const [designations, locations, banks, branches, depts, shifts, activeLeaves] = await Promise.all([
                 api.get('/employees/options/designation').catch(() => []),
                 api.get('/employees/options/office_location').catch(() => []),
+                api.get('/employees/options/bank_name').catch(() => []),
+                api.get('/employees/options/bank_branch').catch(() => []),
                 api.get('/org/departments').catch(() => []),
                 api.get('/attendance/shift-list').catch(() => []),
                 api.get('/leaves/types').catch(() => [])
@@ -825,7 +828,13 @@ const Onboarding = () => {
                 location: Array.isArray(locations) && locations.length > 0 
                     ? locations.map(l => ({ label: l, value: l, active: true })) 
                     : prev.location,
-                department: Array.isArray(depts) && depts.length > 0 
+                bank_name: Array.isArray(banks) && banks.length > 0
+                    ? banks.map(b => ({ label: b, value: b, active: true }))
+                    : prev.bank_name,
+                bank_branch: Array.isArray(branches) && branches.length > 0
+                    ? branches.map(b => ({ label: b, value: b, active: true }))
+                    : prev.bank_branch,
+                department: Array.isArray(depts) && depts.length > 0
                     ? depts.map(d => ({ label: d.name, value: d.name, id: d.id, active: true })) 
                     : prev.department,
                 shift: Array.isArray(shifts) && shifts.length > 0 
