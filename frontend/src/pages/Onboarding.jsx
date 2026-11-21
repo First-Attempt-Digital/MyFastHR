@@ -1651,7 +1651,7 @@ const Onboarding = () => {
                                                         className="hidden"
                                                     />
                                                     <span className="text-xs font-semibold text-slate-600 leading-tight">
-                                                        Employee & Employer contribution - 12% with in wage ceiling (Max Rs.1800)
+                                                        Employee & Employer contribution - 12% with in wage ceiling (Max Rs.3000)
                                                     </span>
                                                 </label>
 
@@ -1676,7 +1676,7 @@ const Onboarding = () => {
                                                         className="hidden"
                                                     />
                                                     <span className="text-xs font-semibold text-slate-600 leading-tight">
-                                                        Employee contribution - 12% over and above wage ceiling (In excess to Rs.1800)
+                                                        Employee contribution - 12% over and above wage ceiling (In excess to Rs.3000)
                                                     </span>
                                                 </label>
                                             </div>

@@ -285,7 +285,7 @@ const Payslips = () => {
                                                 <tr key={slip.id} className="hover:bg-slate-50/50">
                                                     <td className="py-4">{getMonthName(slip.month)} {slip.year}</td>
                                                     <td className="py-4">{showSalary ? `₹${(slip.basic_salary * 1.5).toLocaleString('en-IN')}` : '₹******'}</td>
-                                                    <td className="py-4">{showSalary ? `₹${Math.min(1800, slip.basic_salary * 0.12).toLocaleString('en-IN')}` : '₹******'}</td>
+                                                    <td className="py-4">{showSalary ? `₹${Math.min(3000, slip.basic_salary * 0.12).toLocaleString('en-IN')}` : '₹******'}</td>
                                                     <td className="py-4">{showSalary ? '₹0.00' : '₹******'}</td>
                                                     <td className="py-4 text-right font-bold text-indigo-600">{showSalary ? `₹${parseFloat(slip.net_salary || 0).toLocaleString('en-IN')}` : '₹******'}</td>
                                                 </tr>
@@ -294,7 +294,7 @@ const Payslips = () => {
                                                 <tr className="border-t-2 border-slate-100 font-bold bg-slate-50/40">
                                                     <td className="py-4 pl-3">Total YTD</td>
                                                     <td className="py-4">{showSalary ? `₹${slips.reduce((acc, slip) => acc + slip.basic_salary * 1.5, 0).toLocaleString('en-IN')}` : '₹******'}</td>
-                                                    <td className="py-4">{showSalary ? `₹${slips.reduce((acc, slip) => acc + Math.min(1800, slip.basic_salary * 0.12), 0).toLocaleString('en-IN')}` : '₹******'}</td>
+                                                    <td className="py-4">{showSalary ? `₹${slips.reduce((acc, slip) => acc + Math.min(3000, slip.basic_salary * 0.12), 0).toLocaleString('en-IN')}` : '₹******'}</td>
                                                     <td className="py-4">₹0.00</td>
                                                     <td className="py-4 text-right pr-3 text-indigo-600 font-black">{showSalary ? `₹${slips.reduce((acc, slip) => acc + parseFloat(slip.net_salary || 0), 0).toLocaleString('en-IN')}` : '₹******'}</td>
                                                 </tr>

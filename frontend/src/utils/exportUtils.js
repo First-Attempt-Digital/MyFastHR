@@ -81,7 +81,7 @@ export const exportToECR = (employees, filename) => {
     employees.forEach(emp => {
         // Capping calculation rules for EPFO
         const grossWages = parseFloat(emp.base_salary || emp.salary_basis || 15000);
-        const epfWages = Math.min(15000, grossWages);
+        const epfWages = Math.min(25000, grossWages);
         const epsWages = epfWages;
         const edliWages = epfWages;
 

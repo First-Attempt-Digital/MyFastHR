@@ -13,7 +13,7 @@ function safeParseJson(data) {
 }
 const PDFDocument = require('pdfkit');
 const notificationService = require('./notificationService');
-const { ESIC_WAGE_CEILING } = require('../utils/statutory');
+const { ESIC_WAGE_CEILING, PF_WAGE_CEILING } = require('../utils/statutory');
 
 const convertNumberToWords = (num) => {
     const a = [
@@ -164,15 +164,15 @@ class PayrollService {
                 let erShare = round2(isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100)));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
-                    const pfCeiling = 15000;
+                    const pfCeiling = PF_WAGE_CEILING;
                     const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
 
                     if (pfExcess) {
-                        // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at 15000 (1800 cap)
+                        // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at PF_WAGE_CEILING
                         eeShare = round2(isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100)));
                         erShare = round2(isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100)));
                     } else {
-                        // Option 1: Both Employee and Employer PF capped at 15000 (1800 cap)
+                        // Option 1: Both Employee and Employer PF capped at PF_WAGE_CEILING
                         eeShare = round2(isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employee_percentage) / 100)));
                         erShare = round2(isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100)));
                     }
@@ -509,15 +509,15 @@ class PayrollService {
                 let erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employer_percentage) / 100));
 
                 if (ruleNameLower.includes('pf') || ruleNameLower.includes('provident')) {
-                    const pfCeiling = 15000;
+                    const pfCeiling = PF_WAGE_CEILING;
                     const pfExcess = emp?.pf_excess_contribution === true || emp?.pf_excess_contribution === 1;
                     
                     if (pfExcess) {
-                        // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at 15000 (1800 cap)
+                        // Option 2: Employee PF on full basic salary (no cap), Employer PF capped at PF_WAGE_CEILING
                         eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (calcBaseEarned * (parseFloat(rule.employee_percentage) / 100));
                         erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
                     } else {
-                        // Option 1: Both Employee and Employer PF capped at 15000 (1800 cap)
+                        // Option 1: Both Employee and Employer PF capped at PF_WAGE_CEILING
                         eeShare = isFlat ? (parseFloat(rule.employee_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employee_percentage) / 100));
                         erShare = isFlat ? (parseFloat(rule.employer_percentage) || 0) * prorationFactor : (Math.min(calcBaseEarned, pfCeiling) * (parseFloat(rule.employer_percentage) / 100));
                     }
@@ -1870,9 +1870,9 @@ class PayrollService {
         statements.forEach((stmt) => {
             const pfExcess = stmt.pf_excess_contribution === true || stmt.pf_excess_contribution === 1;
             const actualBase = parseFloat(stmt.base_salary) || 0;
-            const pfWages = pfExcess ? actualBase : Math.min(15000, actualBase);
-            const epsWages = Math.min(15000, actualBase);
-            const edliWages = Math.min(15000, actualBase);
+            const pfWages = pfExcess ? actualBase : Math.min(PF_WAGE_CEILING, actualBase);
+            const epsWages = Math.min(PF_WAGE_CEILING, actualBase);
+            const edliWages = Math.min(PF_WAGE_CEILING, actualBase);
             
             const epfEmployee = parseFloat(stmt.employee_pf) || 0;
             const epsEmployer = Math.round(epsWages * 0.0833);
