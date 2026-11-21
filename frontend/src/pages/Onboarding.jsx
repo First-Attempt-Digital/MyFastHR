@@ -1038,7 +1038,6 @@ const Onboarding = () => {
             if (!formData.employee_number_series) newErrors.employee_number_series = true;
             if (!formData.employee_id_number) newErrors.employee_id_number = true;
             if (!formData.first_name) newErrors.first_name = true;
-            if (!formData.last_name) newErrors.last_name = true;
             if (!formData.status) newErrors.status = true;
             if (!formData.joining_date) newErrors.joining_date = true;
             if (!formData.phone) newErrors.phone = true;
@@ -1214,7 +1213,7 @@ const Onboarding = () => {
                                 </div>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <label className={`text-[11px] font-bold uppercase tracking-wider ${errors.first_name || errors.last_name ? 'text-rose-600' : 'text-slate-500'}`}>Name <span className="text-rose-500">*</span></label>
+                                    <label className={`text-[11px] font-bold uppercase tracking-wider ${errors.first_name ? 'text-rose-600' : 'text-slate-500'}`}>Name <span className="text-rose-500">*</span></label>
                                     <div className="flex gap-2">
                                         <div className="flex-1 flex flex-col gap-1">
                                             <input 
@@ -1234,15 +1233,13 @@ const Onboarding = () => {
                                             <input 
                                                 type="text" 
                                                 name="last_name" 
-                                                placeholder="Last Name"
-                                                required
+                                                placeholder="Last Name (optional)"
                                                 value={formData.last_name} 
                                                 onChange={handleChange}
                                                 className={`px-4 py-2 bg-white border rounded text-sm focus:outline-none transition-all ${
-                                                    errors.last_name ? 'border-rose-400 bg-rose-50' : 'border-slate-300 focus:border-indigo-400'
+                                                    'border-slate-300 focus:border-indigo-400'
                                                 }`}
                                             />
-                                            {errors.last_name && <span className="text-[9px] font-bold text-rose-600 uppercase">Required</span>}
                                         </div>
                                     </div>
                                 </div>
